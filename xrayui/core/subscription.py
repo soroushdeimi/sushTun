@@ -51,7 +51,7 @@ class Subscription:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict) -> "Subscription":
+    def from_dict(cls, data: dict) -> Subscription:
         usage = Usage(**{k: v for k, v in (data.get("usage") or {}).items()
                          if k in Usage.__dataclass_fields__})
         return cls(
