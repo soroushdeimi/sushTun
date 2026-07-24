@@ -26,10 +26,19 @@ def test_defaults_block_ads_and_direct_private():
     assert "geosite:private" in direct["domain"]
 
 
-def test_low_usage_adds_windows_domains():
+def test_low_usage_adds_windows_categories():
     rules = routing.build_rules(_routing(low_usage=True))
     direct = next(x for x in rules if x["outboundTag"] == "direct" and "domain" in x)
+    assert "geosite:win-spy" in direct["domain"]
     assert any("telemetry.microsoft.com" in d for d in direct["domain"])
+
+
+def test_country_toggles():
+    rules = routing.build_rules(_routing(direct_iran=True, direct_russia=True, direct_china=True))
+    direct_d = next(x for x in rules if x["outboundTag"] == "direct" and "domain" in x)["domain"]
+    direct_i = next(x for x in rules if x["outboundTag"] == "direct" and "ip" in x)["ip"]
+    assert {"geosite:category-ir", "geosite:category-ru", "geosite:cn"} <= set(direct_d)
+    assert {"geoip:ir", "geoip:ru", "geoip:cn"} <= set(direct_i)
 
 
 def test_custom_domains_normalized_and_passthrough():

@@ -27,14 +27,20 @@ class RoutingDialog(QDialog):
         tg = QGridLayout(toggles)
         self.cb_low = QCheckBox("Low usage — bypass Windows telemetry/update chatter")
         self.cb_ads = QCheckBox("Block ads & trackers")
-        self.cb_iran = QCheckBox("Iranian sites & IPs direct (geosite/geoip)")
         self.cb_private = QCheckBox("Local network / private IPs direct")
+        self.cb_iran = QCheckBox("Iran sites & IPs direct")
+        self.cb_russia = QCheckBox("Russia sites & IPs direct")
+        self.cb_china = QCheckBox("China sites & IPs direct")
         self.cb_low.setChecked(routing.get("low_usage", False))
         self.cb_ads.setChecked(routing.get("block_ads", True))
-        self.cb_iran.setChecked(routing.get("direct_iran", True))
         self.cb_private.setChecked(routing.get("direct_private", True))
-        for i, cb in enumerate((self.cb_low, self.cb_ads, self.cb_iran, self.cb_private)):
-            tg.addWidget(cb, i, 0)
+        self.cb_iran.setChecked(routing.get("direct_iran", True))
+        self.cb_russia.setChecked(routing.get("direct_russia", False))
+        self.cb_china.setChecked(routing.get("direct_china", False))
+        boxes = (self.cb_low, self.cb_ads, self.cb_private,
+                 self.cb_iran, self.cb_russia, self.cb_china)
+        for i, cb in enumerate(boxes):
+            tg.addWidget(cb, i // 2, i % 2)
         layout.addWidget(toggles)
 
         presets = QGroupBox("App presets (direct)")
@@ -75,8 +81,10 @@ class RoutingDialog(QDialog):
         self._routing.update(
             low_usage=self.cb_low.isChecked(),
             block_ads=self.cb_ads.isChecked(),
-            direct_iran=self.cb_iran.isChecked(),
             direct_private=self.cb_private.isChecked(),
+            direct_iran=self.cb_iran.isChecked(),
+            direct_russia=self.cb_russia.isChecked(),
+            direct_china=self.cb_china.isChecked(),
             app_presets=[n for n, cb in self._preset_boxes.items() if cb.isChecked()],
             bypass_domains=self._lines(self.domains),
             bypass_ips=self._lines(self.ips),

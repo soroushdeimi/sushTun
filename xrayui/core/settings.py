@@ -13,6 +13,8 @@ DEFAULTS: dict = {
         "low_usage": False,
         "block_ads": True,
         "direct_iran": True,
+        "direct_russia": False,
+        "direct_china": False,
         "direct_private": True,
         "bypass_domains": [],
         "bypass_ips": [],
