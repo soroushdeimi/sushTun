@@ -5,7 +5,7 @@ from xrayui.core import importer
 
 SAMPLE = (
     "vless://11111111-1111-1111-1111-111111111111@203.0.113.10:443"
-    "?encryption=mlkem768x25519plus.native.0rtt.KEY&type=tcp&security=none#Sample"
+    "?encryption=mlkem768x25519plus.native.0rtt.EXAMPLE_KEY&type=tcp&security=none#Sample"
 )
 
 
