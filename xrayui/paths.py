@@ -39,6 +39,14 @@ def config_template() -> Path:
     return _first_existing("config.template.json")
 
 
+def icon_png() -> Path:
+    return _first_existing("assets/icon.png")
+
+
+def icon_ico() -> Path:
+    return _first_existing("assets/icon.ico")
+
+
 def runtime_config() -> Path:
     return base_dir() / "config.runtime.json"
 

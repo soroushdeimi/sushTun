@@ -10,6 +10,12 @@ _ASSETS = ["config.template.json", "geoip.dat", "geosite.dat", xray_bin]
 if IS_WIN:
     _ASSETS.append("wintun.dll")
 datas = [(str(ROOT / a), ".") for a in _ASSETS if (ROOT / a).exists()]
+for _icon in ("assets/icon.png", "assets/icon.ico"):
+    if (ROOT / _icon).exists():
+        datas.append((str(ROOT / _icon), "assets"))
+
+ico = ROOT / "assets" / "icon.ico"
+exe_icon = str(ico) if ico.exists() else None
 
 a = Analysis(
     [str(ROOT / "app_main.py")],
@@ -30,4 +36,5 @@ exe = EXE(
     console=False,
     uac_admin=IS_WIN,
     upx=False,
+    icon=exe_icon,
 )

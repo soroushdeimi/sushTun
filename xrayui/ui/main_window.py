@@ -14,7 +14,6 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QSplitter,
-    QStyle,
     QSystemTrayIcon,
     QTabWidget,
     QVBoxLayout,
@@ -174,11 +173,12 @@ class MainWindow(QMainWindow):
         return w
 
     def _build_tray(self) -> None:
+        from .icon import app_icon
+        icon = app_icon()
+        self.setWindowIcon(icon)
         if not QSystemTrayIcon.isSystemTrayAvailable():
             self.tray = None
             return
-        icon = self.style().standardIcon(QStyle.SP_ComputerIcon)
-        self.setWindowIcon(icon)
         self.tray = QSystemTrayIcon(icon, self)
         self.tray.setToolTip("Xray Portable")
         menu = QMenu()

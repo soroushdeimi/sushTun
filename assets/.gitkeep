@@ -1,0 +1,2 @@
+Place the app icon here as icon.png (square, ideally 512x512 or larger).
+Then run: python scripts/make_icon.py   (generates icon.ico for the Windows exe)
