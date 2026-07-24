@@ -1,0 +1,32 @@
+# Runtime / state
+state/
+config.runtime.json
+xray.log
+profiles/
+
+# Third-party redistributables (fetched by scripts/fetch-deps or CI)
+xray.exe
+wintun.dll
+geoip.dat
+geosite.dat
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# Build artifacts
+build/
+dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor / tooling
+.claude/
+.vscode/
+.idea/
