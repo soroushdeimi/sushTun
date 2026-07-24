@@ -3,12 +3,15 @@ from __future__ import annotations
 
 import json
 import socket
+import sys
 import time
 
 from .. import paths
 from . import proc
 
 STATS_API_PORT = 10085
+IS_WIN = sys.platform == "win32"
+IS_MAC = sys.platform == "darwin"
 
 _THROUGHPUT_PS = """
 $idx = [int]$env:IDX; $sec = [int]$env:SECS
@@ -25,7 +28,13 @@ $tx = [math]::Max(0, $s2.SentBytes - $s1.SentBytes)
 
 
 def ping(target: str, count: int = 4) -> str:
-    return proc.run(["ping", "-4", "-n", str(count), target], timeout=count * 3 + 5).stdout
+    if IS_WIN:
+        args = ["ping", "-4", "-n", str(count), target]
+    elif IS_MAC:
+        args = ["ping", "-c", str(count), target]
+    else:
+        args = ["ping", "-4", "-c", str(count), target]
+    return proc.run(args, timeout=count * 3 + 5).stdout
 
 
 def tcp_connect_delay(host: str, port: int, attempts: int = 3, timeout: float = 3.0) -> dict:
@@ -52,6 +61,8 @@ def tcp_connect_delay(host: str, port: int, attempts: int = 3, timeout: float = 
 
 
 def throughput_sample(tun_index: int, seconds: int = 5) -> dict | None:
+    if not IS_WIN:
+        return None  # Get-NetAdapterStatistics has no Linux/macOS equivalent here
     out = proc.powershell(
         _THROUGHPUT_PS, env={"IDX": tun_index, "SECS": seconds}, timeout=seconds + 10
     ).stdout.strip()
@@ -91,17 +102,45 @@ def diagnostics(server_ip: str | None, alias: str | None, tun_index: int | None)
         parts.append(ping(server_ip, 2))
     if alias:
         parts.append(f"--- DNS on {alias} ---")
-        parts.append(proc.run(["netsh", "interface", "ipv4", "show", "dnsservers",
-                               f"name={alias}"]).stdout)
+        parts.append(_dns_diagnostics(alias))
     if server_ip:
         parts.append("--- Relay route ---")
-        parts.append(proc.run(["route", "print", "-4", server_ip]).stdout)
+        parts.append(_route_diagnostics(server_ip))
     if tun_index is not None:
         parts.append("--- Tunnel interface ---")
-        parts.append(proc.run(["netsh", "interface", "ipv4", "show", "interfaces"]).stdout)
+        parts.append(_tun_diagnostics())
     parts.append("--- Last log lines ---")
     parts.append(_tail_log(8))
     return "\n".join(p.strip() for p in parts if p and p.strip())
+
+
+def _dns_diagnostics(alias: str) -> str:
+    if IS_WIN:
+        return proc.run(["netsh", "interface", "ipv4", "show", "dnsservers",
+                         f"name={alias}"]).stdout
+    if IS_MAC:
+        from ._net_posix import mac_service_name
+        service = mac_service_name(alias) or alias
+        return proc.run(["networksetup", "-getdnsservers", service]).stdout
+    return proc.run(["cat", "/etc/resolv.conf"]).stdout
+
+
+def _route_diagnostics(server_ip: str) -> str:
+    if IS_WIN:
+        return proc.run(["route", "print", "-4", server_ip]).stdout
+    if IS_MAC:
+        return proc.run(["route", "-n", "get", server_ip]).stdout
+    return proc.run(["ip", "route", "get", server_ip]).stdout
+
+
+def _tun_diagnostics() -> str:
+    if IS_WIN:
+        return proc.run(["netsh", "interface", "ipv4", "show", "interfaces"]).stdout
+    if IS_MAC:
+        from .tun2socks import DEVICE
+        return proc.run(["ifconfig", DEVICE]).stdout
+    from .network import TUN_NAME
+    return proc.run(["ip", "addr", "show", TUN_NAME]).stdout
 
 
 def _tail_log(n: int) -> str:
