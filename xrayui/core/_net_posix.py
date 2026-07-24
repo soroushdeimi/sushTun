@@ -1,7 +1,9 @@
 """EXPERIMENTAL Linux/macOS network backend (unverified on this build).
 
-Mirrors the Windows network interface using ip/route/networksetup. Not yet
-tested end-to-end; the connect path on these platforms may need iteration.
+Linux mirrors the Windows network interface using ip/route (Xray's native TUN
+inbound works there). macOS has no native Xray TUN inbound at all, so the
+connect path there instead bridges Xray's SOCKS inbound through tun2socks
+(see tun2socks.py) — routes and DNS below target that bridge device.
 """
 from __future__ import annotations
 
@@ -10,6 +12,7 @@ import sys
 import time
 
 from . import proc
+from . import tun2socks as t2s
 from .network import TUN_NAME, DnsState, Interface
 
 IS_MAC = sys.platform == "darwin"
@@ -54,7 +57,7 @@ def detect_interface() -> Interface | None:
 
 
 # -- DNS -------------------------------------------------------------------
-def _mac_service(dev: str) -> str | None:
+def mac_service_name(dev: str) -> str | None:
     out = proc.run(["networksetup", "-listnetworkserviceorder"]).stdout
     service = None
     for line in out.splitlines():
@@ -68,7 +71,7 @@ def _mac_service(dev: str) -> str | None:
 
 def backup_dns(alias: str) -> DnsState:
     if IS_MAC:
-        service = _mac_service(alias) or ""
+        service = mac_service_name(alias) or ""
         current = proc.run(["networksetup", "-getdnsservers", service]).stdout.split()
         servers = [] if (not current or "aren't" in " ".join(current)) else current
         return DnsState(mode="MACOS", servers=[service, *servers])
@@ -79,11 +82,17 @@ def backup_dns(alias: str) -> DnsState:
         return DnsState(mode="FILE", servers=[])
 
 
+def _mac_flush_dns() -> None:
+    proc.run(["dscacheutil", "-flushcache"])
+    proc.run(["killall", "-HUP", "mDNSResponder"])
+
+
 def set_dns_loopback(alias: str) -> None:
     if IS_MAC:
-        service = _mac_service(alias)
+        service = mac_service_name(alias)
         if service:
             proc.run(["networksetup", "-setdnsservers", service, "127.0.0.1"])
+        _mac_flush_dns()
         return
     with open(_RESOLV, "w", encoding="utf-8") as f:
         f.write("nameserver 127.0.0.1\n")
@@ -91,10 +100,11 @@ def set_dns_loopback(alias: str) -> None:
 
 def restore_dns(alias: str, state: DnsState) -> bool:
     if state.mode == "MACOS":
-        service = state.servers[0] if state.servers else _mac_service(alias)
+        service = state.servers[0] if state.servers else mac_service_name(alias)
         rest = state.servers[1:] or ["empty"]
         if service:
             proc.run(["networksetup", "-setdnsservers", service, *rest])
+        _mac_flush_dns()
         return True
     try:
         with open(_RESOLV, "w", encoding="utf-8") as f:
@@ -105,11 +115,13 @@ def restore_dns(alias: str, state: DnsState) -> bool:
 
 
 # -- routes ----------------------------------------------------------------
-def add_routes(server_ip: str, gateway: str, tun_index: int) -> None:
+def add_routes(server_ip: str, gateway: str, tun_index: int | None) -> None:
     if IS_MAC:
+        # Route via the tun2socks point-to-point address, not -interface: the
+        # utun device only forwards what's addressed to its own next-hop.
         proc.run(["route", "-n", "add", "-host", server_ip, gateway])
-        proc.run(["route", "-n", "add", "-net", "0.0.0.0/1", "-interface", TUN_NAME])
-        proc.run(["route", "-n", "add", "-net", "128.0.0.0/1", "-interface", TUN_NAME])
+        proc.run(["route", "-n", "add", "-net", "0.0.0.0/1", t2s.ADDRESS])
+        proc.run(["route", "-n", "add", "-net", "128.0.0.0/1", t2s.ADDRESS])
     else:
         proc.run(["ip", "route", "add", server_ip, "via", gateway])
         proc.run(["ip", "route", "add", "default", "dev", TUN_NAME])
@@ -117,8 +129,8 @@ def add_routes(server_ip: str, gateway: str, tun_index: int) -> None:
 
 def remove_routes(server_ip: str | None = None) -> None:
     if IS_MAC:
-        proc.run(["route", "-n", "delete", "-net", "0.0.0.0/1", "-interface", TUN_NAME])
-        proc.run(["route", "-n", "delete", "-net", "128.0.0.0/1", "-interface", TUN_NAME])
+        proc.run(["route", "-n", "delete", "-net", "0.0.0.0/1", t2s.ADDRESS])
+        proc.run(["route", "-n", "delete", "-net", "128.0.0.0/1", t2s.ADDRESS])
         if server_ip:
             proc.run(["route", "-n", "delete", "-host", server_ip])
     else:
@@ -128,15 +140,14 @@ def remove_routes(server_ip: str | None = None) -> None:
 
 
 def wait_for_tun(name: str = TUN_NAME, timeout: float = 30.0) -> int | None:
+    # Linux only: Xray creates TUN_NAME itself. macOS has no equivalent path —
+    # its connect flow drives tun2socks.bring_up_device() directly instead.
+    if IS_MAC:
+        return None
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        if IS_MAC:
-            # macOS assigns utunN dynamically; treat any utun as the tunnel.
-            if "utun" in proc.run(["ifconfig", "-l"]).stdout:
-                return 0
-        else:
-            links = json.loads(proc.run(["ip", "-j", "link", "show", name]).stdout or "[]")
-            if links:
-                return links[0].get("ifindex", 0)
+        links = json.loads(proc.run(["ip", "-j", "link", "show", name]).stdout or "[]")
+        if links:
+            return links[0].get("ifindex", 0)
         time.sleep(1.0)
     return None

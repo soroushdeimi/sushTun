@@ -4,14 +4,20 @@ from __future__ import annotations
 import atexit
 import socket
 import sys
+import time
 from collections.abc import Callable
 
 from .. import paths
 from . import network, render, routing
 from . import settings as app_settings
+from . import tun2socks as t2s
 from . import xray as xray_mod
 from .profiles import Profile
 from .state import State
+
+IS_MAC = sys.platform == "darwin"
+SOCKS_HOST = "127.0.0.1"
+SOCKS_PORT = 10808
 
 
 class ConnectError(Exception):
@@ -26,11 +32,27 @@ def _resolve(host: str) -> str:
         return socket.gethostbyname(host)
 
 
+def _wait_port(host: str, port: int, timeout: float = 15.0) -> bool:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(1.0)
+        try:
+            s.connect((host, port))
+            return True
+        except OSError:
+            time.sleep(0.5)
+        finally:
+            s.close()
+    return False
+
+
 class Connection:
     def __init__(self, on_step: Callable[[str], None] | None = None) -> None:
         self._log = on_step or (lambda _m: None)
         self.state = State()
         self.xray = xray_mod.XrayProcess()
+        self.tun2socks = t2s.Tun2socks()
         self._owned = False  # did this process establish the active connection?
         atexit.register(self._atexit)
 
@@ -43,8 +65,8 @@ class Connection:
         if self.state.is_connected():
             raise ConnectError("already connected")
 
-        if sys.platform != "win32":
-            self._log("Experimental platform (Linux/macOS) — network backend is unverified.")
+        if sys.platform == "linux":
+            self._log("Experimental platform (Linux) — network backend is unverified.")
         self._log("Detecting active interface...")
         iface = network.detect_interface()
         if iface is None:
@@ -55,6 +77,12 @@ class Connection:
         self._log("Backing up DNS...")
         dns = network.backup_dns(iface.alias)
 
+        if IS_MAC:
+            self._connect_macos(profile, iface, server_ip, dns)
+        else:
+            self._connect_generic(profile, iface, server_ip, dns)
+
+    def _connect_generic(self, profile: Profile, iface, server_ip: str, dns) -> None:
         self._log("Building runtime config...")
         rules = routing.build_rules(app_settings.load()["routing"])
         cfg = render.build(profile, iface.alias, routing_rules=rules, stats=True)
@@ -77,6 +105,37 @@ class Connection:
         self._owned = True
         self._log("Connected.")
 
+    def _connect_macos(self, profile: Profile, iface, server_ip: str, dns) -> None:
+        # Xray has no native TUN inbound on macOS: run it with a SOCKS inbound
+        # only, then bridge that to a real TUN device via tun2socks.
+        self._log("Building runtime config (macOS: SOCKS + tun2socks bridge)...")
+        rules = routing.build_rules(app_settings.load()["routing"])
+        cfg = render.build(profile, iface.alias, routing_rules=rules, stats=True,
+                            include_tun=False)
+
+        self._log("Starting Xray...")
+        network.remove_routes(server_ip)
+        self.xray.start(cfg)
+        if not _wait_port(SOCKS_HOST, SOCKS_PORT):
+            self.xray.stop()
+            paths.runtime_config().unlink(missing_ok=True)
+            raise ConnectError("Xray SOCKS inbound did not come up")
+
+        self._log("Starting tun2socks bridge...")
+        self.tun2socks.start(SOCKS_HOST, SOCKS_PORT, iface.alias)
+        if not t2s.bring_up_device():
+            self.tun2socks.stop()
+            self.xray.stop()
+            paths.runtime_config().unlink(missing_ok=True)
+            raise ConnectError("tun2socks TUN device did not appear")
+
+        self._log("Routing DNS and traffic through the tunnel...")
+        network.set_dns_loopback(iface.alias)
+        network.add_routes(server_ip, iface.gateway, None)
+        self.state.save(iface, server_ip, 0, dns)
+        self._owned = True
+        self._log("Connected.")
+
     def disconnect(self) -> None:
         if not self.state.is_connected() and not xray_mod.is_xray_running():
             return
@@ -90,6 +149,8 @@ class Connection:
         alias = self.state.alias
         server_ip = self.state.server_ip
         dns = self.state.dns_state()
+        if IS_MAC:
+            self.tun2socks.stop()
         self.xray.stop()
         network.remove_routes(server_ip)
         if alias:
