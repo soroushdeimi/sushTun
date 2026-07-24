@@ -8,6 +8,8 @@ import time
 from .. import paths
 from . import proc
 
+STATS_API_PORT = 10085
+
 _THROUGHPUT_PS = """
 $idx = [int]$env:IDX; $sec = [int]$env:SECS
 $a = Get-NetAdapter -InterfaceIndex $idx -ErrorAction Stop
@@ -57,6 +59,29 @@ def throughput_sample(tun_index: int, seconds: int = 5) -> dict | None:
         return json.loads(out)
     except ValueError:
         return None
+
+
+def query_stats(port: int = STATS_API_PORT) -> dict | None:
+    """Total inbound traffic since connect, via the Xray stats API. up/down bytes."""
+    out = proc.run(
+        [str(paths.xray_exe()), "api", "statsquery", f"--server=127.0.0.1:{port}"],
+        timeout=5,
+    ).stdout.strip()
+    try:
+        data = json.loads(out)
+    except ValueError:
+        return None
+    up = down = 0
+    for s in data.get("stat") or []:
+        name = s.get("name", "")
+        value = int(s.get("value", 0) or 0)
+        if not name.startswith("inbound>>>"):
+            continue
+        if name.endswith(">>>uplink"):
+            up += value
+        elif name.endswith(">>>downlink"):
+            down += value
+    return {"up": up, "down": down}
 
 
 def diagnostics(server_ip: str | None, alias: str | None, tun_index: int | None) -> str:

@@ -38,6 +38,15 @@ def test_sample_reproduces_template_exactly():
     assert got_proxy == exp_proxy
 
 
+def test_stats_injection():
+    out = json.loads(render.build_text(parse_vless(SAMPLE), "Wi-Fi", TEMPLATE, stats=True))
+    assert "stats" in out
+    assert out["api"]["services"] == ["StatsService"]
+    assert out["policy"]["system"]["statsInboundUplink"] is True
+    assert any(i.get("tag") == "api" for i in out["inbounds"])
+    assert out["routing"]["rules"][0]["inboundTag"] == ["api"]
+
+
 def test_placeholder_fully_substituted():
     text = render.build_text(parse_vless(SAMPLE), "Ethernet 2", TEMPLATE)
     assert "__IFACE__" not in text and "__INTERFACE__" not in text

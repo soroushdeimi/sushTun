@@ -82,6 +82,7 @@ class StatusCard(QFrame):
             ("Gateway", "gateway"),
             ("Tunnel ifIndex", "tun"),
             ("Throughput", "throughput"),
+            ("Used this session", "used"),
         ]
         for i, (label, key) in enumerate(rows, start=1):
             k, v = _row(label)

@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 
 from .. import paths
+from .metrics import STATS_API_PORT
 from .profiles import Profile
 
 _PLACEHOLDER = "__IFACE__"
@@ -72,17 +73,35 @@ def _apply_routing(cfg: dict, rules: list[dict]) -> None:
     routing["domainStrategy"] = "IPIfNonMatch"
 
 
+def _apply_stats(cfg: dict) -> None:
+    cfg["stats"] = {}
+    cfg["api"] = {"tag": "api", "services": ["StatsService"]}
+    cfg["policy"] = {"system": {
+        "statsInboundUplink": True, "statsInboundDownlink": True,
+        "statsOutboundUplink": True, "statsOutboundDownlink": True,
+    }}
+    cfg.setdefault("inbounds", []).append({
+        "tag": "api", "listen": "127.0.0.1", "port": STATS_API_PORT,
+        "protocol": "dokodemo-door", "settings": {"address": "127.0.0.1"},
+    })
+    rules = cfg.setdefault("routing", {}).setdefault("rules", [])
+    rules.insert(0, {"type": "field", "inboundTag": ["api"], "outboundTag": "api"})
+
+
 def build_text(
     profile: Profile,
     iface_alias: str,
     template_path: Path | None = None,
     routing_rules: list[dict] | None = None,
+    stats: bool = False,
 ) -> str:
     tmpl_path = template_path or paths.config_template()
     cfg = json.loads(tmpl_path.read_text(encoding="utf-8"))
     _apply_profile(cfg, profile)
     if routing_rules:
         _apply_routing(cfg, routing_rules)
+    if stats:
+        _apply_stats(cfg)
     text = json.dumps(cfg, indent=2, ensure_ascii=False)
     return text.replace("__INTERFACE__", iface_alias).replace("__IFACE__", iface_alias)
 
@@ -92,9 +111,11 @@ def build(
     iface_alias: str,
     template_path: Path | None = None,
     routing_rules: list[dict] | None = None,
+    stats: bool = False,
 ) -> Path:
     out = paths.runtime_config()
     out.write_text(
-        build_text(profile, iface_alias, template_path, routing_rules), encoding="utf-8"
+        build_text(profile, iface_alias, template_path, routing_rules, stats),
+        encoding="utf-8",
     )
     return out

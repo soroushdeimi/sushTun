@@ -54,7 +54,7 @@ class Connection:
 
         self._log("Building runtime config...")
         rules = routing.build_rules(app_settings.load()["routing"])
-        cfg = render.build(profile, iface.alias, routing_rules=rules)
+        cfg = render.build(profile, iface.alias, routing_rules=rules, stats=True)
 
         self._log("Starting Xray...")
         network.remove_routes(server_ip)

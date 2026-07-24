@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 from ..core import alerts, metrics
 from ..core import settings as app_settings
 from ..core import subscription as sub_mod
+from ..core.alerts import human_bytes
 from ..core.connection import Connection, _resolve
 from ..core.profiles import Profile, ProfileStore
 from ..core.xray import is_xray_running
@@ -423,18 +424,30 @@ class MainWindow(QMainWindow):
         self.btn_connect.setEnabled(not connected and not self._busy)
         self.btn_disconnect.setEnabled(connected and not self._busy)
         if connected and not self._sampling and st.tun_index is not None:
-            self._sample_throughput(st.tun_index)
+            self._sample_live(st.tun_index)
 
-    def _sample_throughput(self, tun: int) -> None:
+    def _sample_live(self, tun: int) -> None:
         self._sampling = True
+
+        def work():
+            return {"rate": metrics.throughput_sample(tun, 1), "stats": metrics.query_stats()}
 
         def done(result=None, error=None):
             self._sampling = False
-            if result:
+            if not result:
+                return
+            rate = result.get("rate")
+            stats = result.get("stats")
+            if rate:
                 self.status_card.set("throughput",
-                                     f"↓ {result['rx_mbps']}  ↑ {result['tx_mbps']} Mbit/s")
+                                     f"↓ {rate['rx_mbps']}  ↑ {rate['tx_mbps']} Mbit/s")
+            if stats:
+                self.status_card.set(
+                    "used",
+                    f"↓ {human_bytes(stats['down'])}  ↑ {human_bytes(stats['up'])}",
+                )
 
-        self._run_async(lambda: metrics.throughput_sample(tun, 1), done)
+        self._run_async(work, done)
 
     # Settings / routing ----------------------------------------------------
     def _open_settings(self) -> None:
