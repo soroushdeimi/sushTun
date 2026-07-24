@@ -1,12 +1,13 @@
-"""Main application window: status, profiles, connect, log and tools."""
+"""Main window: status, profiles, subscriptions, bypass, connect, log and tools."""
 from __future__ import annotations
 
 import copy
-import json
+import time
 
 from PySide6.QtCore import Qt, QThreadPool, QTimer, Signal
 from PySide6.QtWidgets import (
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QMainWindow,
     QMenu,
@@ -20,31 +21,18 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .. import paths
-from ..core import metrics
+from ..core import alerts, metrics
+from ..core import settings as app_settings
+from ..core import subscription as sub_mod
 from ..core.connection import Connection, _resolve
 from ..core.profiles import Profile, ProfileStore
 from ..core.xray import is_xray_running
 from .dialogs import ImportDialog, ProfileEditDialog, SettingsDialog
 from .log_tailer import LogTailer
+from .routing_dialog import RoutingDialog
+from .subscription_panel import SubscriptionPanel
 from .tools_panel import ToolsPanel
-from .widgets import LogView, ProfilePanel, StatusCard
-
-
-def _load_settings() -> dict:
-    p = paths.base_dir() / "settings.json"
-    if p.exists():
-        try:
-            return json.loads(p.read_text(encoding="utf-8"))
-        except ValueError:
-            pass
-    return {"ping_target": "1.1.1.1", "sample_seconds": 5}
-
-
-def _save_settings(data: dict) -> None:
-    (paths.base_dir() / "settings.json").write_text(
-        json.dumps(data, indent=2), encoding="utf-8"
-    )
+from .widgets import AlertBanner, LogView, ProfilePanel, StatusCard
 
 
 class MainWindow(QMainWindow):
@@ -53,10 +41,12 @@ class MainWindow(QMainWindow):
     def __init__(self, elevated: bool = True) -> None:
         super().__init__()
         self.setWindowTitle("Xray Portable")
-        self.resize(980, 640)
+        self.resize(1040, 680)
 
         self.store = ProfileStore()
-        self.settings = _load_settings()
+        self.subs = sub_mod.SubscriptionStore()
+        self.settings = app_settings.load()
+        self.throttle = alerts.Throttle()
         self.pool = QThreadPool.globalInstance()
         self.conn = Connection(on_step=self.stepReceived.emit)
         self._busy = False
@@ -74,33 +64,53 @@ class MainWindow(QMainWindow):
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._refresh_status)
         self.timer.start(2000)
+        self.alert_timer = QTimer(self)
+        self.alert_timer.timeout.connect(self._check_alerts)
+        self.alert_timer.start(60_000)
+        self.autorefresh_timer = QTimer(self)
+        self.autorefresh_timer.timeout.connect(self._auto_refresh_subs)
+        self.autorefresh_timer.start(30 * 60_000)
 
         self._reload_profiles()
+        self._reload_subs()
         self._refresh_status()
+        self._check_alerts()
 
     # UI construction -------------------------------------------------------
     def _build_ui(self, elevated: bool) -> None:
         self.status_card = StatusCard()
         self.profiles = ProfilePanel()
+        self.subs_panel = SubscriptionPanel()
         self.tools = ToolsPanel()
         self.log = LogView()
+        self.alert_banner = AlertBanner()
 
         self.btn_connect = QPushButton("Connect")
         self.btn_connect.setObjectName("Primary")
         self.btn_disconnect = QPushButton("Disconnect")
         self.btn_disconnect.setObjectName("Danger")
         self.btn_cleanup = QPushButton("Restore network")
-        self.btn_settings = QPushButton("Settings")
         self.btn_connect.clicked.connect(self._connect)
         self.btn_disconnect.clicked.connect(self._disconnect)
         self.btn_cleanup.clicked.connect(self._cleanup)
-        self.btn_settings.clicked.connect(self._open_settings)
 
         actions = QHBoxLayout()
         actions.addWidget(self.btn_connect, 2)
         actions.addWidget(self.btn_disconnect, 1)
         actions.addWidget(self.btn_cleanup, 1)
-        actions.addWidget(self.btn_settings, 1)
+
+        self.btn_low = QPushButton("Low usage")
+        self.btn_low.setCheckable(True)
+        self.btn_low.setChecked(self.settings["routing"]["low_usage"])
+        self.btn_low.toggled.connect(self._toggle_low_usage)
+        self.btn_bypass = QPushButton("Bypass…")
+        self.btn_bypass.clicked.connect(self._open_routing)
+        self.btn_settings = QPushButton("Settings")
+        self.btn_settings.clicked.connect(self._open_settings)
+        actions2 = QHBoxLayout()
+        actions2.addWidget(self.btn_low)
+        actions2.addWidget(self.btn_bypass)
+        actions2.addWidget(self.btn_settings)
 
         self.step_label = QLabel("")
         self.step_label.setObjectName("Muted")
@@ -112,8 +122,10 @@ class MainWindow(QMainWindow):
         right = QWidget()
         rl = QVBoxLayout(right)
         rl.setContentsMargins(0, 0, 0, 0)
+        rl.addWidget(self.alert_banner)
         rl.addWidget(self.status_card)
         rl.addLayout(actions)
+        rl.addLayout(actions2)
         rl.addWidget(self.step_label)
         rl.addWidget(tabs, 1)
         if not elevated:
@@ -121,16 +133,17 @@ class MainWindow(QMainWindow):
             warn.setStyleSheet("color:#ff6b6b;")
             rl.insertWidget(0, warn)
 
+        left_split = QSplitter(Qt.Vertical)
+        left_split.addWidget(self._wrap(self.profiles))
+        left_split.addWidget(self._wrap(self.subs_panel))
+        left_split.setSizes([400, 260])
+
         splitter = QSplitter(Qt.Horizontal)
-        left = QWidget()
-        ll = QVBoxLayout(left)
-        ll.setContentsMargins(0, 0, 0, 0)
-        ll.addWidget(self.profiles)
-        splitter.addWidget(left)
+        splitter.addWidget(left_split)
         splitter.addWidget(right)
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
-        splitter.setSizes([300, 680])
+        splitter.setSizes([320, 720])
 
         container = QWidget()
         cl = QHBoxLayout(container)
@@ -143,10 +156,21 @@ class MainWindow(QMainWindow):
         self.profiles.duplicateRequested.connect(self._duplicate)
         self.profiles.deleteRequested.connect(self._delete)
         self.profiles.activated.connect(self._set_active)
+        self.subs_panel.addRequested.connect(self._add_sub)
+        self.subs_panel.refreshRequested.connect(self._refresh_sub)
+        self.subs_panel.deleteRequested.connect(self._delete_sub)
         self.tools.pingRequested.connect(lambda: self._run_tool(self._ping_fn))
         self.tools.delayRequested.connect(lambda: self._run_tool(self._delay_fn))
         self.tools.throughputRequested.connect(lambda: self._run_tool(self._throughput_fn))
         self.tools.diagnosticsRequested.connect(lambda: self._run_tool(self._diag_fn))
+
+    @staticmethod
+    def _wrap(widget: QWidget) -> QWidget:
+        w = QWidget()
+        v = QVBoxLayout(w)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.addWidget(widget)
+        return w
 
     def _build_tray(self) -> None:
         if not QSystemTrayIcon.isSystemTrayAvailable():
@@ -209,6 +233,7 @@ class MainWindow(QMainWindow):
         clone = copy.deepcopy(profile)
         clone.uid = Profile().uid
         clone.name = f"{profile.name} copy"
+        clone.sub_uid = ""
         self.store.save(clone)
         self._reload_profiles()
 
@@ -225,6 +250,69 @@ class MainWindow(QMainWindow):
         self.store.set_active(uid)
         self._reload_profiles()
         self._refresh_status()
+
+    # Subscriptions ---------------------------------------------------------
+    def _reload_subs(self) -> None:
+        self.subs_panel.set_subscriptions(self.subs.list())
+
+    def _add_sub(self) -> None:
+        url, ok = QInputDialog.getText(self, "Add subscription", "Subscription URL:")
+        url = url.strip()
+        if not ok or not url:
+            return
+        name = url.split("//", 1)[-1].split("/", 1)[0] or url[:40]
+        sub = sub_mod.Subscription(url=url, name=name)
+        self.subs.save(sub)
+        self._reload_subs()
+        self._refresh_sub(sub.uid)
+
+    def _refresh_sub(self, uid: str) -> None:
+        sub = next((s for s in self.subs.list() if s.uid == uid), None)
+        if not sub:
+            return
+        self.step_label.setText(f"Refreshing {sub.name}…")
+
+        def done(result=None, error=None):
+            if error:
+                self.step_label.setText(f"Subscription refresh failed: {error}")
+            else:
+                self.step_label.setText("Subscription updated.")
+            self._reload_subs()
+            self._reload_profiles()
+            self._check_alerts()
+
+        self._run_async(lambda: sub_mod.refresh(sub, self.store, self.subs), done)
+
+    def _delete_sub(self, uid: str) -> None:
+        if QMessageBox.question(self, "Delete", "Delete subscription and its profiles?") == \
+                QMessageBox.Yes:
+            self.subs.delete(uid, self.store)
+            self._reload_subs()
+            self._reload_profiles()
+
+    def _auto_refresh_subs(self) -> None:
+        hours = self.settings.get("alerts", {}).get("auto_refresh_hours", 6)
+        cutoff = time.time() - hours * 3600
+        for sub in self.subs.list():
+            if sub.updated < cutoff:
+                self._refresh_sub(sub.uid)
+
+    # Alerts ----------------------------------------------------------------
+    def _check_alerts(self) -> None:
+        cfg = self.settings.get("alerts", {})
+        triggered = []
+        for sub in self.subs.list():
+            for alert in alerts.evaluate(sub, cfg):
+                if self.throttle.allow(alert.key):
+                    triggered.append(alert)
+        if not triggered:
+            return
+        level = "critical" if any(a.level == "critical" for a in triggered) else "warning"
+        message = "  •  ".join(a.message for a in triggered)
+        self.alert_banner.show_alert(level, message)
+        if self.tray:
+            icon = QSystemTrayIcon.Critical if level == "critical" else QSystemTrayIcon.Warning
+            self.tray.showMessage("Xray Portable", message, icon, 8000)
 
     # Connection ------------------------------------------------------------
     def _connect(self) -> None:
@@ -348,12 +436,27 @@ class MainWindow(QMainWindow):
 
         self._run_async(lambda: metrics.throughput_sample(tun, 1), done)
 
-    # Settings --------------------------------------------------------------
+    # Settings / routing ----------------------------------------------------
     def _open_settings(self) -> None:
         dlg = SettingsDialog(self.settings, self)
         if dlg.exec():
             self.settings.update(dlg.values())
-            _save_settings(self.settings)
+            app_settings.save(self.settings)
+
+    def _open_routing(self) -> None:
+        dlg = RoutingDialog(self.settings["routing"], self)
+        if dlg.exec():
+            self.settings["routing"] = dlg.result_routing()
+            app_settings.save(self.settings)
+            self.btn_low.setChecked(self.settings["routing"]["low_usage"])
+            self.step_label.setText("Routing saved — applies on next connect.")
+
+    def _toggle_low_usage(self, checked: bool) -> None:
+        self.settings["routing"]["low_usage"] = checked
+        app_settings.save(self.settings)
+        self.step_label.setText(
+            f"Low usage {'on' if checked else 'off'} — applies on next connect."
+        )
 
     # Worker plumbing -------------------------------------------------------
     def _run_async(self, fn, done) -> None:
@@ -376,5 +479,8 @@ class MainWindow(QMainWindow):
         self.btn_cleanup.setEnabled(not busy)
 
     def closeEvent(self, event) -> None:
+        for t in (self.timer, self.alert_timer, self.autorefresh_timer):
+            t.stop()
         self.tailer.stop()
+        self.pool.waitForDone(2000)
         super().closeEvent(event)
