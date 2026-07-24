@@ -1,7 +1,4 @@
-"""Windows network orchestration: interface detection, DNS, routes, TUN.
-
-Windows network orchestration.
-"""
+"""Windows network orchestration: interface detection, DNS, routes, TUN."""
 from __future__ import annotations
 
 import sys

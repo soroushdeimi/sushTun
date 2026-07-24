@@ -100,8 +100,7 @@ class Connection:
         self._log("Network restored.")
 
     def _atexit(self) -> None:
-        # Only auto-restore a connection this process created, never one the
-        # .cmd launcher (which shares state/) may own.
+        # Only auto-restore a connection this process created.
         if self._owned and self.state.is_connected():
             try:
                 self._restore()

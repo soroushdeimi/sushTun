@@ -1,4 +1,4 @@
-"""Persisted connection state under state/, persisted under state/."""
+"""Persisted connection state under state/."""
 from __future__ import annotations
 
 from .. import paths
