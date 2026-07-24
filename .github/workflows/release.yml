@@ -17,9 +17,6 @@ jobs:
           - os: windows-latest
             artifact: XrayPortable-windows.exe
             source: dist/XrayPortable.exe
-          - os: macos-latest
-            artifact: XrayPortable-macos
-            source: dist/XrayPortable
           - os: ubuntu-latest
             artifact: XrayPortable-linux
             source: dist/XrayPortable
