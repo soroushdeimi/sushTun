@@ -28,6 +28,7 @@ class Profile:
     path: str = ""
     host: str = ""
     service_name: str = ""
+    sub_uid: str = ""
     uid: str = field(default_factory=lambda: uuid.uuid4().hex)
 
     @classmethod
