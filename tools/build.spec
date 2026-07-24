@@ -12,7 +12,7 @@ if IS_WIN:
 datas = [(str(ROOT / a), ".") for a in _ASSETS if (ROOT / a).exists()]
 
 a = Analysis(
-    [str(ROOT / "xrayui" / "__main__.py")],
+    [str(ROOT / "app_main.py")],
     pathex=[str(ROOT)],
     datas=datas,
     hiddenimports=["cv2"],
