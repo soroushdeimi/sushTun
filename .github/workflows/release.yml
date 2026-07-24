@@ -20,6 +20,9 @@ jobs:
           - os: ubuntu-latest
             artifact: XrayPortable-linux
             source: dist/XrayPortable
+          - os: macos-latest
+            artifact: XrayPortable-macos
+            source: dist/XrayPortable
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
