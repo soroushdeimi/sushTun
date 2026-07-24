@@ -99,9 +99,10 @@ def add_routes(server_ip: str, gateway: str, tun_index: int) -> None:
               "if", str(tun_index), "metric", "3"])
 
 
-def remove_routes(server_ip: str) -> None:
+def remove_routes(server_ip: str | None = None) -> None:
     proc.run(["route", "delete", "0.0.0.0", "mask", "0.0.0.0", "0.0.0.0"])
-    proc.run(["route", "delete", server_ip, "mask", "255.255.255.255"])
+    if server_ip:
+        proc.run(["route", "delete", server_ip, "mask", "255.255.255.255"])
 
 
 def wait_for_tun(name: str = TUN_NAME, timeout: float = 30.0) -> int | None:
