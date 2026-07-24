@@ -31,7 +31,7 @@ class Profile:
     uid: str = field(default_factory=lambda: uuid.uuid4().hex)
 
     @classmethod
-    def from_dict(cls, data: dict) -> "Profile":
+    def from_dict(cls, data: dict) -> Profile:
         known = {f.name for f in fields(cls)}
         return cls(**{k: v for k, v in data.items() if k in known})
 
