@@ -3,7 +3,8 @@
 
 Pulls the matching Xray-core binary (XTLS/Xray-core), the enhanced
 geoip.dat/geosite.dat routing data (Loyalsoldier/v2ray-rules-dat, which ships
-ir/ru/cn plus win-spy/win-update/win-extra), and wintun.dll on Windows.
+ir/ru/cn plus win-spy/win-update/win-extra), wintun.dll on Windows, and
+tun2socks (xjasonlyu/tun2socks) on macOS, where Xray has no native TUN inbound.
 Cross-platform and stdlib-only so it runs in every CI runner.
 """
 from __future__ import annotations
@@ -28,6 +29,15 @@ XRAY_ASSETS = {
 XRAY_URL = "https://github.com/XTLS/Xray-core/releases/latest/download/{}"
 GEO_URL = "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/{}"
 WINTUN_URL = "https://www.wintun.net/builds/wintun-0.14.1.zip"
+
+TUN2SOCKS_VERSION = "v2.6.0"
+TUN2SOCKS_ASSETS = {
+    "64": "tun2socks-darwin-amd64.zip",
+    "arm64": "tun2socks-darwin-arm64.zip",
+}
+TUN2SOCKS_URL = (
+    f"https://github.com/xjasonlyu/tun2socks/releases/download/{TUN2SOCKS_VERSION}/{{}}"
+)
 
 
 def _os() -> str:
@@ -68,6 +78,16 @@ def _fetch_wintun() -> None:
         (ROOT / "wintun.dll").write_bytes(zf.read("wintun/bin/amd64/wintun.dll"))
 
 
+def _fetch_tun2socks() -> None:
+    asset = TUN2SOCKS_ASSETS[_arch()]
+    data = _get(TUN2SOCKS_URL.format(asset))
+    with zipfile.ZipFile(io.BytesIO(data)) as zf:
+        inner = next(n for n in zf.namelist() if n.startswith("tun2socks-darwin"))
+        out = ROOT / "tun2socks"
+        out.write_bytes(zf.read(inner))
+    out.chmod(out.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+
+
 def main() -> int:
     os_name = _os()
     force = "--force" in sys.argv
@@ -86,6 +106,10 @@ def main() -> int:
     if os_name == "windows" and (force or not (ROOT / "wintun.dll").exists()):
         print("wintun.dll...")
         _fetch_wintun()
+
+    if os_name == "darwin" and (force or not (ROOT / "tun2socks").exists()):
+        print(f"tun2socks {TUN2SOCKS_VERSION} (Xray has no native TUN inbound on macOS)...")
+        _fetch_tun2socks()
 
     print("Done.")
     return 0

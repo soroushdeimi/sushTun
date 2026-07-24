@@ -35,6 +35,12 @@ def xray_exe() -> Path:
     return _first_existing("xray.exe" if sys.platform == "win32" else "xray")
 
 
+def tun2socks_bin() -> Path:
+    # macOS only: Xray has no native TUN inbound there, so tun2socks bridges
+    # its SOCKS inbound to a real TUN device.
+    return _first_existing("tun2socks")
+
+
 def config_template() -> Path:
     return _first_existing("config.template.json")
 

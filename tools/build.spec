@@ -4,11 +4,14 @@ from pathlib import Path
 
 ROOT = Path(SPECPATH).parent
 IS_WIN = sys.platform == "win32"
+IS_MAC = sys.platform == "darwin"
 
 xray_bin = "xray.exe" if IS_WIN else "xray"
 _ASSETS = ["config.template.json", "geoip.dat", "geosite.dat", xray_bin]
 if IS_WIN:
     _ASSETS.append("wintun.dll")
+if IS_MAC:
+    _ASSETS.append("tun2socks")
 datas = [(str(ROOT / a), ".") for a in _ASSETS if (ROOT / a).exists()]
 for _icon in ("assets/icon.png", "assets/icon.ico"):
     if (ROOT / _icon).exists():

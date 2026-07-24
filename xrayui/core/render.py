@@ -73,6 +73,12 @@ def _apply_routing(cfg: dict, rules: list[dict]) -> None:
     routing["domainStrategy"] = "IPIfNonMatch"
 
 
+def _drop_tun_inbound(cfg: dict) -> None:
+    # Xray has no native TUN inbound on macOS; there we bridge socks-in to a
+    # real TUN device with tun2socks instead, so the tun-in entry is unused.
+    cfg["inbounds"] = [i for i in cfg.get("inbounds", []) if i.get("tag") != "tun-in"]
+
+
 def _apply_stats(cfg: dict) -> None:
     cfg["stats"] = {}
     cfg["api"] = {"tag": "api", "services": ["StatsService"]}
@@ -94,10 +100,13 @@ def build_text(
     template_path: Path | None = None,
     routing_rules: list[dict] | None = None,
     stats: bool = False,
+    include_tun: bool = True,
 ) -> str:
     tmpl_path = template_path or paths.config_template()
     cfg = json.loads(tmpl_path.read_text(encoding="utf-8"))
     _apply_profile(cfg, profile)
+    if not include_tun:
+        _drop_tun_inbound(cfg)
     if routing_rules:
         _apply_routing(cfg, routing_rules)
     if stats:
@@ -112,10 +121,11 @@ def build(
     template_path: Path | None = None,
     routing_rules: list[dict] | None = None,
     stats: bool = False,
+    include_tun: bool = True,
 ) -> Path:
     out = paths.runtime_config()
     out.write_text(
-        build_text(profile, iface_alias, template_path, routing_rules, stats),
+        build_text(profile, iface_alias, template_path, routing_rules, stats, include_tun),
         encoding="utf-8",
     )
     return out
