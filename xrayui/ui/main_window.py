@@ -61,6 +61,7 @@ class MainWindow(QMainWindow):
         self.conn = Connection(on_step=self.stepReceived.emit)
         self._busy = False
         self._sampling = False
+        self._workers: set = set()
 
         self.stepReceived.connect(self._on_step)
         self._build_ui(elevated)
@@ -250,7 +251,7 @@ class MainWindow(QMainWindow):
         self._set_busy(True)
         self._run_async(self.conn.cleanup, self._on_conn_done)
 
-    def _on_conn_done(self, _result=None, error: str | None = None) -> None:
+    def _on_conn_done(self, result=None, error: str | None = None) -> None:
         self._set_busy(False)
         if error:
             self.step_label.setText(error)
@@ -358,8 +359,14 @@ class MainWindow(QMainWindow):
     def _run_async(self, fn, done) -> None:
         from .workers import Worker
         worker = Worker(fn)
-        worker.signals.finished.connect(lambda r: done(result=r))
-        worker.signals.error.connect(lambda e: done(error=e))
+
+        def finish(result=None, error=None):
+            self._workers.discard(worker)
+            done(result=result, error=error)
+
+        worker.signals.finished.connect(lambda r: finish(result=r))
+        worker.signals.error.connect(lambda e: finish(error=e))
+        self._workers.add(worker)  # hold a reference so PySide won't GC it mid-run
         self.pool.start(worker)
 
     def _set_busy(self, busy: bool) -> None:
