@@ -1,9 +1,14 @@
-# PyInstaller one-file spec. Build with:  pyinstaller tools/build.spec
+# PyInstaller one-file spec (cross-platform). Build with: pyinstaller tools/build.spec
+import sys
 from pathlib import Path
 
 ROOT = Path(SPECPATH).parent
+IS_WIN = sys.platform == "win32"
 
-_ASSETS = ["config.template.json", "xray.exe", "geoip.dat", "geosite.dat", "wintun.dll"]
+xray_bin = "xray.exe" if IS_WIN else "xray"
+_ASSETS = ["config.template.json", "geoip.dat", "geosite.dat", xray_bin]
+if IS_WIN:
+    _ASSETS.append("wintun.dll")
 datas = [(str(ROOT / a), ".") for a in _ASSETS if (ROOT / a).exists()]
 
 a = Analysis(
@@ -23,6 +28,6 @@ exe = EXE(
     a.datas,
     name="XrayPortable",
     console=False,
-    uac_admin=True,
+    uac_admin=IS_WIN,
     upx=False,
 )

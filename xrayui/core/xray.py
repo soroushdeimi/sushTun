@@ -1,16 +1,28 @@
-"""Manage the xray.exe process and its log file."""
+"""Manage the xray process and its log file."""
 from __future__ import annotations
 
 import subprocess
+import sys
 from pathlib import Path
 
 from .. import paths
 from . import proc
 
+IS_WIN = sys.platform == "win32"
+
 
 def is_xray_running() -> bool:
-    out = proc.run(["tasklist", "/fi", "imagename eq xray.exe"]).stdout.lower()
-    return "xray.exe" in out
+    if IS_WIN:
+        out = proc.run(["tasklist", "/fi", "imagename eq xray.exe"]).stdout.lower()
+        return "xray.exe" in out
+    return proc.run(["pgrep", "-x", "xray"]).returncode == 0
+
+
+def _kill_all() -> None:
+    if IS_WIN:
+        proc.run(["taskkill", "/f", "/im", "xray.exe", "/t"])
+    else:
+        proc.run(["pkill", "-x", "xray"])
 
 
 class XrayProcess:
@@ -35,7 +47,7 @@ class XrayProcess:
         return self._proc is not None and self._proc.poll() is None
 
     def stop(self) -> None:
-        proc.run(["taskkill", "/f", "/im", "xray.exe", "/t"])
+        _kill_all()
         self._proc = None
         if self._log is not None:
             try:

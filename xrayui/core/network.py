@@ -4,6 +4,7 @@ Windows network orchestration.
 """
 from __future__ import annotations
 
+import sys
 import time
 from dataclasses import dataclass, field
 
@@ -114,3 +115,17 @@ def wait_for_tun(name: str = TUN_NAME, timeout: float = 30.0) -> int | None:
                 return int(ln)
         time.sleep(1.0)
     return None
+
+
+# On Linux/macOS, swap the Windows implementations for the POSIX backend.
+# The Windows code above is left untouched and never runs off-Windows.
+if sys.platform != "win32":
+    from . import _net_posix as _posix
+
+    detect_interface = _posix.detect_interface
+    backup_dns = _posix.backup_dns
+    set_dns_loopback = _posix.set_dns_loopback
+    restore_dns = _posix.restore_dns
+    add_routes = _posix.add_routes
+    remove_routes = _posix.remove_routes
+    wait_for_tun = _posix.wait_for_tun

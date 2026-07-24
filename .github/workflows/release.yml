@@ -10,7 +10,20 @@ permissions:
 
 jobs:
   build:
-    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: XrayPortable-windows.exe
+            source: dist/XrayPortable.exe
+          - os: macos-latest
+            artifact: XrayPortable-macos
+            source: dist/XrayPortable
+          - os: ubuntu-latest
+            artifact: XrayPortable-linux
+            source: dist/XrayPortable
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -19,18 +32,20 @@ jobs:
       - name: Install dependencies
         run: python -m pip install --upgrade pip -r requirements-dev.txt
       - name: Fetch redistributables
-        shell: pwsh
-        run: pwsh -File scripts/fetch-deps.ps1
-      - name: Build exe
+        run: python scripts/fetch_deps.py
+      - name: Build
         run: pyinstaller tools/build.spec
+      - name: Rename artifact
+        shell: bash
+        run: cp "${{ matrix.source }}" "${{ matrix.artifact }}"
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: XrayPortable
-          path: dist/XrayPortable.exe
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}
       - name: Publish release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/XrayPortable.exe
+          files: ${{ matrix.artifact }}
           generate_release_notes: true

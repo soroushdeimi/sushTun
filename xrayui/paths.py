@@ -32,7 +32,7 @@ def _first_existing(name: str) -> Path:
 
 
 def xray_exe() -> Path:
-    return _first_existing("xray.exe")
+    return _first_existing("xray.exe" if sys.platform == "win32" else "xray")
 
 
 def config_template() -> Path:

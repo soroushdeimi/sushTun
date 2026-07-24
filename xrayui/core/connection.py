@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import atexit
 import socket
+import sys
 from collections.abc import Callable
 
 from .. import paths
@@ -42,6 +43,8 @@ class Connection:
         if self.state.is_connected():
             raise ConnectError("already connected")
 
+        if sys.platform != "win32":
+            self._log("Experimental platform (Linux/macOS) — network backend is unverified.")
         self._log("Detecting active interface...")
         iface = network.detect_interface()
         if iface is None:
