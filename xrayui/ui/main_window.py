@@ -9,9 +9,12 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QPushButton,
     QSplitter,
+    QStyle,
+    QSystemTrayIcon,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -61,6 +64,7 @@ class MainWindow(QMainWindow):
 
         self.stepReceived.connect(self._on_step)
         self._build_ui(elevated)
+        self._build_tray()
 
         self.tailer = LogTailer()
         self.tailer.line.connect(self.log.append_line)
@@ -142,6 +146,31 @@ class MainWindow(QMainWindow):
         self.tools.delayRequested.connect(lambda: self._run_tool(self._delay_fn))
         self.tools.throughputRequested.connect(lambda: self._run_tool(self._throughput_fn))
         self.tools.diagnosticsRequested.connect(lambda: self._run_tool(self._diag_fn))
+
+    def _build_tray(self) -> None:
+        if not QSystemTrayIcon.isSystemTrayAvailable():
+            self.tray = None
+            return
+        icon = self.style().standardIcon(QStyle.SP_ComputerIcon)
+        self.setWindowIcon(icon)
+        self.tray = QSystemTrayIcon(icon, self)
+        self.tray.setToolTip("Xray Portable")
+        menu = QMenu()
+        menu.addAction("Show", self.showNormal)
+        menu.addAction("Connect", self._connect)
+        menu.addAction("Disconnect", self._disconnect)
+        menu.addSeparator()
+        menu.addAction("Quit", self._quit)
+        self.tray.setContextMenu(menu)
+        self.tray.activated.connect(
+            lambda reason: self.showNormal()
+            if reason == QSystemTrayIcon.Trigger else None
+        )
+        self.tray.show()
+
+    def _quit(self) -> None:
+        from PySide6.QtWidgets import QApplication
+        QApplication.instance().quit()
 
     # Profiles --------------------------------------------------------------
     def _reload_profiles(self) -> None:
