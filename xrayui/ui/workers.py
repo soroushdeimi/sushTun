@@ -25,6 +25,13 @@ class Worker(QRunnable):
         try:
             result = self.fn(*self.args, **self.kwargs)
         except Exception as exc:  # surface to the UI instead of crashing
-            self.signals.error.emit(str(exc))
+            self._emit(self.signals.error, str(exc))
         else:
-            self.signals.finished.emit(result)
+            self._emit(self.signals.finished, result)
+
+    @staticmethod
+    def _emit(signal, payload) -> None:
+        try:
+            signal.emit(payload)
+        except RuntimeError:
+            pass  # window torn down before the worker finished

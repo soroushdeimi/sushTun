@@ -30,6 +30,7 @@ class Connection:
         self._log = on_step or (lambda _m: None)
         self.state = State()
         self.xray = xray_mod.XrayProcess()
+        self._owned = False  # did this process establish the active connection?
         atexit.register(self._atexit)
 
     def is_connected(self) -> bool:
@@ -70,6 +71,7 @@ class Connection:
         network.set_dns_loopback(iface.alias)
         network.add_routes(server_ip, iface.gateway, tun)
         self.state.save(iface, server_ip, tun, dns)
+        self._owned = True
         self._log("Connected.")
 
     def disconnect(self) -> None:
@@ -90,11 +92,14 @@ class Connection:
         if alias:
             network.restore_dns(alias, dns)
         self.state.clear()
+        self._owned = False
         paths.runtime_config().unlink(missing_ok=True)
         self._log("Network restored.")
 
     def _atexit(self) -> None:
-        if self.state.is_connected():
+        # Only auto-restore a connection this process created, never one the
+        # .cmd launcher (which shares state/) may own.
+        if self._owned and self.state.is_connected():
             try:
                 self._restore()
             except Exception:
