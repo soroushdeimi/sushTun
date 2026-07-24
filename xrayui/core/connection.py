@@ -6,7 +6,8 @@ import socket
 from collections.abc import Callable
 
 from .. import paths
-from . import network, render
+from . import network, render, routing
+from . import settings as app_settings
 from . import xray as xray_mod
 from .profiles import Profile
 from .state import State
@@ -51,7 +52,8 @@ class Connection:
         dns = network.backup_dns(iface.alias)
 
         self._log("Building runtime config...")
-        cfg = render.build(profile, iface.alias)
+        rules = routing.build_rules(app_settings.load()["routing"])
+        cfg = render.build(profile, iface.alias, routing_rules=rules)
 
         self._log("Starting Xray...")
         network.remove_routes(server_ip)

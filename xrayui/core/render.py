@@ -66,15 +66,35 @@ def _apply_profile(cfg: dict, p: Profile) -> None:
     proxy["streamSettings"] = _stream_settings(p)
 
 
-def build_text(profile: Profile, iface_alias: str, template_path: Path | None = None) -> str:
+def _apply_routing(cfg: dict, rules: list[dict]) -> None:
+    routing = cfg.setdefault("routing", {})
+    routing.setdefault("rules", []).extend(rules)
+    routing["domainStrategy"] = "IPIfNonMatch"
+
+
+def build_text(
+    profile: Profile,
+    iface_alias: str,
+    template_path: Path | None = None,
+    routing_rules: list[dict] | None = None,
+) -> str:
     tmpl_path = template_path or paths.config_template()
     cfg = json.loads(tmpl_path.read_text(encoding="utf-8"))
     _apply_profile(cfg, profile)
+    if routing_rules:
+        _apply_routing(cfg, routing_rules)
     text = json.dumps(cfg, indent=2, ensure_ascii=False)
     return text.replace("__INTERFACE__", iface_alias).replace("__IFACE__", iface_alias)
 
 
-def build(profile: Profile, iface_alias: str, template_path: Path | None = None) -> Path:
+def build(
+    profile: Profile,
+    iface_alias: str,
+    template_path: Path | None = None,
+    routing_rules: list[dict] | None = None,
+) -> Path:
     out = paths.runtime_config()
-    out.write_text(build_text(profile, iface_alias, template_path), encoding="utf-8")
+    out.write_text(
+        build_text(profile, iface_alias, template_path, routing_rules), encoding="utf-8"
+    )
     return out
