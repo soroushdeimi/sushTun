@@ -22,6 +22,30 @@ from ..core.profiles import Profile
 from .theme import ERR, MUTED, OK, WARN
 
 
+class AlertBanner(QFrame):
+    def __init__(self) -> None:
+        super().__init__()
+        self.setVisible(False)
+        row = QHBoxLayout(self)
+        row.setContentsMargins(12, 8, 8, 8)
+        self._label = QLabel("")
+        self._label.setWordWrap(True)
+        close = QPushButton("✕")
+        close.setFixedWidth(28)
+        close.clicked.connect(lambda: self.setVisible(False))
+        row.addWidget(self._label, 1)
+        row.addWidget(close)
+
+    def show_alert(self, level: str, message: str) -> None:
+        color = ERR if level == "critical" else WARN
+        self.setStyleSheet(
+            f"QFrame{{background:rgba(0,0,0,0.25);border:1px solid {color};"
+            f"border-radius:10px;}} QLabel{{color:{color};font-weight:600;}}"
+        )
+        self._label.setText(message)
+        self.setVisible(True)
+
+
 def _row(label: str) -> tuple[QLabel, QLabel]:
     key = QLabel(label)
     key.setObjectName("Muted")
