@@ -34,6 +34,9 @@ dependencies.
   domains, IPs, and app presets.
 - **Low-usage mode** — a single toggle sends OS telemetry and update traffic
   direct so it never eats your quota, while everything else stays tunneled.
+- **Share via hotspot** *(Windows)* — put the tunnel behind the Windows mobile
+  hotspot so phones and other devices are covered the moment they connect, with
+  nothing to configure on the device itself.
 - **Live metrics** — real-time throughput and total data used this session,
   plus ping, TCP-delay, and diagnostics tools alongside a colorized live log.
 
