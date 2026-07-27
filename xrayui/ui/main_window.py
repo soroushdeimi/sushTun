@@ -58,7 +58,7 @@ class MainWindow(QMainWindow):
         self._build_tray()
 
         self.tailer = LogTailer()
-        self.tailer.line.connect(self.log.append_line)
+        self.tailer.lines.connect(self.log.append_lines)
         self.tailer.start()
 
         self.timer = QTimer(self)

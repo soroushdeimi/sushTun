@@ -172,19 +172,26 @@ class LogView(QTextEdit):
         self.setFont(QFont("Cascadia Code", 10))
         self.document().setMaximumBlockCount(5000)
 
-    def append_line(self, line: str) -> None:
-        color = None
+    @staticmethod
+    def _markup(line: str) -> str:
+        color = MUTED
         if "[Warning]" in line or "failed" in line:
             color = WARN
         if "[Error]" in line or "panic" in line:
             color = ERR
         if "started" in line:
             color = OK
-        text = html.escape(line)
-        muted = MUTED
-        payload = f'<span style="color:{color}">{text}</span>' if color else \
-            f'<span style="color:{muted}">{text}</span>'
-        self.append(payload)
+        return f'<span style="color:{color}">{html.escape(line)}</span>'
+
+    def append_line(self, line: str) -> None:
+        self.append(self._markup(line))
+        self.moveCursor(QTextCursor.End)
+
+    def append_lines(self, lines: list[str]) -> None:
+        # One append per batch: per-line appends stall the UI on busy logs.
+        if not lines:
+            return
+        self.append("<br>".join(self._markup(ln) for ln in lines))
         self.moveCursor(QTextCursor.End)
 
     def clear_log(self) -> None:
