@@ -20,11 +20,25 @@ WITH_HOTSPOT = (
 )
 
 
+SHARED_OK = (
+    '[{"name":"xray0","status":2,"shared":true,"role":0},'
+    '{"name":"Local Area Connection* 3","status":2,"shared":true,"role":1}]'
+)
+
+
 def _stub(monkeypatch, stdout, returncode=0):
+    """Stub PowerShell (and netsh) so nothing touches the real network."""
     monkeypatch.setattr(hotspot, "IS_WIN", True)
+    outputs = list(stdout) if isinstance(stdout, list) else None
+
+    def fake_ps(*a, **k):
+        text = outputs.pop(0) if outputs else stdout
+        return types.SimpleNamespace(stdout=text, returncode=returncode)
+
+    monkeypatch.setattr(hotspot.proc, "powershell", fake_ps)
     monkeypatch.setattr(
-        hotspot.proc, "powershell",
-        lambda *a, **k: types.SimpleNamespace(stdout=stdout, returncode=returncode),
+        hotspot.proc, "run",
+        lambda *a, **k: types.SimpleNamespace(stdout="", returncode=0),
     )
 
 
@@ -68,9 +82,29 @@ def test_enable_reports_failure_from_powershell(monkeypatch):
         hotspot.enable(public_name="xray0")
 
 
-def test_enable_succeeds_with_tunnel_and_hotspot(monkeypatch):
-    _stub(monkeypatch, WITH_HOTSPOT)
+def test_enable_succeeds_once_windows_reports_sharing(monkeypatch):
+    # pre-check list, the set call, then the post-check list showing it applied
+    _stub(monkeypatch, [WITH_HOTSPOT, "", SHARED_OK])
     hotspot.enable(public_name="xray0")  # must not raise
+
+
+def test_enable_detects_silently_ignored_sharing(monkeypatch):
+    # Windows accepts the calls but sharing never turns on (link-local public side)
+    _stub(monkeypatch, [WITH_HOTSPOT, "", WITH_HOTSPOT])
+    with pytest.raises(RuntimeError, match="did not accept"):
+        hotspot.enable(public_name="xray0")
+
+
+def test_tunnel_gets_a_resolver_before_sharing(monkeypatch):
+    """ICS answers client DNS from the shared adapter, which starts with none."""
+    calls = []
+    _stub(monkeypatch, [WITH_HOTSPOT, "", SHARED_OK])
+    monkeypatch.setattr(
+        hotspot.proc, "run",
+        lambda args, **k: (calls.append(args), types.SimpleNamespace(returncode=0))[1],
+    )
+    hotspot.enable(public_name="xray0")
+    assert any("dnsservers" in " ".join(c) and "127.0.0.1" in " ".join(c) for c in calls)
 
 
 def test_no_op_off_windows(monkeypatch):

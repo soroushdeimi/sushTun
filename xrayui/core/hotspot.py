@@ -121,6 +121,17 @@ def is_sharing() -> bool:
     return any(c.shared for c in list_connections())
 
 
+def _ensure_tunnel_dns(adapter: str) -> None:
+    """Give the tunnel adapter a resolver.
+
+    ICS answers client DNS from the shared connection's servers, and the TUN
+    adapter comes up with none — without this, hotspot clients resolve nothing.
+    127.0.0.1 is Xray's own dns inbound.
+    """
+    proc.run(["netsh", "interface", "ipv4", "set", "dnsservers",
+              f"name={adapter}", "static", "127.0.0.1", "primary", "validate=no"])
+
+
 def enable(public_name: str = TUN_NAME, private_name: str | None = None) -> None:
     """Route hotspot clients through `public_name`. Raises if it cannot be set."""
     if not IS_WIN:
@@ -133,11 +144,21 @@ def enable(public_name: str = TUN_NAME, private_name: str | None = None) -> None
         raise RuntimeError("no active hotspot adapter found — turn the hotspot on first")
     if not any(c.name == public_name for c in connections):
         raise RuntimeError(f"tunnel adapter {public_name!r} not found")
+    _ensure_tunnel_dns(public_name)
     result = proc.powershell(
         _SET_PS, env={"PUBLIC_NAME": public_name, "PRIVATE_NAME": private_name}, timeout=60
     )
     if result.returncode != 0:
         raise RuntimeError("failed to enable internet connection sharing")
+
+    # Windows can accept the calls yet leave sharing off (a link-local public
+    # adapter is one way this happens), so confirm rather than assume.
+    after = {c.name: c for c in list_connections()}
+    pub, priv = after.get(public_name), after.get(private_name)
+    if not (pub and pub.shared and pub.role == PUBLIC):
+        raise RuntimeError(f"Windows did not accept {public_name!r} as the shared connection")
+    if not (priv and priv.shared and priv.role == PRIVATE):
+        raise RuntimeError(f"Windows did not accept {private_name!r} as the hotspot side")
 
 
 def disable() -> None:
