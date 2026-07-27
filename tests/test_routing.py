@@ -48,12 +48,6 @@ def test_custom_domains_normalized_and_passthrough():
     assert "geosite:google" in direct["domain"]
 
 
-def test_app_presets_expand():
-    rules = routing.build_rules(_routing(app_presets=["Aparat"]))
-    direct = next(x for x in rules if x["outboundTag"] == "direct" and "domain" in x)
-    assert "domain:aparat.com" in direct["domain"]
-
-
 def test_proxy_domains_rule():
     rules = routing.build_rules(_routing(proxy_domains=["netflix.com"]))
     assert any(x["outboundTag"] == "proxy" for x in rules)
@@ -66,3 +60,17 @@ def test_render_keeps_dns_rule_first_and_sets_strategy():
         "Wi-Fi", TEMPLATE, routing_rules=rules))
     assert cfg["routing"]["rules"][0].get("inboundTag") == ["dns-in"]
     assert cfg["routing"]["domainStrategy"] == "IPIfNonMatch"
+
+
+def test_stale_settings_keys_are_dropped(tmp_path, monkeypatch):
+    import json
+
+    from xrayui.core import settings as app_settings
+
+    monkeypatch.setattr(app_settings.paths, "base_dir", lambda: tmp_path)
+    (tmp_path / "settings.json").write_text(json.dumps({
+        "routing": {"app_presets": ["Aparat"], "direct_iran": False},
+    }), encoding="utf-8")
+    loaded = app_settings.load()
+    assert "app_presets" not in loaded["routing"]
+    assert loaded["routing"]["direct_iran"] is False  # real values still applied

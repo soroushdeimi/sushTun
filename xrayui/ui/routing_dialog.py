@@ -12,8 +12,6 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from ..core.routing import APP_PRESETS
-
 
 class RoutingDialog(QDialog):
     def __init__(self, routing: dict, parent=None) -> None:
@@ -42,17 +40,6 @@ class RoutingDialog(QDialog):
         for i, cb in enumerate(boxes):
             tg.addWidget(cb, i // 2, i % 2)
         layout.addWidget(toggles)
-
-        presets = QGroupBox("App presets (direct)")
-        pg = QGridLayout(presets)
-        self._preset_boxes: dict[str, QCheckBox] = {}
-        enabled = set(routing.get("app_presets", []))
-        for i, name in enumerate(APP_PRESETS):
-            cb = QCheckBox(name)
-            cb.setChecked(name in enabled)
-            self._preset_boxes[name] = cb
-            pg.addWidget(cb, i // 2, i % 2)
-        layout.addWidget(presets)
 
         layout.addWidget(QLabel("Bypass domains (one per line — direct):"))
         self.domains = QPlainTextEdit("\n".join(routing.get("bypass_domains", [])))
@@ -85,7 +72,6 @@ class RoutingDialog(QDialog):
             direct_iran=self.cb_iran.isChecked(),
             direct_russia=self.cb_russia.isChecked(),
             direct_china=self.cb_china.isChecked(),
-            app_presets=[n for n, cb in self._preset_boxes.items() if cb.isChecked()],
             bypass_domains=self._lines(self.domains),
             bypass_ips=self._lines(self.ips),
             proxy_domains=self._lines(self.proxy),

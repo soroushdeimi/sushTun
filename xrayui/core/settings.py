@@ -19,7 +19,6 @@ DEFAULTS: dict = {
         "bypass_domains": [],
         "bypass_ips": [],
         "proxy_domains": [],
-        "app_presets": [],
     },
     "alerts": {
         "data_percent": 10,
@@ -31,9 +30,12 @@ DEFAULTS: dict = {
 
 
 def _merge(base: dict, over: dict) -> dict:
+    """Overlay saved values on the defaults, dropping keys we no longer define."""
     out = copy.deepcopy(base)
     for k, v in over.items():
-        if isinstance(v, dict) and isinstance(out.get(k), dict):
+        if k not in out:
+            continue  # stale key from an older version
+        if isinstance(v, dict) and isinstance(out[k], dict):
             out[k] = _merge(out[k], v)
         else:
             out[k] = v

@@ -8,10 +8,12 @@ Loyalsoldier data (ir/ru/cn, category-ads-all, private, win-spy/update/extra).
 from __future__ import annotations
 
 # geosite/geoip category groups per country. First entry is domains, second IPs.
+# The bare `domain:<tld>` entries also catch national domains the curated
+# geosite lists miss (category-ir alone covers only a couple hundred).
 COUNTRY_RULES: dict[str, tuple[list[str], list[str]]] = {
-    "iran": (["geosite:category-ir"], ["geoip:ir"]),
-    "russia": (["geosite:category-ru"], ["geoip:ru"]),
-    "china": (["geosite:cn", "geosite:geolocation-cn"], ["geoip:cn"]),
+    "iran": (["geosite:category-ir", "domain:ir"], ["geoip:ir"]),
+    "russia": (["geosite:category-ru", "domain:ru", "domain:su"], ["geoip:ru"]),
+    "china": (["geosite:cn", "geosite:geolocation-cn", "domain:cn"], ["geoip:cn"]),
 }
 
 # Windows telemetry/update/background. geosite:win-* come from Loyalsoldier data;
@@ -32,15 +34,6 @@ LOW_USAGE_DOMAINS: list[str] = [
     "domain:nexus.officeapps.live.com",
     "domain:nexusrules.officeapps.live.com",
 ]
-
-# Convenience presets: domestic services people commonly bypass. The country
-# toggles above already cover most of these in bulk.
-APP_PRESETS: dict[str, list[str]] = {
-    "Aparat": ["domain:aparat.com"],
-    "Digikala": ["domain:digikala.com"],
-    "Divar": ["domain:divar.ir"],
-    "Iranian banks": ["domain:shaparak.ir", "domain:sadad.ir", "domain:bmi.ir"],
-}
 
 _PREFIXES = ("domain:", "full:", "geosite:", "regexp:", "keyword:", "ext:")
 
@@ -72,8 +65,6 @@ def build_rules(r: dict) -> list[dict]:
     if r.get("low_usage"):
         direct_domains.extend(LOW_USAGE_CATEGORIES)
         direct_domains.extend(LOW_USAGE_DOMAINS)
-    for name in r.get("app_presets", []):
-        direct_domains.extend(APP_PRESETS.get(name, []))
     direct_domains.extend(_norm_domain(d) for d in r.get("bypass_domains", []) if d.strip())
     direct_ips.extend(ip.strip() for ip in r.get("bypass_ips", []) if ip.strip())
 
