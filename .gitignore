@@ -23,6 +23,7 @@ venv/
 # Build artifacts
 build/
 dist/
+XrayPortable*
 
 # OS
 .DS_Store

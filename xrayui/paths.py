@@ -45,6 +45,11 @@ def config_template() -> Path:
     return _first_existing("config.template.json")
 
 
+def asset_dir() -> Path:
+    """Directory holding geoip.dat / geosite.dat (XRAY_LOCATION_ASSET)."""
+    return _first_existing("geoip.dat").parent
+
+
 def icon_png() -> Path:
     return _first_existing("assets/icon.png")
 
