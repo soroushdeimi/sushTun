@@ -20,6 +20,10 @@ DEFAULTS: dict = {
         "bypass_ips": [],
         "proxy_domains": [],
     },
+    "gateway": {
+        "enabled": False,
+        "start_hotspot": True,
+    },
     "alerts": {
         "data_percent": 10,
         "data_gb": 1.0,
