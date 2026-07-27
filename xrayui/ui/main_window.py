@@ -107,8 +107,18 @@ class MainWindow(QMainWindow):
         self.btn_bypass.clicked.connect(self._open_routing)
         self.btn_settings = QPushButton("Settings")
         self.btn_settings.clicked.connect(self._open_settings)
+        self.btn_gateway = QPushButton("Share via hotspot")
+        self.btn_gateway.setCheckable(True)
+        self.btn_gateway.setToolTip(
+            "Route devices on this PC's Windows hotspot through the tunnel, "
+            "so phones need no setup of their own."
+        )
+        self.btn_gateway.setChecked(self.settings["gateway"]["enabled"])
+        self.btn_gateway.toggled.connect(self._toggle_gateway)
+
         actions2 = QHBoxLayout()
         actions2.addWidget(self.btn_low)
+        actions2.addWidget(self.btn_gateway)
         actions2.addWidget(self.btn_bypass)
         actions2.addWidget(self.btn_settings)
 
@@ -469,6 +479,18 @@ class MainWindow(QMainWindow):
         app_settings.save(self.settings)
         self.step_label.setText(
             f"Low usage {'on' if checked else 'off'} — applies on next connect."
+        )
+
+    def _toggle_gateway(self, checked: bool) -> None:
+        self.settings["gateway"]["enabled"] = checked
+        app_settings.save(self.settings)
+        if not checked and self.conn.is_connected():
+            self._run_async(self.conn.stop_gateway, lambda result=None, error=None: None)
+            self.step_label.setText("Hotspot sharing off.")
+            return
+        self.step_label.setText(
+            "Hotspot sharing on — applies on next connect."
+            if checked else "Hotspot sharing off."
         )
 
     # Worker plumbing -------------------------------------------------------

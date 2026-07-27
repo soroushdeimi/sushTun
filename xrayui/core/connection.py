@@ -8,7 +8,7 @@ import time
 from collections.abc import Callable
 
 from .. import paths
-from . import network, render, routing
+from . import hotspot, network, render, routing
 from . import settings as app_settings
 from . import tun2socks as t2s
 from . import xray as xray_mod
@@ -16,6 +16,7 @@ from .profiles import Profile
 from .state import State
 
 IS_MAC = sys.platform == "darwin"
+IS_WIN = sys.platform == "win32"
 SOCKS_HOST = "127.0.0.1"
 SOCKS_PORT = 10808
 
@@ -54,6 +55,7 @@ class Connection:
         self.xray = xray_mod.XrayProcess()
         self.tun2socks = t2s.Tun2socks()
         self._owned = False  # did this process establish the active connection?
+        self._gateway_on = False
         atexit.register(self._atexit)
 
     def is_connected(self) -> bool:
@@ -103,7 +105,29 @@ class Connection:
         network.add_routes(server_ip, iface.gateway, tun)
         self.state.save(iface, server_ip, tun, dns)
         self._owned = True
+        self._setup_gateway()
         self._log("Connected.")
+
+    def _setup_gateway(self) -> None:
+        """Optionally share the tunnel with hotspot clients. Never fails the connect."""
+        cfg = app_settings.load().get("gateway", {})
+        if not cfg.get("enabled") or not IS_WIN:
+            return
+        try:
+            if cfg.get("start_hotspot", True) and hotspot.tethering_state() != "On":
+                self._log("Starting Windows hotspot...")
+                hotspot.start_tethering()
+            hotspot.enable(public_name=network.TUN_NAME)
+            self._gateway_on = True
+            self._log("Gateway mode on — hotspot clients now use the tunnel.")
+        except Exception as exc:
+            self._log(f"Gateway mode unavailable: {exc}")
+
+    def stop_gateway(self) -> None:
+        """Turn sharing off without dropping the tunnel."""
+        if self._gateway_on:
+            hotspot.disable()
+            self._gateway_on = False
 
     def _connect_macos(self, profile: Profile, iface, server_ip: str, dns) -> None:
         # Xray has no native TUN inbound on macOS: run it with a SOCKS inbound
@@ -142,6 +166,9 @@ class Connection:
         self._restore()
 
     def cleanup(self) -> None:
+        # Explicit "restore network": also clear sharing a previous crash left behind.
+        if IS_WIN and app_settings.load().get("gateway", {}).get("enabled"):
+            self._gateway_on = True
         self._restore()
 
     def _restore(self) -> None:
@@ -149,6 +176,13 @@ class Connection:
         alias = self.state.alias
         server_ip = self.state.server_ip
         dns = self.state.dns_state()
+        if self._gateway_on:
+            # Undo first: leaving ICS pointed at a dead tunnel breaks the hotspot.
+            try:
+                hotspot.disable()
+            except Exception:
+                pass
+            self._gateway_on = False
         if IS_MAC:
             self.tun2socks.stop()
         self.xray.stop()
