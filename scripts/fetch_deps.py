@@ -30,7 +30,7 @@ XRAY_URL = "https://github.com/XTLS/Xray-core/releases/latest/download/{}"
 GEO_URL = "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/{}"
 WINTUN_URL = "https://www.wintun.net/builds/wintun-0.14.1.zip"
 
-TUN2SOCKS_VERSION = "v2.6.0"
+TUN2SOCKS_VERSION = "v2.7.0"
 TUN2SOCKS_ASSETS = {
     "64": "tun2socks-darwin-amd64.zip",
     "arm64": "tun2socks-darwin-arm64.zip",
