@@ -13,7 +13,7 @@ import time
 
 from . import proc
 from . import tun2socks as t2s
-from .network import TUN_NAME, DnsState, Interface
+from .network import TUN_NAME, WG_TUN_NAME, DnsState, Interface
 
 IS_MAC = sys.platform == "darwin"
 _RESOLV = "/etc/resolv.conf"
@@ -22,7 +22,8 @@ _RESOLV = "/etc/resolv.conf"
 # -- interface detection ---------------------------------------------------
 def _linux_detect() -> Interface | None:
     routes = json.loads(proc.run(["ip", "-j", "route", "show", "default"]).stdout or "[]")
-    routes = [r for r in routes if r.get("dev") != TUN_NAME and r.get("gateway")]
+    routes = [r for r in routes
+              if r.get("dev") not in (TUN_NAME, WG_TUN_NAME) and r.get("gateway")]
     if not routes:
         return None
     r = routes[0]
@@ -140,8 +141,9 @@ def remove_routes(server_ip: str | None = None) -> None:
 
 
 def wait_for_tun(name: str = TUN_NAME, timeout: float = 30.0) -> int | None:
-    # Linux only: Xray creates TUN_NAME itself. macOS has no equivalent path —
-    # its connect flow drives tun2socks.bring_up_device() directly instead.
+    # Linux only: Xray (and wireguard-go, for the WireGuard lane) create their TUN
+    # device themselves. macOS has no equivalent path here — its connect flow
+    # drives tun2socks.bring_up_device() directly instead.
     if IS_MAC:
         return None
     deadline = time.monotonic() + timeout
@@ -151,3 +153,42 @@ def wait_for_tun(name: str = TUN_NAME, timeout: float = 30.0) -> int | None:
             return links[0].get("ifindex", 0)
         time.sleep(1.0)
     return None
+
+
+def add_host_route(ip: str, gateway: str) -> None:
+    if IS_MAC:
+        proc.run(["route", "-n", "add", "-host", ip, gateway])
+    else:
+        proc.run(["ip", "route", "add", ip, "via", gateway])
+
+
+def remove_host_route(ip: str) -> None:
+    if IS_MAC:
+        proc.run(["route", "-n", "delete", "-host", ip])
+    else:
+        proc.run(["ip", "route", "del", ip])
+
+
+def _iface_name_from_index(tun_index: int) -> str | None:
+    links = json.loads(proc.run(["ip", "-j", "link", "show"]).stdout or "[]")
+    for link in links:
+        if link.get("ifindex") == tun_index:
+            return link.get("ifname")
+    return None
+
+
+def add_prefix_route(prefix: str, tun_index: int) -> None:
+    if IS_MAC:
+        from . import wireguard as wg_mod
+        proc.run(["route", "-n", "add", "-net", prefix, "-interface", wg_mod.MAC_DEVICE])
+        return
+    dev = _iface_name_from_index(tun_index) or WG_TUN_NAME
+    proc.run(["ip", "route", "add", prefix, "dev", dev])
+
+
+def remove_prefix_route(prefix: str, tun_index: int) -> None:
+    if IS_MAC:
+        from . import wireguard as wg_mod
+        proc.run(["route", "-n", "delete", "-net", prefix, "-interface", wg_mod.MAC_DEVICE])
+        return
+    proc.run(["ip", "route", "del", prefix])

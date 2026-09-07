@@ -91,6 +91,17 @@ def test_wireguard_outbound_has_no_stream_settings():
     assert _others(out) == _others(_sub(json.loads(TEMPLATE.read_text(encoding="utf-8")), "Wi-Fi"))
 
 
+def test_wireguard_custom_allowed_ips_reach_outbound():
+    p = Profile(
+        protocol="wireguard", address="1.2.3.4", port=51820,
+        id="SECRET", pbk="PEER", wg_allowed_ips="192.168.1.0/24, 10.0.0.0/8",
+    )
+    out = json.loads(render.build_text(p, "Wi-Fi", TEMPLATE))
+    proxy = [o for o in out["outbounds"] if o.get("tag") == "proxy"][0]
+    peer = proxy["settings"]["peers"][0]
+    assert peer["allowedIPs"] == ["192.168.1.0/24", "10.0.0.0/8"]
+
+
 def test_wireguard_ipv6_endpoint_is_bracketed():
     p = Profile(protocol="wireguard", address="2606:4700:d0::a29f:c001",
                 port=2408, id="S", pbk="P")

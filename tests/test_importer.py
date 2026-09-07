@@ -68,6 +68,13 @@ WG_LINK = (
     "&address=172.16.0.2/32&reserved=1,2,3&mtu=1280&keepalive=25#WARP"
 )
 
+WG_LINK_SPLIT = (
+    "wireguard://cCWrsuGEXF6jGYh13IXrgA2lh7eJFRGX3h1VOZrNkmE="
+    "@home.example.com:51820"
+    "?publickey=bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo="
+    "&address=10.10.0.2/32&allowedips=192.168.1.0/24#Home"
+)
+
 WG_CONF = """
 [Interface]
 PrivateKey = cCWrsuGEXF6jGYh13IXrgA2lh7eJFRGX3h1VOZrNkmE=
@@ -79,6 +86,17 @@ PublicKey = bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=
 Endpoint = engage.cloudflareclient.com:2408
 AllowedIPs = 0.0.0.0/0
 PersistentKeepalive = 25
+"""
+
+WG_CONF_SPLIT = """
+[Interface]
+PrivateKey = cCWrsuGEXF6jGYh13IXrgA2lh7eJFRGX3h1VOZrNkmE=
+Address = 10.10.0.2/32
+
+[Peer]
+PublicKey = bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=
+Endpoint = home.example.com:51820
+AllowedIPs = 192.168.1.0/24, 10.0.0.0/8
 """
 
 
@@ -104,6 +122,32 @@ def test_parse_wg_conf():
     assert p.wg_local_address == "172.16.0.2/32"
     assert p.wg_mtu == 1280
     assert p.wg_keepalive == 25
+
+
+def test_parse_wireguard_link_allowed_ips_survives():
+    p = importer.parse_wireguard(WG_LINK_SPLIT)
+    assert p.wg_allowed_ips == "192.168.1.0/24"
+
+
+def test_parse_wireguard_link_allowed_ips_defaults_empty():
+    p = importer.parse_wireguard(WG_LINK)
+    assert p.wg_allowed_ips == ""
+
+
+def test_parse_wg_conf_allowed_ips_survives():
+    p = importer.parse_wg_conf(WG_CONF_SPLIT)
+    assert p.wg_allowed_ips == "192.168.1.0/24, 10.0.0.0/8"
+
+
+def test_parse_wg_conf_preserves_explicit_full_tunnel_allowed_ips():
+    p = importer.parse_wg_conf(WG_CONF)
+    assert p.wg_allowed_ips == "0.0.0.0/0"
+
+
+def test_parse_wg_conf_allowed_ips_defaults_empty_when_absent():
+    conf_no_allowed = WG_CONF.replace("AllowedIPs = 0.0.0.0/0\n", "")
+    p = importer.parse_wg_conf(conf_no_allowed)
+    assert p.wg_allowed_ips == ""
 
 
 def test_share_text_accepts_wireguard_and_vless():

@@ -33,6 +33,8 @@ class Profile:
     wg_reserved: str = ""
     wg_mtu: int = 1420
     wg_keepalive: int = 0
+    wg_allowed_ips: str = ""
+    wg_endpoint_via_proxy: bool = False
     sub_uid: str = ""
     uid: str = field(default_factory=lambda: uuid.uuid4().hex)
 
@@ -83,6 +85,8 @@ class ProfileStore:
         self._path(uid).unlink(missing_ok=True)
         if self.active_uid() == uid:
             (self.dir / "active.txt").unlink(missing_ok=True)
+        if self.wg_active_uid() == uid:
+            (self.dir / "lan_active.txt").unlink(missing_ok=True)
 
     def active_uid(self) -> str | None:
         p = self.dir / "active.txt"
@@ -94,4 +98,16 @@ class ProfileStore:
 
     def active(self) -> Profile | None:
         uid = self.active_uid()
+        return self.get(uid) if uid else None
+
+    def wg_active_uid(self) -> str | None:
+        p = self.dir / "lan_active.txt"
+        return p.read_text(encoding="utf-8").strip() if p.exists() else None
+
+    def set_wg_active(self, uid: str) -> None:
+        self.dir.mkdir(parents=True, exist_ok=True)
+        (self.dir / "lan_active.txt").write_text(uid, encoding="utf-8")
+
+    def wg_active(self) -> Profile | None:
+        uid = self.wg_active_uid()
         return self.get(uid) if uid else None

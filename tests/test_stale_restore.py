@@ -9,7 +9,7 @@ import pytest
 from xrayui import paths
 from xrayui.core import bootrestore, connection, network
 from xrayui.core.network import DnsState, Interface
-from xrayui.core.state import State
+from xrayui.core.state import State, WgState
 
 
 def _patch_state(monkeypatch, tmp_path):
@@ -83,6 +83,51 @@ def test_restore_clears_gateway_flag(monkeypatch, tmp_path):
     conn._restore()
     assert ics == [True]
     assert not conn.state.gateway_on()
+
+
+def test_restore_leaves_wg_lane_state_untouched(monkeypatch, tmp_path):
+    _patch_state(monkeypatch, tmp_path)
+    _write_connected(tmp_path)
+    wg_state = WgState()
+    wg_state.save("sushTun", "wg-uid", 7, "198.51.100.5", ["192.168.1.0/24"])
+
+    monkeypatch.setattr(connection.network, "remove_routes", lambda ip=None: None)
+    monkeypatch.setattr(connection.network, "restore_dns", lambda *a, **k: True)
+    monkeypatch.setattr(connection.bootrestore, "uninstall", lambda: None)
+    monkeypatch.setattr(connection.hotspot, "disable", lambda: None)
+
+    conn = connection.Connection()
+    conn.xray.stop = lambda: None
+    conn.tun2socks.stop = lambda: None
+    conn._restore()
+
+    assert not conn.state.is_connected()
+    assert wg_state.is_connected()
+    assert wg_state.routes() == ["192.168.1.0/24"]
+    assert wg_state.device == "sushTun"
+
+
+def test_connect_refuses_while_wg_lane_runs_full_tunnel(monkeypatch, tmp_path):
+    _patch_state(monkeypatch, tmp_path)
+    wg_state = WgState()
+    wg_state.save("sushTun", "wg-uid", 7, "198.51.100.5", ["0.0.0.0/0", "::/0"])
+
+    from xrayui.core.profiles import Profile
+    conn = connection.Connection()
+    with pytest.raises(connection.ConnectError, match="WireGuard lane"):
+        conn.connect(Profile(protocol="vless", address="a.com", id="u", port=443))
+
+
+def test_connect_allows_when_wg_lane_runs_split_tunnel(monkeypatch, tmp_path):
+    _patch_state(monkeypatch, tmp_path)
+    wg_state = WgState()
+    wg_state.save("sushTun", "wg-uid", 7, "198.51.100.5", ["192.168.1.0/24"])
+    monkeypatch.setattr(connection.network, "detect_interface", lambda: None)
+
+    from xrayui.core.profiles import Profile
+    conn = connection.Connection()
+    with pytest.raises(connection.ConnectError, match="no active internet interface"):
+        conn.connect(Profile(protocol="vless", address="a.com", id="u", port=443))
 
 
 def test_bootrestore_action_uses_restore_flag(monkeypatch):

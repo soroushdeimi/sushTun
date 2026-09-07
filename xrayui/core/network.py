@@ -1,6 +1,7 @@
 """Windows network orchestration: interface detection, DNS, routes, TUN."""
 from __future__ import annotations
 
+import ipaddress
 import sys
 import time
 from dataclasses import dataclass, field
@@ -8,11 +9,12 @@ from dataclasses import dataclass, field
 from . import proc
 
 TUN_NAME = "xray0"
+WG_TUN_NAME = "sushTun"
 
 _DETECT_PS = """
 $candidate = $null
 foreach ($route in (Get-NetRoute -DestinationPrefix '0.0.0.0/0' -AddressFamily IPv4 -ErrorAction SilentlyContinue)) {
-  if ($route.NextHop -eq '0.0.0.0' -or $route.NextHop -eq '::' -or $route.InterfaceAlias -eq 'xray0') { continue }
+  if ($route.NextHop -eq '0.0.0.0' -or $route.NextHop -eq '::' -or $route.InterfaceAlias -eq 'xray0' -or $route.InterfaceAlias -eq 'sushTun') { continue }
   if (-not $candidate -or $route.RouteMetric -lt $candidate.RouteMetric) { $candidate = $route }
 }
 if ($candidate) {
@@ -148,6 +150,40 @@ def remove_routes(server_ip: str | None = None) -> None:
         proc.run(["route", "delete", server_ip, "mask", "255.255.255.255"])
 
 
+def add_host_route(ip: str, gateway: str) -> None:
+    """Pin a single host through the physical gateway (same pattern as the
+    Xray server route) — used to keep a WireGuard endpoint off its own tunnel."""
+    proc.run(["route", "add", ip, "mask", "255.255.255.255", gateway, "metric", "1"])
+
+
+def remove_host_route(ip: str) -> None:
+    proc.run(["route", "delete", ip, "mask", "255.255.255.255"])
+
+
+def _is_ipv6(prefix: str) -> bool:
+    return ":" in prefix.split("/")[0]
+
+
+def add_prefix_route(prefix: str, tun_index: int) -> None:
+    """Add a route for one AllowedIPs prefix via the WireGuard adapter."""
+    if _is_ipv6(prefix):
+        proc.run(["netsh", "interface", "ipv6", "add", "route", prefix,
+                  f"interface={tun_index}", "store=active"])
+    else:
+        net = ipaddress.ip_network(prefix, strict=False)
+        proc.run(["route", "add", str(net.network_address), "mask", str(net.netmask),
+                  "0.0.0.0", "if", str(tun_index), "metric", "5"])
+
+
+def remove_prefix_route(prefix: str, tun_index: int) -> None:
+    if _is_ipv6(prefix):
+        proc.run(["netsh", "interface", "ipv6", "delete", "route", prefix,
+                  f"interface={tun_index}"])
+    else:
+        net = ipaddress.ip_network(prefix, strict=False)
+        proc.run(["route", "delete", str(net.network_address), "mask", str(net.netmask)])
+
+
 def wait_for_tun(name: str = TUN_NAME, timeout: float = 30.0) -> int | None:
     script = f"(Get-NetAdapter -Name '{name}' -ErrorAction SilentlyContinue).ifIndex"
     deadline = time.monotonic() + timeout
@@ -171,3 +207,7 @@ if sys.platform != "win32":
     add_routes = _posix.add_routes
     remove_routes = _posix.remove_routes
     wait_for_tun = _posix.wait_for_tun
+    add_host_route = _posix.add_host_route
+    remove_host_route = _posix.remove_host_route
+    add_prefix_route = _posix.add_prefix_route
+    remove_prefix_route = _posix.remove_prefix_route

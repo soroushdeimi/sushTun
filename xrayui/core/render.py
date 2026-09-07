@@ -77,10 +77,11 @@ def _apply_wireguard(proxy: dict, p: Profile) -> None:
     # Xray WireGuard outbounds do not accept streamSettings.
     proxy.pop("streamSettings", None)
     addrs = [a.strip() for a in (p.wg_local_address or "").split(",") if a.strip()]
+    allowed = [a.strip() for a in (p.wg_allowed_ips or "").split(",") if a.strip()]
     peer: dict = {
         "endpoint": _wg_endpoint(p),
         "publicKey": p.pbk,
-        "allowedIPs": ["0.0.0.0/0", "::/0"],
+        "allowedIPs": allowed or ["0.0.0.0/0", "::/0"],
     }
     if p.wg_preshared:
         peer["preSharedKey"] = p.wg_preshared

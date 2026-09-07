@@ -110,6 +110,7 @@ def parse_wireguard(url: str) -> Profile:
         wg_reserved=_q(q, "reserved"),
         wg_mtu=int(mtu) if mtu.isdigit() else 1420,
         wg_keepalive=int(keepalive) if keepalive.isdigit() else 0,
+        wg_allowed_ips=_q(q, "allowedips", "allowed_ips"),
     )
 
 
@@ -157,6 +158,7 @@ def parse_wg_conf(text: str) -> Profile:
         wg_preshared=peer.get("presharedkey", ""),
         wg_mtu=int(mtu) if mtu.isdigit() else 1420,
         wg_keepalive=int(keepalive) if keepalive.isdigit() else 0,
+        wg_allowed_ips=peer.get("allowedips", ""),
     )
 
 
@@ -197,6 +199,10 @@ def _profile_from_wg_outbound(proxy: dict) -> Profile:
         local = ", ".join(str(a) for a in addrs)
     reserved = settings.get("reserved") or []
     reserved_s = ",".join(str(x) for x in reserved) if isinstance(reserved, list) else str(reserved)
+    allowed = peer.get("allowedIPs") or peer.get("allowedips") or []
+    allowed_s = ",".join(str(x) for x in allowed) if isinstance(allowed, list) else str(allowed)
+    if allowed_s in ("0.0.0.0/0,::/0", "::/0,0.0.0.0/0"):
+        allowed_s = ""
     return Profile(
         name=host or "WireGuard",
         protocol="wireguard",
@@ -209,6 +215,7 @@ def _profile_from_wg_outbound(proxy: dict) -> Profile:
         wg_reserved=reserved_s,
         wg_mtu=int(settings.get("mtu") or 1420),
         wg_keepalive=int(peer.get("keepAlive") or peer.get("keepalive") or 0),
+        wg_allowed_ips=allowed_s,
     )
 
 

@@ -41,6 +41,11 @@ def tun2socks_bin() -> Path:
     return _first_existing("tun2socks")
 
 
+def wireguard_go_bin() -> Path:
+    # WireGuard lane: a native WireGuard tunnel run alongside the Xray proxy lane.
+    return _first_existing("wireguard-go.exe" if sys.platform == "win32" else "wireguard-go")
+
+
 def config_template() -> Path:
     return _first_existing("config.template.json")
 

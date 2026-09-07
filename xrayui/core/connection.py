@@ -13,7 +13,7 @@ from . import settings as app_settings
 from . import tun2socks as t2s
 from . import xray as xray_mod
 from .profiles import Profile
-from .state import State
+from .state import State, WgState
 
 IS_MAC = sys.platform == "darwin"
 IS_WIN = sys.platform == "win32"
@@ -68,6 +68,14 @@ class Connection:
             raise ConnectError("WireGuard profile is missing the peer public key")
         if self.state.is_connected():
             raise ConnectError("already connected")
+        wg_state = WgState()
+        if wg_state.is_connected() and any(
+            r in ("0.0.0.0/0", "::/0") for r in wg_state.routes()
+        ):
+            raise ConnectError(
+                "The WireGuard lane is running a full-tunnel profile, which would fight "
+                "this lane's default route. Disconnect the WireGuard lane first."
+            )
 
         if sys.platform == "linux":
             self._log("Experimental platform (Linux) — network backend is unverified.")
