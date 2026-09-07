@@ -26,6 +26,7 @@ from ..core.profiles import Profile
 
 _NETWORKS = ["tcp", "ws", "grpc", "h2", "kcp", "quic"]
 _SECURITIES = ["none", "tls", "reality"]
+_PROTOCOLS = ["vless", "wireguard"]
 
 
 class ImportDialog(QDialog):
@@ -37,9 +38,13 @@ class ImportDialog(QDialog):
 
         self.tabs = QTabWidget()
         self.link_edit = QPlainTextEdit()
-        self.link_edit.setPlaceholderText("Paste vless:// links or a base64 subscription…")
+        self.link_edit.setPlaceholderText(
+            "Paste vless:// or wireguard:// links, a WireGuard .conf, or a base64 subscription…"
+        )
         self.json_edit = QPlainTextEdit()
-        self.json_edit.setPlaceholderText("Paste a full Xray config or a profile JSON…")
+        self.json_edit.setPlaceholderText(
+            "Paste a full Xray config, a WireGuard .conf, or a profile JSON…"
+        )
         self.tabs.addTab(self.link_edit, "Link / Subscription")
         self.tabs.addTab(self.json_edit, "JSON")
         self.tabs.addTab(self._qr_tab(), "QR image")
@@ -62,7 +67,7 @@ class ImportDialog(QDialog):
         row = QHBoxLayout()
         row.addWidget(self.qr_path, 1)
         row.addWidget(pick)
-        v.addWidget(QLabel("Decode a vless link from a QR code image."))
+        v.addWidget(QLabel("Decode a vless:// or wireguard:// link from a QR code image."))
         v.addLayout(row)
         v.addStretch(1)
         return w
@@ -96,7 +101,7 @@ class ProfileEditDialog(QDialog):
     def __init__(self, profile: Profile, parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Edit profile")
-        self.resize(520, 560)
+        self.resize(520, 620)
         self._profile = profile
 
         self.tabs = QTabWidget()
@@ -112,10 +117,18 @@ class ProfileEditDialog(QDialog):
         layout.addWidget(self.tabs)
         layout.addWidget(buttons)
 
+    def _add_row(self, form: QFormLayout, text: str, widget) -> QLabel:
+        lab = QLabel(text)
+        form.addRow(lab, widget)
+        return lab
+
     def _form_tab(self, p: Profile) -> QWidget:
         w = QWidget()
         form = QFormLayout(w)
         self.f_name = QLineEdit(p.name)
+        self.f_protocol = QComboBox()
+        self.f_protocol.addItems(_PROTOCOLS)
+        self.f_protocol.setCurrentText(p.protocol if p.protocol in _PROTOCOLS else "vless")
         self.f_address = QLineEdit(p.address)
         self.f_port = QSpinBox()
         self.f_port.setRange(1, 65535)
@@ -136,16 +149,63 @@ class ProfileEditDialog(QDialog):
         self.f_path = QLineEdit(p.path)
         self.f_host = QLineEdit(p.host)
         self.f_service = QLineEdit(p.service_name)
-        rows = [
-            ("Name", self.f_name), ("Address", self.f_address), ("Port", self.f_port),
-            ("UUID", self.f_id), ("Encryption", self.f_encryption), ("Flow", self.f_flow),
-            ("Network", self.f_network), ("Security", self.f_security), ("SNI", self.f_sni),
-            ("Fingerprint", self.f_fp), ("Reality pbk", self.f_pbk), ("Reality sid", self.f_sid),
-            ("Path", self.f_path), ("Host", self.f_host), ("gRPC service", self.f_service),
+        self.f_wg_local = QLineEdit(p.wg_local_address)
+        self.f_wg_psk = QLineEdit(p.wg_preshared)
+        self.f_wg_reserved = QLineEdit(p.wg_reserved)
+        self.f_wg_mtu = QSpinBox()
+        self.f_wg_mtu.setRange(576, 1500)
+        self.f_wg_mtu.setValue(int(p.wg_mtu) if p.wg_mtu else 1420)
+        self.f_wg_keepalive = QSpinBox()
+        self.f_wg_keepalive.setRange(0, 600)
+        self.f_wg_keepalive.setValue(int(p.wg_keepalive) if p.wg_keepalive else 0)
+
+        self._add_row(form, "Name", self.f_name)
+        self._add_row(form, "Protocol", self.f_protocol)
+        self._add_row(form, "Address", self.f_address)
+        self._add_row(form, "Port", self.f_port)
+        self._lab_id = self._add_row(form, "UUID / private key", self.f_id)
+        self._lab_pbk = self._add_row(form, "Peer / Reality public key", self.f_pbk)
+        self._vless_labs = [
+            self._add_row(form, "Encryption", self.f_encryption),
+            self._add_row(form, "Flow", self.f_flow),
+            self._add_row(form, "Network", self.f_network),
+            self._add_row(form, "Security", self.f_security),
+            self._add_row(form, "SNI", self.f_sni),
+            self._add_row(form, "Fingerprint", self.f_fp),
+            self._add_row(form, "Reality sid", self.f_sid),
+            self._add_row(form, "Path", self.f_path),
+            self._add_row(form, "Host", self.f_host),
+            self._add_row(form, "gRPC service", self.f_service),
         ]
-        for label, field in rows:
-            form.addRow(label, field)
+        self._vless_fields = [
+            self.f_encryption, self.f_flow, self.f_network, self.f_security,
+            self.f_sni, self.f_fp, self.f_sid, self.f_path, self.f_host, self.f_service,
+        ]
+        self._wg_labs = [
+            self._add_row(form, "Local address", self.f_wg_local),
+            self._add_row(form, "Preshared key", self.f_wg_psk),
+            self._add_row(form, "Reserved", self.f_wg_reserved),
+            self._add_row(form, "MTU", self.f_wg_mtu),
+            self._add_row(form, "Keepalive (s)", self.f_wg_keepalive),
+        ]
+        self._wg_fields = [
+            self.f_wg_local, self.f_wg_psk, self.f_wg_reserved,
+            self.f_wg_mtu, self.f_wg_keepalive,
+        ]
+        self.f_protocol.currentTextChanged.connect(self._sync_protocol_fields)
+        self._sync_protocol_fields(self.f_protocol.currentText())
         return w
+
+    def _sync_protocol_fields(self, protocol: str) -> None:
+        wg = protocol == "wireguard"
+        self._lab_id.setText("Private key" if wg else "UUID")
+        self._lab_pbk.setText("Peer public key" if wg else "Reality public key")
+        for lab, field in zip(self._vless_labs, self._vless_fields, strict=True):
+            lab.setVisible(not wg)
+            field.setVisible(not wg)
+        for lab, field in zip(self._wg_labs, self._wg_fields, strict=True):
+            lab.setVisible(wg)
+            field.setVisible(wg)
 
     def result_profile(self) -> Profile:
         return self._profile
@@ -162,6 +222,7 @@ class ProfileEditDialog(QDialog):
         else:
             p = self._profile
             p.name = self.f_name.text().strip() or "Profile"
+            p.protocol = self.f_protocol.currentText()
             p.address = self.f_address.text().strip()
             p.port = self.f_port.value()
             p.id = self.f_id.text().strip()
@@ -176,8 +237,16 @@ class ProfileEditDialog(QDialog):
             p.path = self.f_path.text().strip()
             p.host = self.f_host.text().strip()
             p.service_name = self.f_service.text().strip()
+            p.wg_local_address = self.f_wg_local.text().strip()
+            p.wg_preshared = self.f_wg_psk.text().strip()
+            p.wg_reserved = self.f_wg_reserved.text().strip()
+            p.wg_mtu = self.f_wg_mtu.value()
+            p.wg_keepalive = self.f_wg_keepalive.value()
         if not self._profile.address or not self._profile.id:
-            QMessageBox.warning(self, "Missing fields", "Address and UUID are required.")
+            QMessageBox.warning(self, "Missing fields", "Address and UUID / private key are required.")
+            return
+        if self._profile.protocol == "wireguard" and not self._profile.pbk:
+            QMessageBox.warning(self, "Missing fields", "WireGuard peer public key is required.")
             return
         self.accept()
 

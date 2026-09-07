@@ -65,3 +65,35 @@ def test_non_proxy_untouched_for_reality_profile():
     assert stream["realitySettings"]["publicKey"] == "PUB"
     assert stream["wsSettings"]["path"] == "/ws"
     assert stream["sockopt"]["interface"] == "Wi-Fi"
+
+
+def test_wireguard_outbound_has_no_stream_settings():
+    p = Profile(
+        name="wg", protocol="wireguard", address="1.2.3.4", port=51820,
+        id="SECRET", pbk="PEER", wg_local_address="10.0.0.2/32",
+        wg_reserved="1,2,3", wg_mtu=1280, wg_keepalive=25,
+    )
+    out = json.loads(render.build_text(p, "Wi-Fi", TEMPLATE))
+    proxy = [o for o in out["outbounds"] if o.get("tag") == "proxy"][0]
+    assert proxy["protocol"] == "wireguard"
+    assert "streamSettings" not in proxy
+    settings = proxy["settings"]
+    assert settings["secretKey"] == "SECRET"
+    assert settings["address"] == ["10.0.0.2/32"]
+    assert settings["reserved"] == [1, 2, 3]
+    assert settings["mtu"] == 1280
+    assert settings["noKernelTun"] is True
+    peer = settings["peers"][0]
+    assert peer["endpoint"] == "1.2.3.4:51820"
+    assert peer["publicKey"] == "PEER"
+    assert peer["keepAlive"] == 25
+    assert peer["allowedIPs"] == ["0.0.0.0/0", "::/0"]
+    assert _others(out) == _others(_sub(json.loads(TEMPLATE.read_text(encoding="utf-8")), "Wi-Fi"))
+
+
+def test_wireguard_ipv6_endpoint_is_bracketed():
+    p = Profile(protocol="wireguard", address="2606:4700:d0::a29f:c001",
+                port=2408, id="S", pbk="P")
+    out = json.loads(render.build_text(p, "Wi-Fi", TEMPLATE))
+    proxy = [o for o in out["outbounds"] if o.get("tag") == "proxy"][0]
+    assert proxy["settings"]["peers"][0]["endpoint"] == "[2606:4700:d0::a29f:c001]:2408"

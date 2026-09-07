@@ -76,7 +76,19 @@ def set_dns_loopback(alias: str) -> None:
     )
 
 
-def restore_dns(alias: str, state: DnsState) -> bool:
+def restore_dns(alias: str, state: DnsState, retries: int = 1) -> bool:
+    """Put the adapter DNS back. Static 127.0.0.1 survives reboot; this undoes it."""
+    delay = 2.0
+    for attempt in range(max(1, retries)):
+        if _restore_dns_once(alias, state):
+            _flush_dns()
+            return True
+        if attempt + 1 < retries:
+            time.sleep(delay)
+    return False
+
+
+def _restore_dns_once(alias: str, state: DnsState) -> bool:
     if state.mode == "STATIC" and state.servers:
         servers = ",".join(f"'{s}'" for s in state.servers)
         script = (
@@ -88,13 +100,46 @@ def restore_dns(alias: str, state: DnsState) -> bool:
             "try { Set-DnsClientServerAddress -InterfaceAlias $env:ALIAS "
             "-ResetServerAddresses -ErrorAction Stop; exit 0 } catch { exit 1 }"
         )
-    return proc.powershell(script, env={"ALIAS": alias}).returncode == 0
+    if proc.powershell(script, env={"ALIAS": alias}).returncode == 0:
+        return True
+    # PowerShell can fail at boot before the adapter is up; netsh is a fallback.
+    if state.mode == "STATIC" and state.servers:
+        rc = proc.run([
+            "netsh", "interface", "ipv4", "set", "dnsservers",
+            f"name={alias}", "static", state.servers[0], "primary", "validate=no",
+        ]).returncode
+        if rc != 0:
+            return False
+        for i, server in enumerate(state.servers[1:], start=2):
+            proc.run([
+                "netsh", "interface", "ipv4", "add", "dnsservers",
+                f"name={alias}", f"address={server}", f"index={i}", "validate=no",
+            ])
+        return True
+    return proc.run([
+        "netsh", "interface", "ipv4", "set", "dnsservers",
+        f"name={alias}", "dhcp",
+    ]).returncode == 0
+
+
+def _flush_dns() -> None:
+    proc.run(["ipconfig", "/flushdns"])
 
 
 def add_routes(server_ip: str, gateway: str, tun_index: int) -> None:
     proc.run(["route", "add", server_ip, "mask", "255.255.255.255", gateway, "metric", "1"])
     proc.run(["route", "add", "0.0.0.0", "mask", "0.0.0.0", "0.0.0.0",
               "if", str(tun_index), "metric", "3"])
+
+
+def replace_host_route(server_ip: str, gateway: str) -> None:
+    """Repoint the host route to the server after the default gateway changes.
+
+    Leaves the tun default route alone — only the pinned host route goes stale
+    when Wi-Fi renews its lease or roams, so only it needs refreshing.
+    """
+    proc.run(["route", "delete", server_ip, "mask", "255.255.255.255"])
+    proc.run(["route", "add", server_ip, "mask", "255.255.255.255", gateway, "metric", "1"])
 
 
 def remove_routes(server_ip: str | None = None) -> None:

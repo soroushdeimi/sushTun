@@ -28,6 +28,11 @@ class Profile:
     path: str = ""
     host: str = ""
     service_name: str = ""
+    wg_local_address: str = ""
+    wg_preshared: str = ""
+    wg_reserved: str = ""
+    wg_mtu: int = 1420
+    wg_keepalive: int = 0
     sub_uid: str = ""
     uid: str = field(default_factory=lambda: uuid.uuid4().hex)
 

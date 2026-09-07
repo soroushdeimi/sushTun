@@ -7,6 +7,7 @@ from .network import DnsState, Interface
 _FILES = (
     "active_if.txt", "active_ip.txt", "gateway.txt", "relay_ip.txt",
     "tunidx.txt", "connected.flag", "dns-mode.txt", "dns-servers.txt",
+    "gateway.flag",
 )
 
 
@@ -67,6 +68,18 @@ class State:
         sp = self._p("dns-servers.txt")
         servers = sp.read_text(encoding="utf-8").split() if sp.exists() else []
         return DnsState(mode=mode, servers=servers)
+
+    def update_gateway(self, gateway: str) -> None:
+        self._write("gateway.txt", gateway)
+
+    def set_gateway(self, on: bool) -> None:
+        if on:
+            self._write("gateway.flag", "1")
+        else:
+            self._p("gateway.flag").unlink(missing_ok=True)
+
+    def gateway_on(self) -> bool:
+        return self._p("gateway.flag").exists()
 
     def clear(self) -> None:
         for name in _FILES:

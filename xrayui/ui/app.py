@@ -14,4 +14,15 @@ def run(argv: list[str], elevated: bool = True) -> int:
     app.setWindowIcon(app_icon())
     window = MainWindow(elevated=elevated)
     window.show()
+
+    def restore_on_quit(*_args) -> None:
+        try:
+            window.conn.disconnect()
+        except Exception:
+            pass
+
+    app.aboutToQuit.connect(restore_on_quit)
+    # Windows shutdown sends this before killing the process; atexit often misses it.
+    if hasattr(app, "commitDataRequest"):
+        app.commitDataRequest.connect(restore_on_quit)
     return app.exec()

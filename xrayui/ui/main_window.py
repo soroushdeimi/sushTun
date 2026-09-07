@@ -51,6 +51,7 @@ class MainWindow(QMainWindow):
         self.conn = Connection(on_step=self.stepReceived.emit)
         self._busy = False
         self._sampling = False
+        self._repairing = False
         self._workers: set = set()
 
         self.stepReceived.connect(self._on_step)
@@ -70,11 +71,20 @@ class MainWindow(QMainWindow):
         self.autorefresh_timer = QTimer(self)
         self.autorefresh_timer.timeout.connect(self._auto_refresh_subs)
         self.autorefresh_timer.start(30 * 60_000)
+        self.route_timer = QTimer(self)
+        self.route_timer.timeout.connect(self._check_route_health)
+        self.route_timer.start(15_000)
 
         self._reload_profiles()
         self._reload_subs()
         self._refresh_status()
         self._check_alerts()
+        try:
+            if self.conn.recover_if_stale(dns_retries=3):
+                self._on_step("Restored leftover network settings from a previous session.")
+        except Exception as exc:
+            self._on_step(f"Could not restore leftover network settings: {exc}")
+        self._refresh_status()
 
     # UI construction -------------------------------------------------------
     def _build_ui(self, elevated: bool) -> None:
@@ -436,6 +446,18 @@ class MainWindow(QMainWindow):
         if connected and not self._sampling and st.tun_index is not None:
             self._sample_live(st.tun_index)
 
+    def _check_route_health(self) -> None:
+        if self._repairing or not self.conn.is_connected():
+            return
+        self._repairing = True
+
+        def done(result=None, error=None):
+            self._repairing = False
+            if result:
+                self._refresh_status()
+
+        self._run_async(self.conn.repair_route_if_needed, done)
+
     def _sample_live(self, tun: int) -> None:
         self._sampling = True
 
@@ -514,7 +536,7 @@ class MainWindow(QMainWindow):
         self.btn_cleanup.setEnabled(not busy)
 
     def closeEvent(self, event) -> None:
-        for t in (self.timer, self.alert_timer, self.autorefresh_timer):
+        for t in (self.timer, self.alert_timer, self.autorefresh_timer, self.route_timer):
             t.stop()
         self.tailer.stop()
         self.pool.waitForDone(2000)

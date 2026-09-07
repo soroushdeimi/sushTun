@@ -98,7 +98,7 @@ def set_dns_loopback(alias: str) -> None:
         f.write("nameserver 127.0.0.1\n")
 
 
-def restore_dns(alias: str, state: DnsState) -> bool:
+def restore_dns(alias: str, state: DnsState, retries: int = 1) -> bool:
     if state.mode == "MACOS":
         service = state.servers[0] if state.servers else mac_service_name(alias)
         rest = state.servers[1:] or ["empty"]

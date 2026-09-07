@@ -142,7 +142,7 @@ class ProfilePanel(QWidget):
         self.list.clear()
         for p in profiles:
             mark = "● " if p.uid == active_uid else "   "
-            item = QListWidgetItem(f"{mark}{p.name}\n     {p.endpoint}")
+            item = QListWidgetItem(f"{mark}{p.name}\n     {p.protocol} · {p.endpoint}")
             item.setData(Qt.UserRole, p.uid)
             self.list.addItem(item)
             if p.uid == active_uid:

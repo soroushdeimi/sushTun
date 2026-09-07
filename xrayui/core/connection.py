@@ -8,7 +8,7 @@ import time
 from collections.abc import Callable
 
 from .. import paths
-from . import hotspot, network, render, routing
+from . import bootrestore, hotspot, network, render, routing
 from . import settings as app_settings
 from . import tun2socks as t2s
 from . import xray as xray_mod
@@ -64,6 +64,8 @@ class Connection:
     def connect(self, profile: Profile) -> None:
         if not profile.address or not profile.id:
             raise ConnectError("profile is missing address or id")
+        if profile.protocol == "wireguard" and not profile.pbk:
+            raise ConnectError("WireGuard profile is missing the peer public key")
         if self.state.is_connected():
             raise ConnectError("already connected")
 
@@ -100,10 +102,16 @@ class Connection:
             paths.runtime_config().unlink(missing_ok=True)
             raise ConnectError("TUN interface xray0 did not appear")
 
+        # Persist backup + a boot restore task BEFORE hijacking DNS. Static
+        # 127.0.0.1 survives a power-off; the task puts the adapter back.
+        self.state.save(iface, server_ip, tun, dns)
+        try:
+            bootrestore.install()
+        except Exception as exc:
+            self._log(f"Boot restore task not registered: {exc}")
         self._log("Routing DNS and traffic through the tunnel...")
         network.set_dns_loopback(iface.alias)
         network.add_routes(server_ip, iface.gateway, tun)
-        self.state.save(iface, server_ip, tun, dns)
         self._owned = True
         self._setup_gateway()
         self._log("Connected.")
@@ -119,6 +127,7 @@ class Connection:
                 hotspot.start_tethering()
             hotspot.enable(public_name=network.TUN_NAME)
             self._gateway_on = True
+            self.state.set_gateway(True)
             self._log("Gateway mode on — hotspot clients now use the tunnel.")
         except Exception as exc:
             self._log(f"Gateway mode unavailable: {exc}")
@@ -128,6 +137,7 @@ class Connection:
         if self._gateway_on:
             hotspot.disable()
             self._gateway_on = False
+            self.state.set_gateway(False)
 
     def _connect_macos(self, profile: Profile, iface, server_ip: str, dns) -> None:
         # Xray has no native TUN inbound on macOS: run it with a SOCKS inbound
@@ -153,10 +163,14 @@ class Connection:
             paths.runtime_config().unlink(missing_ok=True)
             raise ConnectError("tun2socks TUN device did not appear")
 
+        self.state.save(iface, server_ip, 0, dns)
+        try:
+            bootrestore.install()
+        except Exception as exc:
+            self._log(f"Boot restore task not registered: {exc}")
         self._log("Routing DNS and traffic through the tunnel...")
         network.set_dns_loopback(iface.alias)
         network.add_routes(server_ip, iface.gateway, None)
-        self.state.save(iface, server_ip, 0, dns)
         self._owned = True
         self._log("Connected.")
 
@@ -167,16 +181,59 @@ class Connection:
 
     def cleanup(self) -> None:
         # Explicit "restore network": also clear sharing a previous crash left behind.
-        if IS_WIN and app_settings.load().get("gateway", {}).get("enabled"):
+        if IS_WIN and (app_settings.load().get("gateway", {}).get("enabled")
+                       or self.state.gateway_on()):
             self._gateway_on = True
         self._restore()
 
-    def _restore(self) -> None:
+    def repair_route_if_needed(self) -> str | None:
+        """Refresh the pinned host route if the default gateway moved.
+
+        DHCP renewal, Wi-Fi roaming, or a brief drop to link-local (169.254.x.x)
+        can hand out a new gateway while connected. The host route to the
+        server is pinned to the gateway seen at connect time, so it silently
+        blackholes traffic (repeated 'proxy/tun: operation timed out') until
+        something refreshes it — previously only a manual disconnect did.
+        """
+        if IS_MAC or not self.state.is_connected():
+            return None
+        iface = network.detect_interface()
+        if iface is None or iface.alias != self.state.alias:
+            # Offline, or roamed to a different adapter entirely — too risky
+            # to auto-migrate DNS/routes across adapters; let the user reconnect.
+            return None
+        if iface.gateway == self.state.gateway:
+            return None
+        server_ip = self.state.server_ip
+        if not server_ip:
+            return None
+        old_gateway = self.state.gateway
+        network.replace_host_route(server_ip, iface.gateway)
+        self.state.update_gateway(iface.gateway)
+        msg = f"Gateway changed ({old_gateway} -> {iface.gateway}) — route to server refreshed."
+        self._log(msg)
+        return msg
+
+    def recover_if_stale(self, dns_retries: int = 8) -> bool:
+        """Undo leftover DNS/routes when a previous run never disconnected.
+
+        Static DNS 127.0.0.1 on the Wi-Fi adapter survives reboot. If xray is
+        not running, nothing answers it and Windows shows No Internet.
+        """
+        if not self.state.is_connected():
+            return False
+        if xray_mod.is_xray_running():
+            return False
+        self._log("Previous session left DNS pointing at 127.0.0.1. Restoring...")
+        self._restore(dns_retries=dns_retries)
+        return True
+
+    def _restore(self, dns_retries: int = 1) -> None:
         self._log("Disconnecting...")
         alias = self.state.alias
         server_ip = self.state.server_ip
         dns = self.state.dns_state()
-        if self._gateway_on:
+        if self._gateway_on or self.state.gateway_on():
             # Undo first: leaving ICS pointed at a dead tunnel breaks the hotspot.
             try:
                 hotspot.disable()
@@ -188,7 +245,11 @@ class Connection:
         self.xray.stop()
         network.remove_routes(server_ip)
         if alias:
-            network.restore_dns(alias, dns)
+            network.restore_dns(alias, dns, retries=dns_retries)
+        try:
+            bootrestore.uninstall()
+        except Exception:
+            pass
         self.state.clear()
         self._owned = False
         paths.runtime_config().unlink(missing_ok=True)
@@ -201,3 +262,8 @@ class Connection:
                 self._restore()
             except Exception:
                 pass
+
+
+def recover_stale(on_step=None) -> bool:
+    """Used by `--restore-stale` (boot task) and by the UI on launch."""
+    return Connection(on_step=on_step).recover_if_stale()
