@@ -57,6 +57,32 @@ sushTun requests elevated privileges on launch, since changing routes, DNS, and
 the network device requires admin (Windows), root via `pkexec`/`sudo` (Linux),
 or an `osascript` prompt (macOS).
 
+### "Windows protected your PC" / Unknown publisher
+
+Windows will warn about the download, and the admin prompt will say the
+publisher is unknown. That is expected: the binaries are **not code-signed**,
+because a code-signing certificate has to be bought from a commercial
+certificate authority every year. Nothing about the warning says the file is
+unsafe — only that Windows cannot tell who published it.
+
+To run it anyway: **More info → Run anyway** on the SmartScreen dialog.
+
+Rather than asking you to take that on trust, every release is verifiable:
+
+- **Checksums.** Each release includes `SHA256SUMS.txt`. Compare it against
+  your download with `Get-FileHash .\XrayPortable-windows.exe -Algorithm SHA256`
+  (PowerShell) or `sha256sum` (macOS/Linux).
+- **Build provenance.** Every binary is published with a signed GitHub
+  attestation proving it was built by this repository's release workflow from
+  this source, and was not tampered with afterwards:
+
+  ```
+  gh attestation verify XrayPortable-windows.exe -R soroushdeimi/sushTun
+  ```
+
+Antivirus tools also flag single-file PyInstaller executables fairly often;
+that is a false positive from the packaging format, not from this project.
+
 ## Platform support
 
 | Platform | Status |

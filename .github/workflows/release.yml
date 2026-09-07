@@ -24,6 +24,11 @@ jobs:
             artifact: XrayPortable-macos
             source: dist/XrayPortable
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      # Both are required to mint a build provenance attestation.
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -41,6 +46,14 @@ jobs:
       - name: Rename artifact
         shell: bash
         run: cp "${{ matrix.source }}" "${{ matrix.artifact }}"
+      # The binaries are unsigned -- no code-signing certificate is in play --
+      # so this is what lets anyone verify a download really came from this
+      # repository and workflow, rather than trusting the file on faith:
+      #   gh attestation verify XrayPortable-windows.exe -R <owner>/<repo>
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: ${{ matrix.artifact }}
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
@@ -61,6 +74,11 @@ jobs:
           merge-multiple: true
       - name: List artifacts
         run: ls -la artifacts
+      - name: Generate checksums
+        working-directory: artifacts
+        # Name the binaries explicitly: a bare "*" risks the sums file
+        # matching its own glob.
+        run: sha256sum XrayPortable-* > SHA256SUMS.txt && cat SHA256SUMS.txt
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
