@@ -1,8 +1,9 @@
 """UI smoke tests: the dialogs and the main window actually construct and round-trip.
 
 Skipped when PySide6 is missing so a contributor without it still gets a green
-suite. CI installs requirements-dev.txt, so these do run there -- the UI used to
-be the one part of the app no test ever executed.
+suite -- except under CI, where a skip must fail instead. A silent skip reads
+exactly like a pass in the run summary, and that is how the UI came to be the
+one part of the app no test ever executed.
 """
 from __future__ import annotations
 
@@ -11,7 +12,13 @@ import os
 
 import pytest
 
-pytest.importorskip("PySide6")
+if os.environ.get("CI"):
+    # A skip here looks identical to a pass in the run summary, which is how
+    # the UI went untested in the first place. In CI a missing or broken
+    # PySide6 must fail loudly instead.
+    import PySide6  # noqa: F401
+else:
+    pytest.importorskip("PySide6")
 
 # Must be set before the first QApplication; there is no display on a CI runner.
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
