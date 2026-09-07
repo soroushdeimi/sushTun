@@ -86,6 +86,14 @@ class Connection:
         else:
             self._connect_generic(profile, iface, server_ip, dns)
 
+    def _fail_connect(self, server_ip: str, reason: str) -> None:
+        """Tear down a half-built connection, then report why it failed."""
+        self.tun2socks.stop()
+        self.xray.stop()
+        network.remove_routes(server_ip)
+        paths.runtime_config().unlink(missing_ok=True)
+        raise ConnectError(reason)
+
     def _connect_generic(self, profile: Profile, iface, server_ip: str, dns) -> None:
         self._log("Building runtime config...")
         rules = routing.build_rules(app_settings.load()["routing"])
@@ -93,14 +101,23 @@ class Connection:
 
         self._log("Starting Xray...")
         network.remove_routes(server_ip)
+        # Pin the server route first: Xray dials the moment it starts, and
+        # until this exists that dial races the default route out of the box.
+        network.add_host_route(server_ip, iface.gateway)
         self.xray.start(cfg)
 
         self._log("Waiting for TUN adapter...")
         tun = network.wait_for_tun()
         if tun is None:
-            self.xray.stop()
-            paths.runtime_config().unlink(missing_ok=True)
-            raise ConnectError("TUN interface xray0 did not appear")
+            self._fail_connect(server_ip, "TUN interface xray0 did not appear")
+
+        self._log("Configuring tunnel adapter...")
+        if not network.configure_tun(tun):
+            self._fail_connect(
+                server_ip,
+                f"could not assign {network.TUN_ADDRESS} to {network.TUN_NAME} — "
+                "the tunnel would carry no traffic",
+            )
 
         # Persist backup + a boot restore task BEFORE hijacking DNS. Static
         # 127.0.0.1 survives a power-off; the task puts the adapter back.
@@ -111,7 +128,7 @@ class Connection:
             self._log(f"Boot restore task not registered: {exc}")
         self._log("Routing DNS and traffic through the tunnel...")
         network.set_dns_loopback(iface.alias)
-        network.add_routes(server_ip, iface.gateway, tun)
+        network.add_default_routes(tun)
         self._owned = True
         self._setup_gateway()
         self._log("Connected.")
@@ -149,19 +166,15 @@ class Connection:
 
         self._log("Starting Xray...")
         network.remove_routes(server_ip)
+        network.add_host_route(server_ip, iface.gateway)
         self.xray.start(cfg)
         if not _wait_port(SOCKS_HOST, SOCKS_PORT):
-            self.xray.stop()
-            paths.runtime_config().unlink(missing_ok=True)
-            raise ConnectError("Xray SOCKS inbound did not come up")
+            self._fail_connect(server_ip, "Xray SOCKS inbound did not come up")
 
         self._log("Starting tun2socks bridge...")
         self.tun2socks.start(SOCKS_HOST, SOCKS_PORT, iface.alias)
         if not t2s.bring_up_device():
-            self.tun2socks.stop()
-            self.xray.stop()
-            paths.runtime_config().unlink(missing_ok=True)
-            raise ConnectError("tun2socks TUN device did not appear")
+            self._fail_connect(server_ip, "tun2socks TUN device did not appear")
 
         self.state.save(iface, server_ip, 0, dns)
         try:
@@ -170,7 +183,7 @@ class Connection:
             self._log(f"Boot restore task not registered: {exc}")
         self._log("Routing DNS and traffic through the tunnel...")
         network.set_dns_loopback(iface.alias)
-        network.add_routes(server_ip, iface.gateway, None)
+        network.add_default_routes(None)
         self._owned = True
         self._log("Connected.")
 

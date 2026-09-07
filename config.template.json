@@ -16,7 +16,7 @@
       "protocol": "tun",
       "settings": {
         "name": "xray0",
-        "mtu": 1500
+        "mtu": 1420
       },
       "sniffing": {
         "enabled": true,
@@ -107,6 +107,12 @@
       {
         "type": "field",
         "inboundTag": ["dns-in"],
+        "outboundTag": "dns-out"
+      },
+      {
+        "type": "field",
+        "inboundTag": ["tun-in"],
+        "port": 53,
         "outboundTag": "dns-out"
       }
     ]

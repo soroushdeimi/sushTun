@@ -13,9 +13,10 @@ import time
 
 from . import proc
 from . import tun2socks as t2s
-from .network import TUN_NAME, DnsState, Interface
+from .network import TUN_ADDRESS, TUN_NAME, TUN_NETMASK, DnsState, Interface
 
 IS_MAC = sys.platform == "darwin"
+TUN_PREFIX_LEN = 30
 _RESOLV = "/etc/resolv.conf"
 
 
@@ -114,17 +115,34 @@ def restore_dns(alias: str, state: DnsState, retries: int = 1) -> bool:
         return False
 
 
+# -- tun adapter -----------------------------------------------------------
+def configure_tun(index: int, address: str = TUN_ADDRESS, mask: str = TUN_NETMASK) -> bool:
+    """Address the TUN device and bring it up. macOS: tun2socks does this."""
+    if IS_MAC:
+        return True
+    proc.run(["ip", "address", "replace", f"{address}/{TUN_PREFIX_LEN}", "dev", TUN_NAME])
+    proc.run(["ip", "link", "set", "dev", TUN_NAME, "up"])
+    out = proc.run(["ip", "-4", "-o", "address", "show", "dev", TUN_NAME]).stdout
+    return address in out
+
+
 # -- routes ----------------------------------------------------------------
-def add_routes(server_ip: str, gateway: str, tun_index: int | None) -> None:
+def add_host_route(server_ip: str, gateway: str) -> None:
+    if IS_MAC:
+        proc.run(["route", "-n", "add", "-host", server_ip, gateway])
+    else:
+        proc.run(["ip", "route", "add", server_ip, "via", gateway])
+
+
+def add_default_routes(tun_index: int | None = None) -> None:
     if IS_MAC:
         # Route via the tun2socks point-to-point address, not -interface: the
         # utun device only forwards what's addressed to its own next-hop.
-        proc.run(["route", "-n", "add", "-host", server_ip, gateway])
         proc.run(["route", "-n", "add", "-net", "0.0.0.0/1", t2s.ADDRESS])
         proc.run(["route", "-n", "add", "-net", "128.0.0.0/1", t2s.ADDRESS])
-    else:
-        proc.run(["ip", "route", "add", server_ip, "via", gateway])
-        proc.run(["ip", "route", "add", "default", "dev", TUN_NAME])
+        return
+    for dest in ("0.0.0.0/1", "128.0.0.0/1"):
+        proc.run(["ip", "route", "add", dest, "dev", TUN_NAME])
 
 
 def remove_routes(server_ip: str | None = None) -> None:
@@ -135,6 +153,8 @@ def remove_routes(server_ip: str | None = None) -> None:
             proc.run(["route", "-n", "delete", "-host", server_ip])
     else:
         proc.run(["ip", "route", "del", "default", "dev", TUN_NAME])
+        for dest in ("0.0.0.0/1", "128.0.0.0/1"):
+            proc.run(["ip", "route", "del", dest, "dev", TUN_NAME])
         if server_ip:
             proc.run(["ip", "route", "del", server_ip])
 

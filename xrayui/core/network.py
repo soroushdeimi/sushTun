@@ -9,6 +9,18 @@ from . import proc
 
 TUN_NAME = "xray0"
 
+# The TUN adapter must own a global-scope address. Left on DHCP it falls back
+# to APIPA (169.254.x.x), and Windows source-address selection then prefers the
+# physical adapter's global address for global destinations — so the tunnel's
+# default route is never chosen and traffic leaves in the clear.
+TUN_ADDRESS = "172.19.0.2"
+TUN_NETMASK = "255.255.255.252"
+TUN_METRIC = 1
+
+# Two /1 routes beat the physical /0 by longest-prefix match, so the tunnel
+# wins regardless of the interface metrics Windows hands out.
+DEFAULT_SPLIT = (("0.0.0.0", "128.0.0.0"), ("128.0.0.0", "128.0.0.0"))
+
 _DETECT_PS = """
 $candidate = $null
 foreach ($route in (Get-NetRoute -DestinationPrefix '0.0.0.0/0' -AddressFamily IPv4 -ErrorAction SilentlyContinue)) {
@@ -126,10 +138,46 @@ def _flush_dns() -> None:
     proc.run(["ipconfig", "/flushdns"])
 
 
-def add_routes(server_ip: str, gateway: str, tun_index: int) -> None:
+def tun_ipv4(index: int) -> str:
+    """The adapter's routable IPv4, ignoring an APIPA fallback."""
+    script = (
+        f"(Get-NetIPAddress -InterfaceIndex {int(index)} -AddressFamily IPv4 "
+        f"-ErrorAction SilentlyContinue).IPAddress"
+    )
+    for ln in proc.ps_lines(script):
+        if ln and not ln.startswith("169.254."):
+            return ln
+    return ""
+
+
+def configure_tun(index: int, address: str = TUN_ADDRESS, mask: str = TUN_NETMASK) -> bool:
+    """Give the TUN adapter a routable address and a low interface metric.
+
+    Addressed by index first (immune to a renamed or localized adapter), then
+    by name in case this netsh build will not take an index.
+
+    Returns False when Windows did not take the address. The caller must treat
+    that as a failed connect: an APIPA-only tunnel silently carries nothing.
+    """
+    for target in (str(index), TUN_NAME):
+        proc.run(["netsh", "interface", "ipv4", "set", "address",
+                  f"name={target}", "static", address, mask])
+        proc.run(["netsh", "interface", "ipv4", "set", "interface",
+                  f"interface={target}", f"metric={TUN_METRIC}"])
+        if tun_ipv4(index) == address:
+            return True
+    return False
+
+
+def add_host_route(server_ip: str, gateway: str) -> None:
+    """Pin the server route before anything else can default into the tunnel."""
     proc.run(["route", "add", server_ip, "mask", "255.255.255.255", gateway, "metric", "1"])
-    proc.run(["route", "add", "0.0.0.0", "mask", "0.0.0.0", "0.0.0.0",
-              "if", str(tun_index), "metric", "3"])
+
+
+def add_default_routes(tun_index: int) -> None:
+    for dest, mask in DEFAULT_SPLIT:
+        proc.run(["route", "add", dest, "mask", mask, "0.0.0.0",
+                  "if", str(tun_index), "metric", "1"])
 
 
 def replace_host_route(server_ip: str, gateway: str) -> None:
@@ -139,11 +187,14 @@ def replace_host_route(server_ip: str, gateway: str) -> None:
     when Wi-Fi renews its lease or roams, so only it needs refreshing.
     """
     proc.run(["route", "delete", server_ip, "mask", "255.255.255.255"])
-    proc.run(["route", "add", server_ip, "mask", "255.255.255.255", gateway, "metric", "1"])
+    add_host_route(server_ip, gateway)
 
 
 def remove_routes(server_ip: str | None = None) -> None:
+    # The bare /0 is what releases before the split default installed.
     proc.run(["route", "delete", "0.0.0.0", "mask", "0.0.0.0", "0.0.0.0"])
+    for dest, mask in DEFAULT_SPLIT:
+        proc.run(["route", "delete", dest, "mask", mask, "0.0.0.0"])
     if server_ip:
         proc.run(["route", "delete", server_ip, "mask", "255.255.255.255"])
 
@@ -168,6 +219,8 @@ if sys.platform != "win32":
     backup_dns = _posix.backup_dns
     set_dns_loopback = _posix.set_dns_loopback
     restore_dns = _posix.restore_dns
-    add_routes = _posix.add_routes
+    configure_tun = _posix.configure_tun
+    add_host_route = _posix.add_host_route
+    add_default_routes = _posix.add_default_routes
     remove_routes = _posix.remove_routes
     wait_for_tun = _posix.wait_for_tun
