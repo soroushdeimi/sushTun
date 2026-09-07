@@ -67,3 +67,6 @@ jobs:
           files: artifacts/*
           generate_release_notes: true
           fail_on_unmatched_files: true
+          # A tag carrying a suffix (v0.1.7-rc1) is a test build, not a
+          # stable one, so it must not surface as the latest release.
+          prerelease: ${{ contains(github.ref_name, '-') }}
