@@ -7,7 +7,8 @@ IS_WIN = sys.platform == "win32"
 IS_MAC = sys.platform == "darwin"
 
 xray_bin = "xray.exe" if IS_WIN else "xray"
-_ASSETS = ["config.template.json", "geoip.dat", "geosite.dat", xray_bin]
+wg_bin = "wireguard-go.exe" if IS_WIN else "wireguard-go"
+_ASSETS = ["config.template.json", "geoip.dat", "geosite.dat", xray_bin, wg_bin]
 if IS_WIN:
     _ASSETS.append("wintun.dll")
 if IS_MAC:

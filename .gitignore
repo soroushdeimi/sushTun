@@ -11,6 +11,8 @@ xray.exe
 wintun.dll
 geoip.dat
 geosite.dat
+wireguard-go
+wireguard-go.exe
 
 # Python
 __pycache__/

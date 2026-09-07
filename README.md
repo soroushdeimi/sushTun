@@ -39,6 +39,12 @@ dependencies.
   nothing to configure on the device itself.
 - **Live metrics** — real-time throughput and total data used this session,
   plus ping, TCP-delay, and diagnostics tools alongside a colorized live log.
+- **Dual tunnels** — run the Xray proxy lane and a native WireGuard lane
+  at the same time, side by side: one profile for filter circumvention, a
+  second for a split-tunnel WireGuard connection — a home network, a
+  workplace VPN, a cloud VPC, anything reachable over WireGuard — with the
+  more specific route taking precedence automatically. System DNS stays
+  owned by the proxy lane alone.
 
 ## Download
 
@@ -67,12 +73,33 @@ python scripts/fetch_deps.py   # fetches xray-core, geo data, and platform TUN h
 python -m xrayui
 ```
 
+`fetch_deps.py` also builds `wireguard-go` from source, which requires a Go
+toolchain (1.22+) on PATH. If Go is not found, that step is skipped with a
+message and the WireGuard lane is simply unavailable — everything else still
+works.
+
 To produce a standalone binary:
 
 ```bash
 pyinstaller tools/build.spec
 ```
 
+## Third-party licenses
+
+sushTun bundles the following redistributables, fetched or built by
+`scripts/fetch_deps.py`:
+
+| Component | License | Purpose |
+|-----------|---------|---------|
+| [Xray-core](https://github.com/XTLS/Xray-core) | MPL-2.0 | The proxy engine driving the Proxy (Xray) lane. |
+| [wireguard-go](https://github.com/WireGuard/wireguard-go) | MIT | Userspace WireGuard implementation driving the WireGuard lane, on all three platforms. |
+| [wintun](https://www.wintun.net/) | Restrictive prebuilt license (see vendor site) | The TUN driver used on Windows by both lanes. |
+| [tun2socks](https://github.com/xjasonlyu/tun2socks) | MIT | Bridges Xray's SOCKS inbound to a real TUN device on macOS. |
+| [v2ray-rules-dat](https://github.com/Loyalsoldier/v2ray-rules-dat) | GPL-3.0 (data) | `geoip.dat`/`geosite.dat` routing data used for split routing. |
+
+None of these are modified; they are used as distributed by their upstream
+projects. See each project's license for full terms.
+
 ## License
 
-Released under the [MIT License](LICENSE).
+sushTun itself is released under the [MIT License](LICENSE).
