@@ -31,7 +31,10 @@ dependencies.
   a plan is about to expire, throttled to once per day per threshold.
 - **Split routing** — choose what skips the tunnel: Iran, Russia, and China
   (via geosite/geoip), ad and tracker blocking, the local network, or your own
-  domains, IPs, and app presets.
+  domains and IPs.
+- **Custom DNS** — pick your resolvers (DoH, DoT, plain, or a one-click preset
+  for Cloudflare, Google, Quad9, or AdGuard), choose the query strategy, and pin
+  individual domains to fixed addresses.
 - **Low-usage mode** — a single toggle sends OS telemetry and update traffic
   direct so it never eats your quota, while everything else stays tunneled.
 - **Share via hotspot** *(Windows)* — put the tunnel behind the Windows mobile

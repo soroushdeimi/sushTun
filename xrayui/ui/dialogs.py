@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core import importer
+from ..core import settings as app_settings
 from ..core.profiles import Profile
 
 _NETWORKS = ["tcp", "ws", "grpc", "h2", "kcp", "quic"]
@@ -262,8 +263,23 @@ class SettingsDialog(QDialog):
         self.sample_seconds = QSpinBox()
         self.sample_seconds.setRange(1, 60)
         self.sample_seconds.setValue(int(settings.get("sample_seconds", 5)))
+        self.tun_mtu = QSpinBox()
+        self.tun_mtu.setRange(576, 9000)
+        self.tun_mtu.setValue(int(settings.get("tun_mtu", 1420)))
+        self.tun_mtu.setToolTip(
+            "Tunnel MTU. Lower leaves more headroom for encapsulation; "
+            "higher reduces per-packet overhead. 1420 is a safe default."
+        )
+        self.log_level = QComboBox()
+        self.log_level.addItems(app_settings.LOG_LEVELS)
+        current = str(settings.get("log_level", "warning"))
+        if current in app_settings.LOG_LEVELS:
+            self.log_level.setCurrentText(current)
+
         form.addRow("Ping target", self.ping_target)
         form.addRow("Throughput sample (s)", self.sample_seconds)
+        form.addRow("Tunnel MTU", self.tun_mtu)
+        form.addRow("Xray log level", self.log_level)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
@@ -274,4 +290,6 @@ class SettingsDialog(QDialog):
         return {
             "ping_target": self.ping_target.text().strip() or "1.1.1.1",
             "sample_seconds": self.sample_seconds.value(),
+            "tun_mtu": self.tun_mtu.value(),
+            "log_level": self.log_level.currentText(),
         }

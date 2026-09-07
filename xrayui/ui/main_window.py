@@ -28,6 +28,7 @@ from ..core.connection import Connection, _resolve
 from ..core.profiles import Profile, ProfileStore
 from ..core.xray import is_xray_running
 from .dialogs import ImportDialog, ProfileEditDialog, SettingsDialog
+from .dns_dialog import DnsDialog
 from .log_tailer import LogTailer
 from .routing_dialog import RoutingDialog
 from .subscription_panel import SubscriptionPanel
@@ -115,6 +116,9 @@ class MainWindow(QMainWindow):
         self.btn_low.toggled.connect(self._toggle_low_usage)
         self.btn_bypass = QPushButton("Bypass…")
         self.btn_bypass.clicked.connect(self._open_routing)
+        self.btn_dns = QPushButton("DNS…")
+        self.btn_dns.setToolTip("Choose which resolvers the tunnel uses.")
+        self.btn_dns.clicked.connect(self._open_dns)
         self.btn_settings = QPushButton("Settings")
         self.btn_settings.clicked.connect(self._open_settings)
         self.btn_gateway = QPushButton("Share via hotspot")
@@ -130,6 +134,7 @@ class MainWindow(QMainWindow):
         actions2.addWidget(self.btn_low)
         actions2.addWidget(self.btn_gateway)
         actions2.addWidget(self.btn_bypass)
+        actions2.addWidget(self.btn_dns)
         actions2.addWidget(self.btn_settings)
 
         self.step_label = QLabel("")
@@ -182,6 +187,7 @@ class MainWindow(QMainWindow):
         self.tools.pingRequested.connect(lambda: self._run_tool(self._ping_fn))
         self.tools.delayRequested.connect(lambda: self._run_tool(self._delay_fn))
         self.tools.throughputRequested.connect(lambda: self._run_tool(self._throughput_fn))
+        self.tools.baselineRequested.connect(lambda: self._run_tool(self._baseline_fn))
         self.tools.diagnosticsRequested.connect(lambda: self._run_tool(self._diag_fn))
 
     @staticmethod
@@ -419,6 +425,16 @@ class MainWindow(QMainWindow):
                 f"RX {s['rx']:,} bytes  ~{s['rx_mbps']} Mbit/s\n"
                 f"TX {s['tx']:,} bytes  ~{s['tx_mbps']} Mbit/s")
 
+    def _baseline_fn(self) -> str:
+        tun = self.conn.state.tun_index
+        if tun is None:
+            return "Not connected (no tunnel)."
+        seconds = int(self.settings.get("sample_seconds", 5))
+        s = metrics.baseline_sample(tun, self.conn.state.alias, seconds)
+        if not s:
+            return "Sampling failed (Windows only)."
+        return metrics.format_baseline(s)
+
     def _diag_fn(self) -> str:
         profile = self._active_profile()
         server_ip = self.conn.state.server_ip
@@ -495,6 +511,13 @@ class MainWindow(QMainWindow):
             app_settings.save(self.settings)
             self.btn_low.setChecked(self.settings["routing"]["low_usage"])
             self.step_label.setText("Routing saved — applies on next connect.")
+
+    def _open_dns(self) -> None:
+        dlg = DnsDialog(self.settings["dns"], self)
+        if dlg.exec():
+            self.settings["dns"] = dlg.result_dns()
+            app_settings.save(self.settings)
+            self.step_label.setText("DNS saved — applies on next connect.")
 
     def _toggle_low_usage(self, checked: bool) -> None:
         self.settings["routing"]["low_usage"] = checked

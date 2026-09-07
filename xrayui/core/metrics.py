@@ -72,6 +72,74 @@ def throughput_sample(tun_index: int, seconds: int = 5) -> dict | None:
         return None
 
 
+_BASELINE_PS = """
+$tun = [int]$env:TUN_IDX; $sec = [int]$env:SECS; $alias = $env:PHYS_ALIAS
+$ta = Get-NetAdapter -InterfaceIndex $tun -ErrorAction Stop
+$pa = Get-NetAdapter -Name $alias -ErrorAction SilentlyContinue
+function Cpu { (Get-Process xray -ErrorAction SilentlyContinue |
+                 Measure-Object -Property CPU -Sum).Sum }
+$t1 = Get-NetAdapterStatistics -Name $ta.Name -ErrorAction Stop
+$p1 = if ($pa) { Get-NetAdapterStatistics -Name $pa.Name -ErrorAction SilentlyContinue }
+$c1 = Cpu
+Start-Sleep -Seconds $sec
+$t2 = Get-NetAdapterStatistics -Name $ta.Name -ErrorAction Stop
+$p2 = if ($pa) { Get-NetAdapterStatistics -Name $pa.Name -ErrorAction SilentlyContinue }
+$c2 = Cpu
+function Mbps($a, $b) { [math]::Round((([math]::Max(0, $b - $a) * 8) / $sec) / 1MB, 2) }
+@{
+  tun_name     = $ta.Name
+  tun_rx_mbps  = Mbps $t1.ReceivedBytes $t2.ReceivedBytes
+  tun_tx_mbps  = Mbps $t1.SentBytes     $t2.SentBytes
+  phys_name    = if ($pa) { $pa.Name } else { '' }
+  phys_rx_mbps = if ($p1 -and $p2) { Mbps $p1.ReceivedBytes $p2.ReceivedBytes } else { 0 }
+  phys_tx_mbps = if ($p1 -and $p2) { Mbps $p1.SentBytes     $p2.SentBytes } else { 0 }
+  xray_cpu_pct = [math]::Round(((($c2 - $c1) / $sec) * 100), 1)
+  cores        = [Environment]::ProcessorCount
+} | ConvertTo-Json -Compress
+"""
+
+
+def baseline_sample(tun_index: int, phys_alias: str | None, seconds: int = 5) -> dict | None:
+    """Tunnel and physical throughput plus xray CPU, over one sample window.
+
+    Answers the only question worth asking before tuning anything: CPU near
+    100% of a core means the userspace TCP stack is the ceiling; low CPU with
+    tunnel throughput tracking the physical adapter means the WAN link is.
+    """
+    if not IS_WIN:
+        return None
+    out = proc.powershell(
+        _BASELINE_PS,
+        env={"TUN_IDX": tun_index, "SECS": seconds, "PHYS_ALIAS": phys_alias or ""},
+        timeout=seconds + 20,
+    ).stdout.strip()
+    try:
+        return json.loads(out)
+    except ValueError:
+        return None
+
+
+def format_baseline(s: dict) -> str:
+    cpu = float(s.get("xray_cpu_pct") or 0.0)
+    rx, tx = s.get("tun_rx_mbps") or 0, s.get("tun_tx_mbps") or 0
+    lines = [f"Tunnel   {s.get('tun_name', '?'):<22} "
+             f"RX ~{rx} Mbit/s   TX ~{tx} Mbit/s"]
+    if s.get("phys_name"):
+        lines.append(f"Physical {s['phys_name']:<22} "
+                     f"RX ~{s.get('phys_rx_mbps') or 0} Mbit/s   "
+                     f"TX ~{s.get('phys_tx_mbps') or 0} Mbit/s")
+    lines.append(f"\nxray CPU {cpu}% of one core ({s.get('cores') or 1} cores)\n")
+    if rx < 1 and tx < 1:
+        lines.append("Almost no traffic during the sample — start a download and retry.")
+    elif cpu >= 80:
+        lines.append("CPU-bound: the userspace TCP stack is the ceiling. MTU tuning and")
+        lines.append("the kernel-level track would have a real payoff here.")
+    else:
+        lines.append("Not CPU-bound: the WAN link to the server is the ceiling, so there")
+        lines.append("is nothing on the client side worth optimizing.")
+    return "\n".join(lines)
+
+
 def query_stats(port: int = STATS_API_PORT) -> dict | None:
     """Total inbound traffic since connect, via the Xray stats API. up/down bytes."""
     out = proc.run(

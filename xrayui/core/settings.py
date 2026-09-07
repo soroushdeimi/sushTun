@@ -12,6 +12,17 @@ DEFAULTS: dict = {
     "ping_target": "1.1.1.1",
     "sample_seconds": 5,
     "log_level": "warning",
+    "tun_mtu": 1420,
+    # Empty means "inherit the template", so an untouched install renders the
+    # bundled config verbatim. See core/dns.py.
+    # `hosts` is a list of "domain = address" lines, not a map: _merge treats a
+    # dict as a schema and filters saved keys against it, so a map default of {}
+    # would silently discard every entry. Lists are replaced wholesale.
+    "dns": {
+        "servers": [],
+        "query_strategy": "",
+        "hosts": [],
+    },
     "routing": {
         "low_usage": False,
         "block_ads": True,

@@ -16,6 +16,7 @@ class ToolsPanel(QWidget):
     pingRequested = Signal()
     delayRequested = Signal()
     throughputRequested = Signal()
+    baselineRequested = Signal()
     diagnosticsRequested = Signal()
 
     def __init__(self) -> None:
@@ -29,6 +30,7 @@ class ToolsPanel(QWidget):
             ("Ping", self.pingRequested),
             ("Relay TCP delay", self.delayRequested),
             ("Throughput", self.throughputRequested),
+            ("Baseline", self.baselineRequested),
             ("Diagnostics", self.diagnosticsRequested),
         ):
             b = QPushButton(text)

@@ -16,7 +16,8 @@
       "protocol": "tun",
       "settings": {
         "name": "xray0",
-        "mtu": 1420
+        "mtu": 1420,
+        "dns": ["127.0.0.1"]
       },
       "sniffing": {
         "enabled": true,
