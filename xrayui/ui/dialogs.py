@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -158,6 +159,10 @@ class ProfileEditDialog(QDialog):
         self.f_wg_keepalive = QSpinBox()
         self.f_wg_keepalive.setRange(0, 600)
         self.f_wg_keepalive.setValue(int(p.wg_keepalive) if p.wg_keepalive else 0)
+        self.f_wg_allowed_ips = QLineEdit(p.wg_allowed_ips)
+        self.f_wg_allowed_ips.setPlaceholderText("Empty = full tunnel (0.0.0.0/0, ::/0)")
+        self.f_wg_endpoint_via_proxy = QCheckBox("Route WireGuard endpoint through the proxy lane")
+        self.f_wg_endpoint_via_proxy.setChecked(bool(p.wg_endpoint_via_proxy))
 
         self._add_row(form, "Name", self.f_name)
         self._add_row(form, "Protocol", self.f_protocol)
@@ -187,10 +192,13 @@ class ProfileEditDialog(QDialog):
             self._add_row(form, "Reserved", self.f_wg_reserved),
             self._add_row(form, "MTU", self.f_wg_mtu),
             self._add_row(form, "Keepalive (s)", self.f_wg_keepalive),
+            self._add_row(form, "Allowed IPs", self.f_wg_allowed_ips),
+            self._add_row(form, "Endpoint routing", self.f_wg_endpoint_via_proxy),
         ]
         self._wg_fields = [
             self.f_wg_local, self.f_wg_psk, self.f_wg_reserved,
             self.f_wg_mtu, self.f_wg_keepalive,
+            self.f_wg_allowed_ips, self.f_wg_endpoint_via_proxy,
         ]
         self.f_protocol.currentTextChanged.connect(self._sync_protocol_fields)
         self._sync_protocol_fields(self.f_protocol.currentText())
@@ -242,6 +250,8 @@ class ProfileEditDialog(QDialog):
             p.wg_reserved = self.f_wg_reserved.text().strip()
             p.wg_mtu = self.f_wg_mtu.value()
             p.wg_keepalive = self.f_wg_keepalive.value()
+            p.wg_allowed_ips = self.f_wg_allowed_ips.text().strip()
+            p.wg_endpoint_via_proxy = self.f_wg_endpoint_via_proxy.isChecked()
         if not self._profile.address or not self._profile.id:
             QMessageBox.warning(self, "Missing fields", "Address and UUID / private key are required.")
             return

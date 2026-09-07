@@ -53,8 +53,20 @@ def _row(label: str) -> tuple[QLabel, QLabel]:
     return key, val
 
 
+_DEFAULT_ROWS = [
+    ("Relay", "endpoint"),
+    ("Xray process", "process"),
+    ("Interface", "iface"),
+    ("Source IPv4", "ip"),
+    ("Gateway", "gateway"),
+    ("Tunnel ifIndex", "tun"),
+    ("Throughput", "throughput"),
+    ("Used this session", "used"),
+]
+
+
 class StatusCard(QFrame):
-    def __init__(self) -> None:
+    def __init__(self, title_text: str = "Connection", rows: list[tuple[str, str]] | None = None) -> None:
         super().__init__()
         self.setObjectName("Card")
         grid = QGridLayout(self)
@@ -62,7 +74,7 @@ class StatusCard(QFrame):
         grid.setHorizontalSpacing(14)
         grid.setVerticalSpacing(8)
 
-        title = QLabel("Connection")
+        title = QLabel(title_text)
         title.setObjectName("H1")
         self.pill = QLabel("DISCONNECTED")
         self.pill.setObjectName("PillOff")
@@ -74,16 +86,7 @@ class StatusCard(QFrame):
         grid.addLayout(top, 0, 0, 1, 2)
 
         self._vals: dict[str, QLabel] = {}
-        rows = [
-            ("Relay", "endpoint"),
-            ("Xray process", "process"),
-            ("Interface", "iface"),
-            ("Source IPv4", "ip"),
-            ("Gateway", "gateway"),
-            ("Tunnel ifIndex", "tun"),
-            ("Throughput", "throughput"),
-            ("Used this session", "used"),
-        ]
+        rows = rows if rows is not None else _DEFAULT_ROWS
         for i, (label, key) in enumerate(rows, start=1):
             k, v = _row(label)
             self._vals[key] = v
@@ -142,7 +145,8 @@ class ProfilePanel(QWidget):
         self.list.clear()
         for p in profiles:
             mark = "● " if p.uid == active_uid else "   "
-            item = QListWidgetItem(f"{mark}{p.name}\n     {p.protocol} · {p.endpoint}")
+            badge = "[WG] " if p.protocol == "wireguard" else ""
+            item = QListWidgetItem(f"{mark}{badge}{p.name}\n     {p.protocol} · {p.endpoint}")
             item.setData(Qt.UserRole, p.uid)
             self.list.addItem(item)
             if p.uid == active_uid:

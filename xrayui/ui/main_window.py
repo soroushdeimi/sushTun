@@ -6,6 +6,7 @@ import time
 
 from PySide6.QtCore import Qt, QThreadPool, QTimer, Signal
 from PySide6.QtWidgets import (
+    QComboBox,
     QHBoxLayout,
     QInputDialog,
     QLabel,
@@ -20,12 +21,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..core import alerts, metrics
+from ..core import alerts, metrics, wgconf
 from ..core import settings as app_settings
 from ..core import subscription as sub_mod
 from ..core.alerts import human_bytes
 from ..core.connection import Connection, _resolve
 from ..core.profiles import Profile, ProfileStore
+from ..core.wgtunnel import WgTunnel
 from ..core.xray import is_xray_running
 from .dialogs import ImportDialog, ProfileEditDialog, SettingsDialog
 from .log_tailer import LogTailer
@@ -33,6 +35,14 @@ from .routing_dialog import RoutingDialog
 from .subscription_panel import SubscriptionPanel
 from .tools_panel import ToolsPanel
 from .widgets import AlertBanner, LogView, ProfilePanel, StatusCard
+
+_WG_ROWS = [
+    ("Profile", "profile"),
+    ("Process", "status"),
+    ("Device", "device"),
+    ("Subnets", "subnets"),
+    ("Throughput", "throughput"),
+]
 
 
 class MainWindow(QMainWindow):
@@ -49,8 +59,11 @@ class MainWindow(QMainWindow):
         self.throttle = alerts.Throttle()
         self.pool = QThreadPool.globalInstance()
         self.conn = Connection(on_step=self.stepReceived.emit)
+        self.wg_conn = WgTunnel(on_step=self.stepReceived.emit)
         self._busy = False
+        self._wg_busy = False
         self._sampling = False
+        self._wg_sampling = False
         self._repairing = False
         self._workers: set = set()
 
@@ -64,6 +77,7 @@ class MainWindow(QMainWindow):
 
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._refresh_status)
+        self.timer.timeout.connect(self._refresh_wg_status)
         self.timer.start(2000)
         self.alert_timer = QTimer(self)
         self.alert_timer.timeout.connect(self._check_alerts)
@@ -84,11 +98,18 @@ class MainWindow(QMainWindow):
                 self._on_step("Restored leftover network settings from a previous session.")
         except Exception as exc:
             self._on_step(f"Could not restore leftover network settings: {exc}")
+        try:
+            if self.wg_conn.recover_if_stale():
+                self._on_step("Cleaned up leftover WireGuard tunnel routes from a previous session.")
+        except Exception as exc:
+            self._on_step(f"Could not clean up leftover WireGuard routes: {exc}")
         self._refresh_status()
+        self._refresh_wg_status()
 
     # UI construction -------------------------------------------------------
     def _build_ui(self, elevated: bool) -> None:
-        self.status_card = StatusCard()
+        self.status_card = StatusCard("Proxy (Xray)")
+        self.wg_status_card = StatusCard("WireGuard", _WG_ROWS)
         self.profiles = ProfilePanel()
         self.subs_panel = SubscriptionPanel()
         self.tools = ToolsPanel()
@@ -132,6 +153,20 @@ class MainWindow(QMainWindow):
         actions2.addWidget(self.btn_bypass)
         actions2.addWidget(self.btn_settings)
 
+        self.wg_combo = QComboBox()
+        self.wg_combo.currentIndexChanged.connect(lambda _i: self._refresh_wg_button_state())
+        self.btn_wg_connect = QPushButton("Connect")
+        self.btn_wg_connect.setObjectName("Primary")
+        self.btn_wg_disconnect = QPushButton("Disconnect")
+        self.btn_wg_disconnect.setObjectName("Danger")
+        self.btn_wg_connect.clicked.connect(self._wg_connect)
+        self.btn_wg_disconnect.clicked.connect(self._wg_disconnect)
+
+        wg_actions = QHBoxLayout()
+        wg_actions.addWidget(self.wg_combo, 2)
+        wg_actions.addWidget(self.btn_wg_connect, 1)
+        wg_actions.addWidget(self.btn_wg_disconnect, 1)
+
         self.step_label = QLabel("")
         self.step_label.setObjectName("Muted")
 
@@ -146,6 +181,8 @@ class MainWindow(QMainWindow):
         rl.addWidget(self.status_card)
         rl.addLayout(actions)
         rl.addLayout(actions2)
+        rl.addWidget(self.wg_status_card)
+        rl.addLayout(wg_actions)
         rl.addWidget(self.step_label)
         rl.addWidget(tabs, 1)
         if not elevated:
@@ -221,9 +258,28 @@ class MainWindow(QMainWindow):
     # Profiles --------------------------------------------------------------
     def _reload_profiles(self) -> None:
         self.profiles.set_profiles(self.store.list(), self.store.active_uid())
+        self._reload_wg_combo()
 
     def _active_profile(self) -> Profile | None:
         uid = self.profiles.current_uid() or self.store.active_uid()
+        return self.store.get(uid) if uid else None
+
+    def _reload_wg_combo(self) -> None:
+        wg_profiles = [p for p in self.store.list() if p.protocol == "wireguard"]
+        active_uid = self.store.wg_active_uid()
+        self.wg_combo.blockSignals(True)
+        self.wg_combo.clear()
+        for p in wg_profiles:
+            self.wg_combo.addItem(f"{p.name} · {p.endpoint}", p.uid)
+        if active_uid:
+            idx = self.wg_combo.findData(active_uid)
+            if idx >= 0:
+                self.wg_combo.setCurrentIndex(idx)
+        self.wg_combo.blockSignals(False)
+        self._refresh_wg_button_state()
+
+    def _active_wg_profile(self) -> Profile | None:
+        uid = self.wg_combo.currentData()
         return self.store.get(uid) if uid else None
 
     def _import(self) -> None:
@@ -366,10 +422,57 @@ class MainWindow(QMainWindow):
             self.step_label.setText(error)
             QMessageBox.warning(self, "Connection", error)
         self._refresh_status()
+        self._refresh_wg_button_state()
 
     def _on_step(self, msg: str) -> None:
         self.step_label.setText(msg)
         self.log.append_line(f">> {msg}")
+
+    # WireGuard lane --------------------------------------------------------
+    def _wg_connect(self) -> None:
+        if self._wg_busy:
+            return
+        profile = self._active_wg_profile()
+        if not profile:
+            QMessageBox.information(self, "No profile", "Import or select a WireGuard profile first.")
+            return
+        self.store.set_wg_active(profile.uid)
+        self._set_wg_busy(True)
+        self.log.append_line(f"Connecting WireGuard tunnel to {profile.name} ({profile.endpoint})…")
+        self._run_async(lambda: self.wg_conn.connect(profile), self._on_wg_conn_done)
+
+    def _wg_disconnect(self) -> None:
+        if self._wg_busy:
+            return
+        self._set_wg_busy(True)
+        self._run_async(self.wg_conn.disconnect, self._on_wg_conn_done)
+
+    def _on_wg_conn_done(self, result=None, error: str | None = None) -> None:
+        self._set_wg_busy(False)
+        if error:
+            self.step_label.setText(error)
+            QMessageBox.warning(self, "WireGuard", error)
+        self._refresh_wg_status()
+
+    def _set_wg_busy(self, busy: bool) -> None:
+        self._wg_busy = busy
+        self._refresh_wg_button_state()
+
+    def _refresh_wg_button_state(self) -> None:
+        connected = self.wg_conn.is_connected()
+        profile = self._active_wg_profile()
+        full_tunnel = bool(profile) and wgconf.is_full_tunnel(profile)
+        proxy_up = self.conn.is_connected()
+        blocked = full_tunnel and proxy_up
+        self.btn_wg_connect.setEnabled(not connected and not self._wg_busy and not blocked)
+        self.btn_wg_disconnect.setEnabled(connected and not self._wg_busy)
+        if blocked:
+            self.btn_wg_connect.setToolTip(
+                "This profile has no split AllowedIPs (full tunnel), which would fight "
+                "the Proxy lane's default route. Disconnect the Proxy lane first."
+            )
+        else:
+            self.btn_wg_connect.setToolTip("")
 
     # Tools -----------------------------------------------------------------
     def _run_tool(self, fn) -> None:
@@ -445,6 +548,31 @@ class MainWindow(QMainWindow):
         self.btn_disconnect.setEnabled(connected and not self._busy)
         if connected and not self._sampling and st.tun_index is not None:
             self._sample_live(st.tun_index)
+
+    def _refresh_wg_status(self) -> None:
+        connected = self.wg_conn.is_connected()
+        self.wg_status_card.set_connected(connected)
+        state = self.wg_conn.state
+        profile = self.store.get(state.profile_uid) if state.profile_uid else self._active_wg_profile()
+        self.wg_status_card.set("profile", profile.name if profile else "—")
+        self.wg_status_card.set("status", "RUNNING" if self.wg_conn.wg.is_running() else "STOPPED")
+        self.wg_status_card.set("device", state.device or "—")
+        self.wg_status_card.set("subnets", ", ".join(state.routes()) or "—")
+        self._refresh_wg_button_state()
+        if connected and not self._wg_sampling and state.tun_index is not None:
+            self._sample_wg_live(state.tun_index)
+
+    def _sample_wg_live(self, tun: int) -> None:
+        self._wg_sampling = True
+
+        def done(result=None, error=None):
+            self._wg_sampling = False
+            if result:
+                self.wg_status_card.set(
+                    "throughput", f"↓ {result['rx_mbps']}  ↑ {result['tx_mbps']} Mbit/s"
+                )
+
+        self._run_async(lambda: metrics.throughput_sample(tun, 1), done)
 
     def _check_route_health(self) -> None:
         if self._repairing or not self.conn.is_connected():
