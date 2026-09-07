@@ -50,6 +50,15 @@ foreach ($s in $servers) { Write-Output $s }
 """
 
 
+_STRANDED_DNS_PS = """
+foreach ($e in Get-DnsClientServerAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue) {
+  if ($e.ServerAddresses.Count -eq 1 -and $e.ServerAddresses[0] -eq '127.0.0.1') {
+    Write-Output $e.InterfaceAlias
+  }
+}
+"""
+
+
 @dataclass
 class Interface:
     alias: str
@@ -132,6 +141,35 @@ def _restore_dns_once(alias: str, state: DnsState) -> bool:
         "netsh", "interface", "ipv4", "set", "dnsservers",
         f"name={alias}", "dhcp",
     ]).returncode == 0
+
+
+def stranded_loopback_adapters(exclude: str | None = None) -> list[str]:
+    """Adapters whose only IPv4 resolver is 127.0.0.1.
+
+    A session that never restored leaves its adapter pointing at a resolver
+    that dies with the xray process. State records one alias, so an adapter
+    stranded by an *older* session is never put back — switch to it and
+    Windows reports no internet.
+    """
+    return [a for a in proc.ps_lines(_STRANDED_DNS_PS) if a and a != exclude]
+
+
+def release_stranded_dns(exclude: str | None = None) -> list[str]:
+    """Reset stranded adapters to DHCP. Returns the aliases actually reset.
+
+    Only adapters whose sole resolver is 127.0.0.1 qualify, and only while
+    xray is not running to answer there. DHCP is the safe target: we hold no
+    backup for an adapter some earlier session hijacked.
+    """
+    reset: list[str] = []
+    for alias in stranded_loopback_adapters(exclude):
+        rc = proc.run(["netsh", "interface", "ipv4", "set", "dnsservers",
+                       f"name={alias}", "dhcp"]).returncode
+        if rc == 0:
+            reset.append(alias)
+    if reset:
+        _flush_dns()
+    return reset
 
 
 def _flush_dns() -> None:
@@ -219,6 +257,8 @@ if sys.platform != "win32":
     backup_dns = _posix.backup_dns
     set_dns_loopback = _posix.set_dns_loopback
     restore_dns = _posix.restore_dns
+    stranded_loopback_adapters = _posix.stranded_loopback_adapters
+    release_stranded_dns = _posix.release_stranded_dns
     configure_tun = _posix.configure_tun
     add_host_route = _posix.add_host_route
     add_default_routes = _posix.add_default_routes

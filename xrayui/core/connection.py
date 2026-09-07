@@ -96,8 +96,10 @@ class Connection:
 
     def _connect_generic(self, profile: Profile, iface, server_ip: str, dns) -> None:
         self._log("Building runtime config...")
-        rules = routing.build_rules(app_settings.load()["routing"])
-        cfg = render.build(profile, iface.alias, routing_rules=rules, stats=True)
+        cfgs = app_settings.load()
+        rules = routing.build_rules(cfgs["routing"])
+        cfg = render.build(profile, iface.alias, routing_rules=rules, stats=True,
+                           log_level=cfgs.get("log_level"))
 
         self._log("Starting Xray...")
         network.remove_routes(server_ip)
@@ -160,9 +162,10 @@ class Connection:
         # Xray has no native TUN inbound on macOS: run it with a SOCKS inbound
         # only, then bridge that to a real TUN device via tun2socks.
         self._log("Building runtime config (macOS: SOCKS + tun2socks bridge)...")
-        rules = routing.build_rules(app_settings.load()["routing"])
+        cfgs = app_settings.load()
+        rules = routing.build_rules(cfgs["routing"])
         cfg = render.build(profile, iface.alias, routing_rules=rules, stats=True,
-                            include_tun=False)
+                            include_tun=False, log_level=cfgs.get("log_level"))
 
         self._log("Starting Xray...")
         network.remove_routes(server_ip)
@@ -259,6 +262,11 @@ class Connection:
         network.remove_routes(server_ip)
         if alias:
             network.restore_dns(alias, dns, retries=dns_retries)
+        # State records one alias, so an adapter stranded on 127.0.0.1 by an
+        # earlier session would otherwise stay broken forever. xray is down by
+        # now, so nothing legitimately answers there.
+        for stranded in network.release_stranded_dns(exclude=alias):
+            self._log(f"Released stale DNS on {stranded}.")
         try:
             bootrestore.uninstall()
         except Exception:

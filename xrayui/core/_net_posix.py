@@ -8,8 +8,10 @@ connect path there instead bridges Xray's SOCKS inbound through tun2socks
 from __future__ import annotations
 
 import json
+import shutil
 import sys
 import time
+from pathlib import Path
 
 from . import proc
 from . import tun2socks as t2s
@@ -76,6 +78,9 @@ def backup_dns(alias: str) -> DnsState:
         current = proc.run(["networksetup", "-getdnsservers", service]).stdout.split()
         servers = [] if (not current or "aren't" in " ".join(current)) else current
         return DnsState(mode="MACOS", servers=[service, *servers])
+    if _resolved_active():
+        # resolvectl revert restores the link wholesale, so nothing to record.
+        return DnsState(mode="RESOLVED", servers=[])
     try:
         with open(_RESOLV, encoding="utf-8") as f:
             return DnsState(mode="FILE", servers=f.read().splitlines())
@@ -88,12 +93,32 @@ def _mac_flush_dns() -> None:
     proc.run(["killall", "-HUP", "mDNSResponder"])
 
 
+def _resolved_active() -> bool:
+    """Is systemd-resolved managing DNS?
+
+    On Ubuntu/Fedora/Arch /etc/resolv.conf is a symlink into /run that
+    resolved rewrites, so writing it directly either fails or is silently
+    reverted. resolvectl is the only durable way in.
+    """
+    if IS_MAC:
+        return False
+    return (Path("/run/systemd/resolve").exists()
+            and shutil.which("resolvectl") is not None)
+
+
 def set_dns_loopback(alias: str) -> None:
     if IS_MAC:
         service = mac_service_name(alias)
         if service:
             proc.run(["networksetup", "-setdnsservers", service, "127.0.0.1"])
         _mac_flush_dns()
+        return
+    if _resolved_active():
+        proc.run(["resolvectl", "dns", alias, "127.0.0.1"])
+        # "~." claims every domain for this link, else resolved keeps using
+        # the DHCP servers it still holds for other links.
+        proc.run(["resolvectl", "domain", alias, "~."])
+        proc.run(["resolvectl", "flush-caches"])
         return
     with open(_RESOLV, "w", encoding="utf-8") as f:
         f.write("nameserver 127.0.0.1\n")
@@ -107,12 +132,47 @@ def restore_dns(alias: str, state: DnsState, retries: int = 1) -> bool:
             proc.run(["networksetup", "-setdnsservers", service, *rest])
         _mac_flush_dns()
         return True
+    if state.mode == "RESOLVED" or _resolved_active():
+        ok = proc.run(["resolvectl", "revert", alias]).returncode == 0
+        proc.run(["resolvectl", "flush-caches"])
+        return ok
     try:
         with open(_RESOLV, "w", encoding="utf-8") as f:
             f.write("\n".join(state.servers) + "\n")
         return True
     except OSError:
         return False
+
+
+def stranded_loopback_adapters(exclude: str | None = None) -> list[str]:
+    """Links whose only resolver is 127.0.0.1, per `resolvectl dns`.
+
+    Only meaningful under systemd-resolved, which tracks DNS per link. With a
+    plain /etc/resolv.conf there is a single global file and restore_dns
+    already rewrites it, so there is nothing left to strand.
+    """
+    if not _resolved_active():
+        return []
+    found = []
+    for line in proc.run(["resolvectl", "dns"]).stdout.splitlines():
+        # "Link 2 (eth0): 127.0.0.1"
+        if not line.startswith("Link ") or "(" not in line or "):" not in line:
+            continue
+        alias = line.split("(", 1)[1].split(")", 1)[0].strip()
+        servers = line.split("):", 1)[1].split()
+        if servers == ["127.0.0.1"] and alias != exclude:
+            found.append(alias)
+    return found
+
+
+def release_stranded_dns(exclude: str | None = None) -> list[str]:
+    reset = []
+    for alias in stranded_loopback_adapters(exclude):
+        if proc.run(["resolvectl", "revert", alias]).returncode == 0:
+            reset.append(alias)
+    if reset:
+        proc.run(["resolvectl", "flush-caches"])
+    return reset
 
 
 # -- tun adapter -----------------------------------------------------------

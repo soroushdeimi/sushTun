@@ -6,9 +6,12 @@ import json
 
 from .. import paths
 
+LOG_LEVELS = ("debug", "info", "warning", "error", "none")
+
 DEFAULTS: dict = {
     "ping_target": "1.1.1.1",
     "sample_seconds": 5,
+    "log_level": "warning",
     "routing": {
         "low_usage": False,
         "block_ads": True,

@@ -42,6 +42,15 @@ def tun2socks_bin() -> Path:
 
 
 def config_template() -> Path:
+    """The Xray config template.
+
+    A copy placed next to the exe wins over the bundled one, so config can be
+    changed in the field without a rebuild-and-release cycle. In a source run
+    the two directories are the same and this is a no-op.
+    """
+    override = base_dir() / "config.template.json"
+    if override.exists():
+        return override
     return _first_existing("config.template.json")
 
 

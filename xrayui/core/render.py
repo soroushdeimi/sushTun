@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 
 from .. import paths
+from . import settings as app_settings
 from .metrics import STATS_API_PORT
 from .profiles import Profile
 
@@ -129,6 +130,12 @@ def _drop_tun_inbound(cfg: dict) -> None:
     cfg["inbounds"] = [i for i in cfg.get("inbounds", []) if i.get("tag") != "tun-in"]
 
 
+def _apply_log_level(cfg: dict, level: str) -> None:
+    if level not in app_settings.LOG_LEVELS:
+        return
+    cfg.setdefault("log", {})["loglevel"] = level
+
+
 def _apply_stats(cfg: dict) -> None:
     cfg["stats"] = {}
     cfg["api"] = {"tag": "api", "services": ["StatsService"]}
@@ -151,6 +158,7 @@ def build_text(
     routing_rules: list[dict] | None = None,
     stats: bool = False,
     include_tun: bool = True,
+    log_level: str | None = None,
 ) -> str:
     tmpl_path = template_path or paths.config_template()
     cfg = json.loads(tmpl_path.read_text(encoding="utf-8"))
@@ -161,6 +169,8 @@ def build_text(
         _apply_routing(cfg, routing_rules)
     if stats:
         _apply_stats(cfg)
+    if log_level:
+        _apply_log_level(cfg, log_level)
     text = json.dumps(cfg, indent=2, ensure_ascii=False)
     return text.replace("__INTERFACE__", iface_alias).replace("__IFACE__", iface_alias)
 
@@ -172,10 +182,12 @@ def build(
     routing_rules: list[dict] | None = None,
     stats: bool = False,
     include_tun: bool = True,
+    log_level: str | None = None,
 ) -> Path:
     out = paths.runtime_config()
     out.write_text(
-        build_text(profile, iface_alias, template_path, routing_rules, stats, include_tun),
+        build_text(profile, iface_alias, template_path, routing_rules, stats,
+                   include_tun, log_level),
         encoding="utf-8",
     )
     return out
