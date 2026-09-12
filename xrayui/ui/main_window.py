@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..core import alerts, metrics
+from ..core import alerts, hotspot, metrics
 from ..core import settings as app_settings
 from ..core import subscription as sub_mod
 from ..core.alerts import human_bytes
@@ -123,10 +123,16 @@ class MainWindow(QMainWindow):
         self.btn_settings.clicked.connect(self._open_settings)
         self.btn_gateway = QPushButton("Share via hotspot")
         self.btn_gateway.setCheckable(True)
-        self.btn_gateway.setToolTip(
-            "Route devices on this PC's Windows hotspot through the tunnel, "
-            "so phones need no setup of their own."
-        )
+        if not hotspot.supported():
+            tip = "Not available on this platform yet."
+        elif hotspot.IS_WIN:
+            tip = ("Route devices on this PC's Windows hotspot through the tunnel, "
+                   "so phones need no setup of their own.")
+        else:
+            tip = ("Start a Wi-Fi hotspot whose devices use the tunnel, so phones need "
+                   "no setup of their own. Its name and password appear in the log.")
+        self.btn_gateway.setToolTip(tip)
+        self.btn_gateway.setEnabled(hotspot.supported())
         self.btn_gateway.setChecked(self.settings["gateway"]["enabled"])
         self.btn_gateway.toggled.connect(self._toggle_gateway)
 

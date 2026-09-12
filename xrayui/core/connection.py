@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import atexit
+import secrets
 import socket
 import sys
 import time
@@ -46,6 +47,17 @@ def _wait_port(host: str, port: int, timeout: float = 15.0) -> bool:
         finally:
             s.close()
     return False
+
+
+def _hotspot_credentials() -> tuple[str, str]:
+    """The Linux hotspot's name and password; the password is made once and
+    kept, so phones that joined before rejoin without asking."""
+    settings = app_settings.load()
+    gw = settings["gateway"]
+    if len(gw.get("password") or "") < 8:  # WPA2 needs 8-63 characters
+        gw["password"] = secrets.token_urlsafe(9)  # 12 characters
+        app_settings.save(settings)
+    return gw.get("ssid") or "sushTun", gw["password"]
 
 
 def _last_log_line() -> str:
@@ -161,13 +173,19 @@ class Connection:
     def _setup_gateway(self) -> None:
         """Optionally share the tunnel with hotspot clients. Never fails the connect."""
         cfg = app_settings.load().get("gateway", {})
-        if not cfg.get("enabled") or not IS_WIN:
+        if not cfg.get("enabled") or not hotspot.supported():
             return
         try:
-            if cfg.get("start_hotspot", True) and hotspot.tethering_state() != "On":
-                self._log("Starting Windows hotspot...")
-                hotspot.start_tethering()
-            hotspot.enable(public_name=network.TUN_NAME)
+            if IS_WIN:
+                if cfg.get("start_hotspot", True) and hotspot.tethering_state() != "On":
+                    self._log("Starting Windows hotspot...")
+                    hotspot.start_tethering()
+                hotspot.enable(public_name=network.TUN_NAME)
+            else:
+                ssid, password = _hotspot_credentials()
+                self._log("Starting Wi-Fi hotspot...")
+                ap = hotspot.start_linux(ssid, password)
+                self._log(f'Hotspot "{ssid}" is on ({ap}); password: {password}')
             self._gateway_on = True
             self.state.set_gateway(True)
             self._log("Gateway mode on — hotspot clients now use the tunnel.")
@@ -221,8 +239,8 @@ class Connection:
 
     def cleanup(self) -> None:
         # Explicit "restore network": also clear sharing a previous crash left behind.
-        if IS_WIN and (app_settings.load().get("gateway", {}).get("enabled")
-                       or self.state.gateway_on()):
+        if hotspot.supported() and (app_settings.load().get("gateway", {}).get("enabled")
+                                    or self.state.gateway_on()):
             self._gateway_on = True
         self._restore()
 

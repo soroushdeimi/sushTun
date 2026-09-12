@@ -37,6 +37,10 @@ DEFAULTS: dict = {
     "gateway": {
         "enabled": False,
         "start_hotspot": True,
+        # Linux hotspot. The password is generated on first use and kept, so a
+        # phone that joined once rejoins on its own.
+        "ssid": "sushTun",
+        "password": "",
     },
     "alerts": {
         "data_percent": 10,

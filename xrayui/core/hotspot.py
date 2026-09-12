@@ -1,22 +1,32 @@
-"""Gateway mode: share the tunnel with devices on the Windows hotspot.
+"""Gateway mode: share the tunnel with devices on a Wi-Fi hotspot.
 
 Windows Internet Connection Sharing (ICS) NATs a "private" adapter behind a
 "public" one. Pointing the public side at the Xray TUN adapter makes every
 hotspot client reach the internet through the tunnel with no client-side setup.
-
 Driven through PowerShell rather than a COM binding so the app keeps its
 stdlib-only runtime footprint.
+
+On Linux, NetworkManager's "shared" mode does the same job (see the Linux
+section below).
 """
 from __future__ import annotations
 
 import json
+import re
 import sys
+import time
 from dataclasses import dataclass
+from pathlib import Path
 
 from . import proc
 from .network import TUN_NAME
 
 IS_WIN = sys.platform == "win32"
+IS_LINUX = sys.platform.startswith("linux")
+
+
+def supported() -> bool:
+    return IS_WIN or IS_LINUX
 
 # ICS sharing roles, per SHARINGCONNECTIONTYPE.
 PUBLIC = 0   # the connection to the internet (our tunnel)
@@ -118,6 +128,8 @@ def find_hotspot_adapter(connections: list[Connection] | None = None) -> str | N
 
 
 def is_sharing() -> bool:
+    if IS_LINUX:
+        return _linux_running()
     return any(c.shared for c in list_connections())
 
 
@@ -164,6 +176,8 @@ def enable(public_name: str = TUN_NAME, private_name: str | None = None) -> None
 def disable() -> None:
     if IS_WIN:
         proc.powershell(_CLEAR_PS, timeout=60)
+    elif IS_LINUX:
+        stop_linux()
 
 
 def tethering_state() -> str:
@@ -181,3 +195,144 @@ def start_tethering() -> bool:
 def stop_tethering() -> bool:
     r = proc.powershell(_TETHER_PS, env={"TETHER_ACTION": "stop"}, timeout=60)
     return r.returncode == 0
+
+
+# -- Linux -----------------------------------------------------------------
+# NetworkManager's "shared" IPv4 method is ICS: DHCP and DNS for clients
+# (dnsmasq, which asks the host resolver, so the tunnel's DNS), IP forwarding,
+# and NAT out of whatever the routing table picks, which while connected is
+# the tunnel's two /1 routes. So a shared hotspot is all gateway mode needs.
+
+AP_IFACE = "sushap0"
+AP_CON = "sushTun Hotspot"
+
+
+def _wifi_devices() -> list[tuple[str, str]]:
+    """(device, state) of each Wi-Fi adapter NetworkManager knows."""
+    out = proc.run(["nmcli", "-t", "-f", "DEVICE,TYPE,STATE", "device", "status"]).stdout
+    found = []
+    for line in out.splitlines():
+        dev, _, rest = line.partition(":")
+        kind, _, state = rest.partition(":")
+        if kind == "wifi" and dev != AP_IFACE:
+            found.append((dev, state))
+    return found
+
+
+def _iw_info(dev: str) -> tuple[int | None, int | None, int | None]:
+    """(wiphy, channel, MHz) of a Wi-Fi interface, from `iw dev <dev> info`."""
+    out = proc.run(["iw", "dev", dev, "info"]).stdout
+    phy = re.search(r"^\s*wiphy (\d+)", out, re.M)
+    chan = re.search(r"^\s*channel (\d+) \((\d+) MHz\)", out, re.M)
+    return (int(phy.group(1)) if phy else None,
+            int(chan.group(1)) if chan else None,
+            int(chan.group(2)) if chan else None)
+
+
+def _can_ap_while_connected(phy: int) -> bool:
+    """Does the radio allow an access point beside a client interface?
+
+    From `iw phy phyN info`, e.g. "#{ managed, P2P-client } <= 2, #{ AP } <= 1,
+    ... #channels <= 1": one combination must hold both a managed and an AP
+    interface. Entries start with "*" and may wrap onto indented lines.
+    """
+    lines = proc.run(["iw", "phy", f"phy{phy}", "info"]).stdout.splitlines()
+    start = next((i for i, ln in enumerate(lines) if "valid interface combinations" in ln), None)
+    if start is None:
+        return False
+    combos: list[str] = []
+    for ln in lines[start + 1:]:
+        if not ln.startswith("\t\t"):
+            break
+        if ln.strip().startswith("*"):
+            combos.append(ln.strip())
+        elif combos:
+            combos[-1] += " " + ln.strip()
+    return any("managed" in c and re.search(r"#\{[^}]*\bAP\b[^}]*\}", c) for c in combos)
+
+
+def _local_mac(dev: str) -> str | None:
+    """dev's MAC with the locally-administered bit set: most drivers refuse a
+    second interface on the radio with the same address as the first."""
+    try:
+        mac = Path(f"/sys/class/net/{dev}/address").read_text(encoding="utf-8").strip()
+        first, rest = mac.split(":", 1)
+    except (OSError, ValueError):
+        return None
+    return f"{int(first, 16) | 0x02:02x}:{rest}"
+
+
+def _wait_for_nm_device(dev: str, timeout: float = 5.0) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if any(d == dev for d, _ in _wifi_devices_all()):
+            return
+        time.sleep(0.5)
+
+
+def _wifi_devices_all() -> list[tuple[str, str]]:
+    out = proc.run(["nmcli", "-t", "-f", "DEVICE,STATE", "device", "status"]).stdout
+    return [tuple(line.split(":", 1)) for line in out.splitlines() if ":" in line]
+
+
+def _linux_running() -> bool:
+    out = proc.run(["nmcli", "-t", "-f", "NAME", "connection", "show", "--active"]).stdout
+    return AP_CON in out.splitlines()
+
+
+def start_linux(ssid: str, password: str) -> str:
+    """Bring up a NetworkManager hotspot. Returns the interface it runs on."""
+    devices = _wifi_devices()
+    if not devices:
+        raise RuntimeError("no Wi-Fi adapter found")
+    dev, state = devices[0]
+    ap, band, channel = dev, None, None
+    if state == "connected":
+        # Turning the adapter itself into an access point would drop the Wi-Fi
+        # it is connected to, very likely the internet the tunnel runs over.
+        # A second, virtual AP interface keeps both, if the radio allows it,
+        # and only on the channel the client side is already using.
+        phy, channel, mhz = _iw_info(dev)
+        if phy is None or channel is None or not _can_ap_while_connected(phy):
+            raise RuntimeError(
+                f"{dev} cannot run a hotspot while it is connected to Wi-Fi; "
+                "use Ethernet for internet, or disconnect Wi-Fi first")
+        band = "a" if mhz and mhz > 4000 else "bg"
+        if proc.run(["iw", "dev", AP_IFACE, "info"]).returncode != 0:
+            add = ["iw", "dev", dev, "interface", "add", AP_IFACE, "type", "__ap"]
+            mac = _local_mac(dev)
+            if mac:
+                add += ["addr", mac]
+            if proc.run(add).returncode != 0:
+                raise RuntimeError(f"could not add a virtual hotspot interface to {dev}")
+        ap = AP_IFACE
+        _wait_for_nm_device(AP_IFACE)
+        proc.run(["nmcli", "device", "set", AP_IFACE, "managed", "yes"])
+
+    proc.run(["nmcli", "connection", "delete", AP_CON])  # a leftover from a crash
+    add = ["nmcli", "connection", "add", "type", "wifi", "ifname", ap, "con-name", AP_CON,
+           "autoconnect", "no", "ssid", ssid, "802-11-wireless.mode", "ap",
+           # IPv6 off: the tunnel carries IPv4 only, so shared IPv6 would hand
+           # clients a path around it.
+           "ipv4.method", "shared", "ipv6.method", "disabled",
+           "wifi-sec.key-mgmt", "wpa-psk", "wifi-sec.psk", password]
+    if band:
+        add += ["802-11-wireless.band", band, "802-11-wireless.channel", str(channel)]
+    if proc.run(add).returncode != 0:
+        stop_linux()
+        raise RuntimeError("NetworkManager refused the hotspot profile")
+    up = proc.run(["nmcli", "connection", "up", AP_CON], timeout=45)
+    if up.returncode != 0:
+        stop_linux()
+        detail = ((up.stderr or "") + (up.stdout or "")).strip().splitlines()
+        raise RuntimeError("hotspot did not start" + (f": {detail[-1]}" if detail else ""))
+    return ap
+
+
+def stop_linux() -> None:
+    """Take the hotspot down. Must run before the tunnel goes: left up, its
+    clients would be NATed straight out of the physical link, unprotected."""
+    proc.run(["nmcli", "connection", "down", AP_CON])
+    proc.run(["nmcli", "connection", "delete", AP_CON])
+    if proc.run(["iw", "dev", AP_IFACE, "info"]).returncode == 0:
+        proc.run(["iw", "dev", AP_IFACE, "del"])

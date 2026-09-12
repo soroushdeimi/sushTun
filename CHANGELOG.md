@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+### New: share the tunnel over a Wi-Fi hotspot on Linux
+"Share via hotspot" was shown on Linux but did nothing: it said "applies on next
+connect", and then nothing happened. It is now implemented through NetworkManager.
+Checked against a real Intel Wi-Fi card's capabilities; a phone joining end to end
+has not been tested yet.
+
+- On connect, sushTun starts a hotspot named **sushTun**. The password is made once,
+  kept, and shown in the log, so a phone that joined once rejoins by itself.
+- If the Wi-Fi card is already connected as a client (your internet), the hotspot runs
+  on a second, virtual interface on the same channel, so the internet stays up. Cards
+  that cannot do both at once are refused with a clear message instead.
+- Hotspot clients get IPv4 only: the tunnel carries IPv4, and IPv6 would go around it.
+- Disconnecting takes the hotspot down before the tunnel, so clients never fall back to
+  the unprotected connection.
+- If you enable the `ufw` firewall, allow forwarding (`DEFAULT_FORWARD_POLICY="ACCEPT"`
+  in `/etc/default/ufw`) or hotspot clients will get no internet.
+- The button is disabled on macOS, where sharing is not available yet.
+
 ## v0.1.12
 
 ### Fixed (Linux: running alongside OpenVPN or other VPNs)

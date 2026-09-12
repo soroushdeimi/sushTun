@@ -37,9 +37,11 @@ dependencies.
   individual domains to fixed addresses.
 - **Low-usage mode** — a single toggle sends OS telemetry and update traffic
   direct so it never eats your quota, while everything else stays tunneled.
-- **Share via hotspot** *(Windows)* — put the tunnel behind the Windows mobile
-  hotspot so phones and other devices are covered the moment they connect, with
-  nothing to configure on the device itself.
+- **Share via hotspot** *(Windows, Linux)* — put the tunnel behind a Wi-Fi hotspot
+  so phones and other devices are covered the moment they connect, with nothing to
+  configure on the device itself. On Linux sushTun starts the hotspot through
+  NetworkManager (named "sushTun"; the password is shown in the log), alongside the
+  Wi-Fi you are connected to when the card supports it.
 - **Live metrics** — real-time throughput and total data used this session,
   plus ping, TCP-delay, and diagnostics tools alongside a colorized live log.
 
