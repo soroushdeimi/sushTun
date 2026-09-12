@@ -1,7 +1,6 @@
 """Manage the xray process and its log file."""
 from __future__ import annotations
 
-import os
 import re
 import subprocess
 import sys
@@ -49,7 +48,7 @@ class XrayProcess:
         self._log = open(log_path, "w", encoding="utf-8", errors="replace")
         # Point Xray at the bundled geo data explicitly: without it a frozen
         # build can fail to resolve geoip:/geosite: rules and refuse to start.
-        env = {**os.environ, "XRAY_LOCATION_ASSET": str(paths.asset_dir())}
+        env = proc.child_env({"XRAY_LOCATION_ASSET": str(paths.asset_dir())})
         self._proc = subprocess.Popen(
             [str(paths.xray_exe()), "run", "-c", str(config_path)],
             stdout=self._log,

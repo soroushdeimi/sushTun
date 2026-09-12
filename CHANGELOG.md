@@ -39,10 +39,11 @@ sudo cp -r /path/to/portable/profiles /path/to/portable/settings.json /var/lib/s
 ```
 
 ### Fixed
-- **Linux: DNS leaked outside the tunnel.** NetworkManager takes over the new `xray0`
-  device about a second after it appears and wipes its DNS setting, so lookups went to
-  the ISP unencrypted (and could be filtered). sushTun now tells NetworkManager to leave
-  `xray0` alone, sets DNS on it, and checks it stuck; if it cannot, the log says so.
+- **Linux: DNS leaked outside the tunnel.** The packaged app started system tools with
+  its own bundled libraries on the library path; `resolvectl` loaded the bundled
+  `libcrypto`, crashed, and DNS was never moved into the tunnel, so lookups went to the
+  ISP unencrypted (and could be filtered). System tools now run with the system's own
+  libraries. sushTun also reads the DNS setting back and warns if it did not take.
   Check with `resolvectl status xray0`: it should list DNS server `172.19.0.1`.
 
 ## v0.1.10

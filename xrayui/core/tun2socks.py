@@ -41,6 +41,7 @@ class Tun2socks:
             stdout=self._log,
             stderr=subprocess.STDOUT,
             cwd=str(paths.base_dir()),
+            env=proc.child_env(),
         )
 
     def is_running(self) -> bool:

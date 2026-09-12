@@ -84,6 +84,31 @@ def test_session_env_is_applied_and_stripped_but_only_for_known_keys(monkeypatch
     assert "LD_PRELOAD" not in os.environ  # runs as root: never honoured
 
 
+# -- child processes of the frozen app -------------------------------------
+def test_system_tools_do_not_inherit_the_bundles_libraries(monkeypatch):
+    from xrayui.core import proc
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(proc, "IS_WIN", False)
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/opt/sushtun/_internal")
+    monkeypatch.delenv("LD_LIBRARY_PATH_ORIG", raising=False)
+    # Seen live: resolvectl loaded the bundle's libcrypto, died, and DNS was
+    # never moved into the tunnel.
+    assert "LD_LIBRARY_PATH" not in proc.child_env()
+
+    monkeypatch.setenv("LD_LIBRARY_PATH_ORIG", "/usr/local/lib")
+    env = proc.child_env({"ALIAS": "eth0"})
+    assert env["LD_LIBRARY_PATH"] == "/usr/local/lib"
+    assert "LD_LIBRARY_PATH_ORIG" not in env
+    assert env["ALIAS"] == "eth0"
+
+
+def test_source_runs_pass_the_library_path_through(monkeypatch):
+    from xrayui.core import proc
+    monkeypatch.delattr(sys, "frozen", raising=False)
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/home/u/lib")
+    assert proc.child_env()["LD_LIBRARY_PATH"] == "/home/u/lib"
+
+
 # -- installed (.deb) data location ----------------------------------------
 def _frozen_at(monkeypatch, exe: Path):
     exe.parent.mkdir(parents=True, exist_ok=True)
@@ -114,13 +139,11 @@ def test_portable_build_still_writes_next_to_itself(monkeypatch, tmp_path):
 
 
 # -- DNS under systemd-resolved -------------------------------------------
-def _resolved(monkeypatch, *, sticks_after: int = 1, nmcli: bool = True):
+def _resolved(monkeypatch, *, sticks_after: int = 1):
     """resolved is active; `resolvectl dns xray0` reports our server only once
-    it has been set `sticks_after` times (NetworkManager wiping the earlier ones)."""
+    it has been set `sticks_after` times (the earlier attempts did not take)."""
     monkeypatch.setattr(posix, "_resolved_active", lambda: True)
     monkeypatch.setattr(posix.time, "sleep", lambda _s: None)
-    monkeypatch.setattr(posix.shutil, "which",
-                        lambda name: f"/usr/bin/{name}" if nmcli else None)
     sets = []
 
     def stdout(args):
@@ -148,17 +171,7 @@ def test_resolved_dns_is_claimed_on_the_tunnel_not_the_physical_link(monkeypatch
 
 
 @LINUX_ONLY
-def test_networkmanager_is_told_to_leave_the_tun_alone_before_dns_is_set(monkeypatch):
-    ran = _resolved(monkeypatch)
-    posix.set_dns_loopback("enx0")
-
-    unmanage = ran.index(["nmcli", "device", "set", posix.TUN_NAME, "managed", "no"])
-    first_dns = ran.index(["resolvectl", "dns", posix.TUN_NAME, posix.TUN_DNS])
-    assert unmanage < first_dns
-
-
-@LINUX_ONLY
-def test_dns_wiped_by_networkmanager_is_put_back(monkeypatch):
+def test_dns_that_did_not_take_is_retried(monkeypatch):
     ran = _resolved(monkeypatch, sticks_after=3)
 
     assert posix.set_dns_loopback("enx0") is True
@@ -167,7 +180,7 @@ def test_dns_wiped_by_networkmanager_is_put_back(monkeypatch):
 
 @LINUX_ONLY
 def test_dns_that_never_sticks_is_reported_not_hidden(monkeypatch):
-    _resolved(monkeypatch, sticks_after=99, nmcli=False)
+    _resolved(monkeypatch, sticks_after=99)
     assert posix.set_dns_loopback("enx0") is False
 
 

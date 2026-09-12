@@ -139,17 +139,12 @@ def _tun_dns_applied() -> bool:
 
 
 def _claim_tun_dns(attempts: int = 5) -> bool:
-    """Point resolved at the tunnel, and make sure it stays that way.
+    """Point resolved at the tunnel, and check that it took.
 
-    NetworkManager "assumes" a new tun device about a second after it appears
-    and pushes its own, empty, DNS for it to resolved -- silently wiping ours,
-    so lookups leak out the physical link in the clear. Seen live: NM
-    activated an external 'xray0' connection 0.7s after xray started, after
-    this had already run. So tell NM to leave xray0 alone first (runtime only;
-    it lapses when xray0 disappears), then check the setting survived.
+    A failed resolvectl used to go unnoticed, and lookups then quietly left
+    the physical link in the clear (seen live: resolvectl crashed on a bundled
+    library, see proc.child_env). Read the setting back, retry, and report.
     """
-    if shutil.which("nmcli"):
-        proc.run(["nmcli", "device", "set", TUN_NAME, "managed", "no"])
     applied = False
     for _ in range(attempts):
         proc.run(["resolvectl", "dns", TUN_NAME, TUN_DNS])
@@ -157,7 +152,7 @@ def _claim_tun_dns(attempts: int = 5) -> bool:
         # the DHCP servers it still holds for other links.
         proc.run(["resolvectl", "domain", TUN_NAME, "~."])
         proc.run(["resolvectl", "default-route", TUN_NAME, "yes"])
-        time.sleep(1.0)  # let a late NetworkManager push land before checking
+        time.sleep(1.0)  # resolved may not have picked up a brand-new link yet
         if _tun_dns_applied():
             applied = True
             break
