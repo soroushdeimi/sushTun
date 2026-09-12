@@ -22,16 +22,19 @@ class Tun2socks:
         self._proc: subprocess.Popen | None = None
         self._log = None
 
-    def start(self, socks_host: str, socks_port: int, interface: str) -> None:
+    def start(self, socks_host: str, socks_port: int) -> None:
         self.stop()
         log_path = paths.base_dir() / "tun2socks.log"
         self._log = open(log_path, "w", encoding="utf-8", errors="replace")
+        # No -interface: it pins tun2socks' sockets to the NIC (IP_BOUND_IF),
+        # yet its only peer is Xray's SOCKS inbound on loopback, which a
+        # NIC-pinned socket cannot reach. Loopback never routes into the utun,
+        # so there is no loop for the flag to prevent.
         self._proc = subprocess.Popen(
             [
                 str(paths.tun2socks_bin()),
                 "-device", DEVICE,
                 "-proxy", f"socks5://{socks_host}:{socks_port}",
-                "-interface", interface,
                 "-mtu", str(MTU),
                 "-loglevel", "info",
             ],

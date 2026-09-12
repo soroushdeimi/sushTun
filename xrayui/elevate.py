@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -28,12 +29,6 @@ def relaunch_as_admin() -> bool:
     if IS_MAC:
         return _relaunch_macos()
     return _relaunch_linux()
-
-
-def _cmd() -> list[str]:
-    if getattr(sys, "frozen", False):
-        return [sys.executable, *sys.argv[1:]]
-    return [sys.executable, "-m", "xrayui", *sys.argv[1:]]
 
 
 def _relaunch_windows() -> bool:
@@ -92,13 +87,14 @@ def apply_session_env(argv: list[str]) -> list[str]:
     return rest
 
 
-def _linux_cmd() -> list[str]:
+def _elevated_cmd() -> list[str]:
     if getattr(sys, "frozen", False):
         # Resolved, so a polkit policy keyed on the installed path matches
         # even when launched through the /usr/bin symlink.
         return [str(Path(sys.executable).resolve()), *sys.argv[1:]]
-    # pkexec starts in root's home, where `-m xrayui` cannot find the package;
-    # the script's absolute path puts the project on sys.path wherever it runs.
+    # pkexec starts in root's home and osascript's `do shell script` in /,
+    # where `-m xrayui` cannot find the package; the script's absolute path
+    # puts the project on sys.path wherever it runs.
     main = Path(__file__).resolve().parent.parent / "app_main.py"
     return [sys.executable, str(main), *sys.argv[1:]]
 
@@ -107,7 +103,7 @@ def _relaunch_linux() -> bool:
     # The session rides as arguments rather than through `env VAR=...`, so
     # pkexec runs this program itself: the .deb's polkit policy then matches
     # and the prompt names sushTun instead of "/usr/bin/env".
-    cmd = [*_linux_cmd(), *_session_args()]
+    cmd = [*_elevated_cmd(), *_session_args()]
     pkexec = shutil.which("pkexec")
     if pkexec:
         # Wait, so a refused prompt falls back to an unelevated window that
@@ -121,10 +117,17 @@ def _relaunch_linux() -> bool:
 
 
 def _relaunch_macos() -> bool:
-    inner = " ".join(_cmd())
-    script = f'do shell script "{inner}" with administrator privileges'
-    subprocess.Popen(["osascript", "-e", script])
-    return True
+    # Quoted for the shell `do shell script` runs, then escaped for the
+    # AppleScript string literal around it: unquoted, a space anywhere in the
+    # path split the command and the elevated app never started.
+    inner = " ".join(shlex.quote(a) for a in _elevated_cmd())
+    literal = inner.replace("\\", "\\\\").replace('"', '\\"')
+    script = f'do shell script "{literal}" with administrator privileges'
+    # Wait, so a cancelled prompt (AppleScript error -128) falls back to an
+    # unelevated window that says why connecting will fail, as on Linux. Any
+    # other failure is the elevated app's own exit, not a reason to reopen.
+    result = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+    return "-128" not in result.stderr
 
 
 def _join(args: list[str]) -> str:

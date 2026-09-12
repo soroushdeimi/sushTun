@@ -2,6 +2,22 @@
 
 ## v0.1.11
 
+### Fixed (macOS — found by code review; still needs testing on a real Mac)
+- **The tunnel bridge was likely cut off from Xray.** `tun2socks` was pinned to the
+  Wi-Fi/Ethernet card (`-interface en0`), but its only peer is Xray on `127.0.0.1`,
+  which a card-pinned connection cannot reach (the same trap proven on Linux).
+- **The password step broke on a space in the app's path**, and cancelling the
+  prompt left nothing on screen. It now falls back to a limited window, as on Linux.
+- (Already fixed in v0.1.10, now covered by a test) network services with spaces in
+  their name, like "USB 10/100/1000 LAN", lost their DNS on disconnect.
+
+### Known macOS gaps (not fixed yet)
+- No restore after a crash or power-off: the 127.0.0.1 DNS setting survives reboot,
+  so there is no internet until sushTun is opened again. Windows has a boot task for this.
+- The download is an unsigned, bare binary: Gatekeeper blocks it (right-click → Open,
+  or `xattr -d com.apple.quarantine XrayPortable-macos`), and it only runs on Apple
+  Silicon (built on `macos-latest`), not Intel Macs.
+
 ### New: install on Debian/Ubuntu (`.deb`)
 A separate download from the portable binary: `sushtun_0.1.11_amd64.deb`.
 

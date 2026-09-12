@@ -198,7 +198,7 @@ class Connection:
             self._fail_connect(server_ip, "Xray SOCKS inbound did not come up")
 
         self._log("Starting tun2socks bridge...")
-        self.tun2socks.start(SOCKS_HOST, SOCKS_PORT, iface.alias)
+        self.tun2socks.start(SOCKS_HOST, SOCKS_PORT)
         if not t2s.bring_up_device():
             self._fail_connect(server_ip, "tun2socks TUN device did not appear")
 
