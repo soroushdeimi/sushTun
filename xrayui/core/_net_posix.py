@@ -16,7 +16,7 @@ from pathlib import Path
 
 from . import proc
 from . import tun2socks as t2s
-from .network import TUN_ADDRESS, TUN_NAME, TUN_NETMASK, DnsState, Interface
+from ._net_common import TUN_ADDRESS, TUN_NAME, TUN_NETMASK, DnsState, Interface
 
 IS_MAC = sys.platform == "darwin"
 TUN_PREFIX_LEN = 30

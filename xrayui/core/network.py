@@ -4,18 +4,10 @@ from __future__ import annotations
 import sys
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
 
 from . import proc
+from ._net_common import TUN_ADDRESS, TUN_NAME, TUN_NETMASK, DnsState, Interface
 
-TUN_NAME = "xray0"
-
-# The TUN adapter must own a global-scope address. Left on DHCP it falls back
-# to APIPA (169.254.x.x), and Windows source-address selection then prefers the
-# physical adapter's global address for global destinations — so the tunnel's
-# default route is never chosen and traffic leaves in the clear.
-TUN_ADDRESS = "172.19.0.2"
-TUN_NETMASK = "255.255.255.252"
 TUN_METRIC = 1
 
 # Two /1 routes beat the physical /0 by longest-prefix match, so the tunnel
@@ -58,20 +50,6 @@ foreach ($e in Get-DnsClientServerAddress -AddressFamily IPv4 -ErrorAction Silen
   }
 }
 """
-
-
-@dataclass
-class Interface:
-    alias: str
-    ipv4: str
-    gateway: str
-    index: int | None = None
-
-
-@dataclass
-class DnsState:
-    mode: str = "DHCP"  # DHCP | STATIC
-    servers: list[str] = field(default_factory=list)
 
 
 def detect_interface() -> Interface | None:
