@@ -46,12 +46,48 @@ def _relaunch_windows() -> bool:
     return int(rc) > 32
 
 
+# What a GUI needs to reach the user's display and session bus. pkexec scrubs
+# the environment (DISPLAY and XAUTHORITY included), so without these the
+# elevated window can never open and the relaunch dies with nothing on screen.
+_GUI_ENV = (
+    "DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY", "XDG_RUNTIME_DIR",
+    "XDG_SESSION_TYPE", "XDG_CURRENT_DESKTOP", "DBUS_SESSION_BUS_ADDRESS",
+    "QT_QPA_PLATFORM", "QT_SCALE_FACTOR", "LANG",
+)
+
+# pkexec exit codes: 126 = the auth dialog was dismissed, 127 = not authorized
+# (or no polkit agent is running).
+_PKEXEC_REFUSED = (126, 127)
+
+
+def _linux_env() -> list[str]:
+    env = {k: os.environ[k] for k in _GUI_ENV if os.environ.get(k)}
+    if "DISPLAY" in env and "XAUTHORITY" not in env:
+        # X11 falls back to ~/.Xauthority, which as root would mean /root's.
+        cookie = os.path.expanduser("~/.Xauthority")
+        if os.path.exists(cookie):
+            env["XAUTHORITY"] = cookie
+    if not getattr(sys, "frozen", False):
+        # pkexec starts in root's home, so `-m xrayui` (and any --user
+        # site-packages holding PySide6) would not be importable. Hand the
+        # elevated interpreter this one's import path.
+        env["PYTHONPATH"] = os.pathsep.join(p for p in sys.path if p and os.path.isdir(p))
+    return [f"{k}={v}" for k, v in env.items()]
+
+
 def _relaunch_linux() -> bool:
-    runner = shutil.which("pkexec") or shutil.which("sudo")
-    if not runner:
-        return False
-    subprocess.Popen([runner, *_cmd()])
-    return True
+    env_bin = shutil.which("env") or "/usr/bin/env"
+    cmd = [env_bin, *_linux_env(), *_cmd()]
+    pkexec = shutil.which("pkexec")
+    if pkexec:
+        # Wait, so a refused prompt falls back to an unelevated window that
+        # says why connecting will fail, instead of silently exiting.
+        return subprocess.call([pkexec, *cmd]) not in _PKEXEC_REFUSED
+    sudo = shutil.which("sudo")
+    if sudo and sys.stdin is not None and sys.stdin.isatty():
+        # sudo needs a terminal to ask for the password.
+        return subprocess.call([sudo, *cmd]) == 0
+    return False
 
 
 def _relaunch_macos() -> bool:

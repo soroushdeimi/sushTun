@@ -11,6 +11,7 @@ import json
 import shutil
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 from . import proc
@@ -20,6 +21,11 @@ from .network import TUN_ADDRESS, TUN_NAME, TUN_NETMASK, DnsState, Interface
 IS_MAC = sys.platform == "darwin"
 TUN_PREFIX_LEN = 30
 _RESOLV = "/etc/resolv.conf"
+
+# The resolver systemd-resolved is pointed at on the tunnel link: the peer of
+# TUN_ADDRESS inside the /30, so queries to it are routed into xray0, where the
+# template sends anything on port 53 arriving over tun-in to dns-out.
+TUN_DNS = "172.19.0.1"
 
 
 # -- interface detection ---------------------------------------------------
@@ -114,10 +120,17 @@ def set_dns_loopback(alias: str) -> None:
         _mac_flush_dns()
         return
     if _resolved_active():
-        proc.run(["resolvectl", "dns", alias, "127.0.0.1"])
+        # Never 127.0.0.1 on the physical link: resolved pins a link's queries
+        # to that link (IP_UNICAST_IF), and loopback is unreachable through a
+        # NIC, so every lookup would time out. Claim DNS on the tunnel link
+        # instead, as wg-quick and Tailscale do. The physical link keeps what
+        # NetworkManager gave it, and the setting dies with xray0, so a crash
+        # strands nothing.
+        proc.run(["resolvectl", "dns", TUN_NAME, TUN_DNS])
         # "~." claims every domain for this link, else resolved keeps using
         # the DHCP servers it still holds for other links.
-        proc.run(["resolvectl", "domain", alias, "~."])
+        proc.run(["resolvectl", "domain", TUN_NAME, "~."])
+        proc.run(["resolvectl", "default-route", TUN_NAME, "yes"])
         proc.run(["resolvectl", "flush-caches"])
         return
     with open(_RESOLV, "w", encoding="utf-8") as f:
@@ -133,9 +146,16 @@ def restore_dns(alias: str, state: DnsState, retries: int = 1) -> bool:
         _mac_flush_dns()
         return True
     if state.mode == "RESOLVED" or _resolved_active():
-        ok = proc.run(["resolvectl", "revert", alias]).returncode == 0
+        # Only the tunnel link was touched, and it is usually gone with xray
+        # already, so a failure here is expected. Never revert the physical
+        # link outright: that also wipes the servers NetworkManager pushed,
+        # leaving no DNS at all until the next reconnect.
+        proc.run(["resolvectl", "revert", TUN_NAME])
+        # Older builds pinned the physical link itself to 127.0.0.1; undo that.
+        if alias in stranded_loopback_adapters():
+            proc.run(["resolvectl", "revert", alias])
         proc.run(["resolvectl", "flush-caches"])
-        return ok
+        return True
     try:
         with open(_RESOLV, "w", encoding="utf-8") as f:
             f.write("\n".join(state.servers) + "\n")
@@ -219,7 +239,8 @@ def remove_routes(server_ip: str | None = None) -> None:
             proc.run(["ip", "route", "del", server_ip])
 
 
-def wait_for_tun(name: str = TUN_NAME, timeout: float = 30.0) -> int | None:
+def wait_for_tun(name: str = TUN_NAME, timeout: float = 30.0,
+                 alive: Callable[[], bool] | None = None) -> int | None:
     # Linux only: Xray creates TUN_NAME itself. macOS has no equivalent path —
     # its connect flow drives tun2socks.bring_up_device() directly instead.
     if IS_MAC:
@@ -229,5 +250,23 @@ def wait_for_tun(name: str = TUN_NAME, timeout: float = 30.0) -> int | None:
         links = json.loads(proc.run(["ip", "-j", "link", "show", name]).stdout or "[]")
         if links:
             return links[0].get("ifindex", 0)
+        if alive is not None and not alive():
+            return None
         time.sleep(1.0)
     return None
+
+
+def foreign_tunnel(iface: str) -> str | None:
+    """The device another VPN is steering traffic through, if any.
+
+    Clients like v2rayN/sing-box install policy-routing rules that sit ahead of
+    the main table, so our routes there would be silently outvoted and DNS
+    split between two tunnels.
+    """
+    if IS_MAC:
+        return None
+    try:
+        dev = json.loads(proc.run(["ip", "-j", "route", "get", "1.1.1.1"]).stdout or "[]")[0]["dev"]
+    except (ValueError, IndexError, KeyError, TypeError):
+        return None  # offline: nothing to conflict with
+    return dev if dev not in (iface, TUN_NAME) else None

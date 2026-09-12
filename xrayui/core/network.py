@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import sys
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from . import proc
@@ -237,14 +238,24 @@ def remove_routes(server_ip: str | None = None) -> None:
         proc.run(["route", "delete", server_ip, "mask", "255.255.255.255"])
 
 
-def wait_for_tun(name: str = TUN_NAME, timeout: float = 30.0) -> int | None:
+def wait_for_tun(name: str = TUN_NAME, timeout: float = 30.0,
+                 alive: Callable[[], bool] | None = None) -> int | None:
+    """The TUN adapter's index, or None. Gives up early once `alive` says
+    xray has exited, rather than waiting out the timeout for nothing."""
     script = f"(Get-NetAdapter -Name '{name}' -ErrorAction SilentlyContinue).ifIndex"
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         for ln in proc.ps_lines(script):
             if ln.isdigit():
                 return int(ln)
+        if alive is not None and not alive():
+            return None
         time.sleep(1.0)
+    return None
+
+
+def foreign_tunnel(iface: str) -> str | None:
+    """Another VPN's device carrying the default traffic. Linux-only check."""
     return None
 
 
@@ -264,3 +275,4 @@ if sys.platform != "win32":
     add_default_routes = _posix.add_default_routes
     remove_routes = _posix.remove_routes
     wait_for_tun = _posix.wait_for_tun
+    foreign_tunnel = _posix.foreign_tunnel

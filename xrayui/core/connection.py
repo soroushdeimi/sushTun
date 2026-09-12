@@ -48,6 +48,15 @@ def _wait_port(host: str, port: int, timeout: float = 15.0) -> bool:
     return False
 
 
+def _last_log_line() -> str:
+    try:
+        lines = paths.log_file().read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return "no log output"
+    lines = [ln for ln in lines if ln.strip()]
+    return lines[-1].strip() if lines else "no log output"
+
+
 class Connection:
     def __init__(self, on_step: Callable[[str], None] | None = None) -> None:
         self._log = on_step or (lambda _m: None)
@@ -76,6 +85,12 @@ class Connection:
         if iface is None:
             raise ConnectError("no active internet interface found")
         self._log(f"Interface {iface.alias} ({iface.ipv4}) via {iface.gateway}")
+        other = network.foreign_tunnel(iface.alias)
+        if other:
+            raise ConnectError(
+                f"another VPN is already routing traffic through {other} — "
+                "disconnect it first; two full tunnels cannot share the default route"
+            )
 
         server_ip = _resolve(profile.address)
         self._log("Backing up DNS...")
@@ -110,8 +125,12 @@ class Connection:
         self.xray.start(cfg)
 
         self._log("Waiting for TUN adapter...")
-        tun = network.wait_for_tun()
+        tun = network.wait_for_tun(alive=self.xray.is_running)
         if tun is None:
+            if not self.xray.is_running():
+                # Say why instead of "did not appear": a bad config, port 53
+                # already taken, a missing binary... it is all in the log.
+                self._fail_connect(server_ip, f"Xray exited during startup: {_last_log_line()}")
             self._fail_connect(server_ip, "TUN interface xray0 did not appear")
 
         self._log("Configuring tunnel adapter...")

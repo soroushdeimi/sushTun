@@ -155,6 +155,7 @@ def _stub_connect(monkeypatch, tmp_path, *, tun=42, tun_addressed=True):
     conn = connection.Connection()
     conn.xray.start = lambda cfg: calls.append("xray_start")
     conn.xray.stop = lambda: calls.append("xray_stop")
+    conn.xray.is_running = lambda: True  # the stubbed start "succeeded"
     monkeypatch.setattr(conn, "_setup_gateway", lambda: None)
     return conn, calls
 
@@ -197,6 +198,20 @@ def test_connect_fails_and_cleans_up_when_the_tun_never_appears(monkeypatch, tmp
 
     assert "configure_tun" not in calls
     assert calls.count("remove_routes") == 2
+
+
+def test_xray_dying_at_startup_reports_its_own_error(monkeypatch, tmp_path):
+    conn, calls = _stub_connect(monkeypatch, tmp_path, tun=None)
+    conn.xray.is_running = lambda: False
+    log = tmp_path / "xray.log"
+    log.write_text("Xray 26.3.27\nFailed to start: listen udp 127.0.0.1:53: "
+                   "bind: address already in use\n\n", encoding="utf-8")
+    monkeypatch.setattr(paths, "log_file", lambda: log)
+
+    with pytest.raises(connection.ConnectError, match="address already in use"):
+        conn._connect_generic(types.SimpleNamespace(), _iface(), "185.229.204.23",
+                              DnsState(mode="DHCP", servers=[]))
+    assert "xray_stop" in calls
 
 
 # -- template --------------------------------------------------------------

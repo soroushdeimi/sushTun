@@ -66,8 +66,13 @@ class State:
     def dns_state(self) -> DnsState:
         mode = self._read("dns-mode.txt") or "DHCP"
         sp = self._p("dns-servers.txt")
-        servers = sp.read_text(encoding="utf-8").split() if sp.exists() else []
-        return DnsState(mode=mode, servers=servers)
+        lines = sp.read_text(encoding="utf-8").splitlines() if sp.exists() else []
+        if mode != "FILE":
+            lines = [ln.strip() for ln in lines if ln.strip()]
+        # FILE holds /etc/resolv.conf verbatim, one line per entry. Splitting
+        # it on whitespace restored "nameserver\n1.1.1.1", a resolv.conf glibc
+        # cannot parse: no DNS at all after disconnect.
+        return DnsState(mode=mode, servers=lines)
 
     def update_gateway(self, gateway: str) -> None:
         self._write("gateway.txt", gateway)

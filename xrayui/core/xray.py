@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -12,18 +13,29 @@ from . import proc
 IS_WIN = sys.platform == "win32"
 
 
+def _own_pattern() -> str:
+    """pgrep/pkill -f pattern for the xray this app launched, and no other.
+
+    Matching the bare name `xray` hits other clients too (v2rayN, Nekoray and
+    friends all ship one): connecting killed their core, and their xray made a
+    crashed session look alive. Ours is the one reading our runtime config.
+    """
+    cfg = re.sub(r"([.^$*+?()\[\]{}|\\])", r"\\\1", str(paths.runtime_config()))
+    return f"run -c {cfg}$"
+
+
 def is_xray_running() -> bool:
     if IS_WIN:
         out = proc.run(["tasklist", "/fi", "imagename eq xray.exe"]).stdout.lower()
         return "xray.exe" in out
-    return proc.run(["pgrep", "-x", "xray"]).returncode == 0
+    return proc.run(["pgrep", "-f", _own_pattern()]).returncode == 0
 
 
 def _kill_all() -> None:
     if IS_WIN:
         proc.run(["taskkill", "/f", "/im", "xray.exe", "/t"])
     else:
-        proc.run(["pkill", "-x", "xray"])
+        proc.run(["pkill", "-f", _own_pattern()])
 
 
 class XrayProcess:
