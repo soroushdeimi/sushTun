@@ -152,10 +152,15 @@ def main() -> int:
         print(f"{onedir / PKG} not found; first run:\n"
               "  SUSHTUN_ONEDIR=1 pyinstaller tools/build.spec", file=sys.stderr)
         return 1
+    # --version labels a test build, e.g. 0.1.13~test1: "~" sorts before the
+    # release, so the real 0.1.13 later upgrades over it with plain apt.
+    version = __version__
+    if "--version" in sys.argv[1:-1]:
+        version = sys.argv[sys.argv.index("--version") + 1]
     arch = subprocess.run(["dpkg", "--print-architecture"], capture_output=True,
                           text=True, check=True).stdout.strip()
-    root = stage(onedir, ROOT / "build" / "deb", __version__, arch)
-    out = ROOT / "dist" / f"{PKG}_{__version__}_{arch}.deb"
+    root = stage(onedir, ROOT / "build" / "deb", version, arch)
+    out = ROOT / "dist" / f"{PKG}_{version}_{arch}.deb"
     subprocess.run(["dpkg-deb", "--root-owner-group", "--build", str(root), str(out)],
                    check=True)
     print(out)
