@@ -1,16 +1,34 @@
 """Portable path resolution for both frozen (PyInstaller) and source runs."""
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
+
+# The .deb drops this marker next to the installed executable. /opt is not a
+# place to write settings, so installed builds keep their data in a system
+# directory instead (the app runs as root; profiles hold credentials).
+INSTALLED_MARKER = ".installed"
+INSTALLED_DATA_DIR = Path("/var/lib/sushtun")
 
 
 def _frozen() -> bool:
     return bool(getattr(sys, "frozen", False))
 
 
+def installed() -> bool:
+    return _frozen() and (Path(sys.executable).resolve().parent / INSTALLED_MARKER).exists()
+
+
 def base_dir() -> Path:
     # Writable, persistent location: next to the exe, or the project root in dev.
+    if installed():
+        if os.geteuid() == 0:
+            return INSTALLED_DATA_DIR
+        # A refused password prompt still opens an unelevated window; give it
+        # somewhere it may write instead of crashing on /var/lib.
+        xdg = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
+        return Path(xdg) / "sushtun"
     if _frozen():
         return Path(sys.executable).resolve().parent
     return Path(__file__).resolve().parent.parent

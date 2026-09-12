@@ -44,10 +44,34 @@ jobs:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact }}
 
-  # Publishing runs once, after every build: three jobs racing to create the
-  # same release drops assets from whichever loses.
+  # The installable package, separate from the portable one-file build.
+  deb:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip -r requirements-dev.txt
+      - name: Fetch redistributables
+        run: python scripts/fetch_deps.py
+      - name: Build one-dir
+        run: pyinstaller tools/build.spec
+        env:
+          SUSHTUN_ONEDIR: "1"
+      - name: Package .deb
+        run: python scripts/build_deb.py
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sushtun-deb
+          path: dist/*.deb
+
+  # Publishing runs once, after every build: jobs racing to create the same
+  # release drops assets from whichever loses.
   publish:
-    needs: build
+    needs: [build, deb]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:

@@ -112,13 +112,14 @@ def _resolved_active() -> bool:
             and shutil.which("resolvectl") is not None)
 
 
-def set_dns_loopback(alias: str) -> None:
+def set_dns_loopback(alias: str) -> bool:
+    """Send the system's DNS into the tunnel. False if it would not stick."""
     if IS_MAC:
         service = mac_service_name(alias)
         if service:
             proc.run(["networksetup", "-setdnsservers", service, "127.0.0.1"])
         _mac_flush_dns()
-        return
+        return True
     if _resolved_active():
         # Never 127.0.0.1 on the physical link: resolved pins a link's queries
         # to that link (IP_UNICAST_IF), and loopback is unreachable through a
@@ -126,15 +127,42 @@ def set_dns_loopback(alias: str) -> None:
         # instead, as wg-quick and Tailscale do. The physical link keeps what
         # NetworkManager gave it, and the setting dies with xray0, so a crash
         # strands nothing.
+        return _claim_tun_dns()
+    with open(_RESOLV, "w", encoding="utf-8") as f:
+        f.write("nameserver 127.0.0.1\n")
+    return True
+
+
+def _tun_dns_applied() -> bool:
+    # "Link 10 (xray0): 172.19.0.1"
+    return TUN_DNS in proc.run(["resolvectl", "dns", TUN_NAME]).stdout.split()
+
+
+def _claim_tun_dns(attempts: int = 5) -> bool:
+    """Point resolved at the tunnel, and make sure it stays that way.
+
+    NetworkManager "assumes" a new tun device about a second after it appears
+    and pushes its own, empty, DNS for it to resolved -- silently wiping ours,
+    so lookups leak out the physical link in the clear. Seen live: NM
+    activated an external 'xray0' connection 0.7s after xray started, after
+    this had already run. So tell NM to leave xray0 alone first (runtime only;
+    it lapses when xray0 disappears), then check the setting survived.
+    """
+    if shutil.which("nmcli"):
+        proc.run(["nmcli", "device", "set", TUN_NAME, "managed", "no"])
+    applied = False
+    for _ in range(attempts):
         proc.run(["resolvectl", "dns", TUN_NAME, TUN_DNS])
         # "~." claims every domain for this link, else resolved keeps using
         # the DHCP servers it still holds for other links.
         proc.run(["resolvectl", "domain", TUN_NAME, "~."])
         proc.run(["resolvectl", "default-route", TUN_NAME, "yes"])
-        proc.run(["resolvectl", "flush-caches"])
-        return
-    with open(_RESOLV, "w", encoding="utf-8") as f:
-        f.write("nameserver 127.0.0.1\n")
+        time.sleep(1.0)  # let a late NetworkManager push land before checking
+        if _tun_dns_applied():
+            applied = True
+            break
+    proc.run(["resolvectl", "flush-caches"])
+    return applied
 
 
 def restore_dns(alias: str, state: DnsState, retries: int = 1) -> bool:

@@ -50,6 +50,15 @@ Grab the latest build for your platform from the
 Each release ships ready-to-run binaries for Windows, macOS, and Linux — no
 Python or dependencies required.
 
+On Debian/Ubuntu you can install it instead of running the portable binary:
+the `sushtun_<version>_amd64.deb` asset adds sushTun to the app menu with its
+icon, and keeps settings and profiles in `/var/lib/sushtun`.
+
+```bash
+sudo apt install ./sushtun_*_amd64.deb   # then launch "sushTun" from the app menu
+sudo apt remove sushtun                  # uninstall (purge also deletes your data)
+```
+
 sushTun requests elevated privileges on launch, since changing routes, DNS, and
 the network device requires admin (Windows), root via `pkexec`/`sudo` (Linux),
 or an `osascript` prompt (macOS).

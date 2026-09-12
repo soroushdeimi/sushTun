@@ -5,6 +5,7 @@ import os
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 IS_WIN = sys.platform == "win32"
 IS_MAC = sys.platform == "darwin"
@@ -49,18 +50,21 @@ def _relaunch_windows() -> bool:
 # What a GUI needs to reach the user's display and session bus. pkexec scrubs
 # the environment (DISPLAY and XAUTHORITY included), so without these the
 # elevated window can never open and the relaunch dies with nothing on screen.
+# Nothing outside this list is ever accepted back: the receiver runs as root,
+# and LD_PRELOAD and friends must not ride along.
 _GUI_ENV = (
     "DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY", "XDG_RUNTIME_DIR",
     "XDG_SESSION_TYPE", "XDG_CURRENT_DESKTOP", "DBUS_SESSION_BUS_ADDRESS",
     "QT_QPA_PLATFORM", "QT_SCALE_FACTOR", "LANG",
 )
+_SESSION_ARG = "--session-env="
 
 # pkexec exit codes: 126 = the auth dialog was dismissed, 127 = not authorized
 # (or no polkit agent is running).
 _PKEXEC_REFUSED = (126, 127)
 
 
-def _linux_env() -> list[str]:
+def _session_args() -> list[str]:
     env = {k: os.environ[k] for k in _GUI_ENV if os.environ.get(k)}
     if "DISPLAY" in env and "XAUTHORITY" not in env:
         # X11 falls back to ~/.Xauthority, which as root would mean /root's.
@@ -68,16 +72,42 @@ def _linux_env() -> list[str]:
         if os.path.exists(cookie):
             env["XAUTHORITY"] = cookie
     if not getattr(sys, "frozen", False):
-        # pkexec starts in root's home, so `-m xrayui` (and any --user
-        # site-packages holding PySide6) would not be importable. Hand the
-        # elevated interpreter this one's import path.
+        # Root's interpreter would not see --user site-packages (PySide6).
         env["PYTHONPATH"] = os.pathsep.join(p for p in sys.path if p and os.path.isdir(p))
-    return [f"{k}={v}" for k, v in env.items()]
+    return [f"{_SESSION_ARG}{k}={v}" for k, v in env.items()]
+
+
+def apply_session_env(argv: list[str]) -> list[str]:
+    """Strip --session-env=KEY=VALUE arguments from argv and apply them."""
+    rest = []
+    for arg in argv:
+        if not arg.startswith(_SESSION_ARG):
+            rest.append(arg)
+            continue
+        key, _, value = arg[len(_SESSION_ARG):].partition("=")
+        if key == "PYTHONPATH" and not getattr(sys, "frozen", False):
+            sys.path[1:1] = [p for p in value.split(os.pathsep) if p and p not in sys.path]
+        elif key in _GUI_ENV:
+            os.environ[key] = value
+    return rest
+
+
+def _linux_cmd() -> list[str]:
+    if getattr(sys, "frozen", False):
+        # Resolved, so a polkit policy keyed on the installed path matches
+        # even when launched through the /usr/bin symlink.
+        return [str(Path(sys.executable).resolve()), *sys.argv[1:]]
+    # pkexec starts in root's home, where `-m xrayui` cannot find the package;
+    # the script's absolute path puts the project on sys.path wherever it runs.
+    main = Path(__file__).resolve().parent.parent / "app_main.py"
+    return [sys.executable, str(main), *sys.argv[1:]]
 
 
 def _relaunch_linux() -> bool:
-    env_bin = shutil.which("env") or "/usr/bin/env"
-    cmd = [env_bin, *_linux_env(), *_cmd()]
+    # The session rides as arguments rather than through `env VAR=...`, so
+    # pkexec runs this program itself: the .deb's polkit policy then matches
+    # and the prompt names sushTun instead of "/usr/bin/env".
+    cmd = [*_linux_cmd(), *_session_args()]
     pkexec = shutil.which("pkexec")
     if pkexec:
         # Wait, so a refused prompt falls back to an unelevated window that

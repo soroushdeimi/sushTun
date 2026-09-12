@@ -149,7 +149,9 @@ class Connection:
         except Exception as exc:
             self._log(f"Boot restore task not registered: {exc}")
         self._log("Routing DNS and traffic through the tunnel...")
-        network.set_dns_loopback(iface.alias)
+        if network.set_dns_loopback(iface.alias) is False:
+            self._log("WARNING: DNS could not be routed through the tunnel — "
+                      "lookups will leave unencrypted via the local network.")
         network.add_default_routes(tun)
         self._owned = True
         self._setup_gateway()

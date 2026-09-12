@@ -10,6 +10,9 @@ from .theme import STYLESHEET
 def run(argv: list[str], elevated: bool = True) -> int:
     app = QApplication(argv)
     app.setApplicationName("Xray Portable")
+    # GNOME on Wayland pairs a window with its launcher (and so its dock and
+    # Alt-Tab icon) by this id; matches the .deb's sushtun.desktop.
+    app.setDesktopFileName("sushtun")
     app.setStyleSheet(STYLESHEET)
     app.setWindowIcon(app_icon())
     window = MainWindow(elevated=elevated)
