@@ -259,6 +259,11 @@ def foreign_tunnel(iface: str) -> str | None:
     return None
 
 
+def repair_tun_dns() -> bool | None:
+    """Re-claim DNS cleared by another program. Only resolved (Linux) needs it."""
+    return None
+
+
 # On Linux/macOS, swap the Windows implementations for the POSIX backend.
 # The Windows code above is left untouched and never runs off-Windows.
 if sys.platform != "win32":
@@ -276,3 +281,4 @@ if sys.platform != "win32":
     remove_routes = _posix.remove_routes
     wait_for_tun = _posix.wait_for_tun
     foreign_tunnel = _posix.foreign_tunnel
+    repair_tun_dns = _posix.repair_tun_dns

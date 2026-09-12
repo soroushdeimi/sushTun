@@ -467,12 +467,17 @@ class MainWindow(QMainWindow):
             return
         self._repairing = True
 
+        def work():
+            # DNS too: another program can silently clear the tunnel's resolver.
+            fixed = (self.conn.repair_route_if_needed(), self.conn.repair_dns_if_needed())
+            return [m for m in fixed if m]
+
         def done(result=None, error=None):
             self._repairing = False
             if result:
                 self._refresh_status()
 
-        self._run_async(self.conn.repair_route_if_needed, done)
+        self._run_async(work, done)
 
     def _sample_live(self, tun: int) -> None:
         self._sampling = True

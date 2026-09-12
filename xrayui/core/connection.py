@@ -65,6 +65,7 @@ class Connection:
         self.tun2socks = t2s.Tun2socks()
         self._owned = False  # did this process establish the active connection?
         self._gateway_on = False
+        self._dns_warned = False
         atexit.register(self._atexit)
 
     def is_connected(self) -> bool:
@@ -250,6 +251,30 @@ class Connection:
         network.replace_host_route(server_ip, iface.gateway)
         self.state.update_gateway(iface.gateway)
         msg = f"Gateway changed ({old_gateway} -> {iface.gateway}) — route to server refreshed."
+        self._log(msg)
+        return msg
+
+    def repair_dns_if_needed(self) -> str | None:
+        """Put the tunnel's DNS back if another program cleared it.
+
+        Seen live on Linux: minutes after connecting, xray0's resolved settings
+        were wiped without a trace and lookups fell back to other VPNs' servers
+        until reconnect. Checked on the same timer as the route.
+        """
+        if IS_MAC or not self.state.is_connected():
+            return None
+        restored = network.repair_tun_dns()
+        if restored is None:
+            return None
+        if restored:
+            self._dns_warned = False
+            msg = "Tunnel DNS was cleared by another program — restored."
+        elif self._dns_warned:
+            return None  # already said so; do not repeat every 15 seconds
+        else:
+            self._dns_warned = True
+            msg = ("WARNING: tunnel DNS was cleared by another program and could not "
+                   "be restored — lookups are leaving outside the tunnel.")
         self._log(msg)
         return msg
 

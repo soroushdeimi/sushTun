@@ -171,6 +171,54 @@ def test_resolved_dns_is_claimed_on_the_tunnel_not_the_physical_link(monkeypatch
 
 
 @LINUX_ONLY
+def test_networkmanager_is_asked_to_leave_the_tun_alone_before_dns_is_set(monkeypatch):
+    ran = _resolved(monkeypatch)
+    monkeypatch.setattr(posix.shutil, "which", lambda name: f"/usr/bin/{name}")
+    posix.set_dns_loopback("enx0")
+
+    unmanage = ran.index(["nmcli", "device", "set", posix.TUN_NAME, "managed", "no"])
+    first_dns = ran.index(["resolvectl", "dns", posix.TUN_NAME, posix.TUN_DNS])
+    assert unmanage < first_dns
+
+
+@LINUX_ONLY
+def test_cleared_tunnel_dns_is_put_back(monkeypatch):
+    # Seen live: xray0's resolved settings vanished minutes after connecting.
+    ran = _resolved(monkeypatch, sticks_after=1)
+    monkeypatch.setattr(posix, "_tun_dns_applied", lambda: False)
+    monkeypatch.setattr(posix, "_claim_tun_dns", lambda attempts=5: ran.append(["claim"]) or True)
+    assert posix.repair_tun_dns() is True
+    assert ["claim"] in ran
+
+
+@LINUX_ONLY
+def test_intact_tunnel_dns_is_left_alone(monkeypatch):
+    ran = _resolved(monkeypatch)
+    monkeypatch.setattr(posix, "_tun_dns_applied", lambda: True)
+    assert posix.repair_tun_dns() is None
+    assert not any(cmd[:2] == ["resolvectl", "dns"] and len(cmd) == 4 for cmd in ran)
+
+
+def test_dns_watchdog_reports_a_restore_and_warns_only_once(monkeypatch):
+    conn = connection.Connection()
+    monkeypatch.setattr(conn.state, "is_connected", lambda: True)
+    monkeypatch.setattr(connection, "IS_MAC", False)
+    steps = []
+    conn._log = steps.append
+
+    monkeypatch.setattr(connection.network, "repair_tun_dns", lambda: None)
+    assert conn.repair_dns_if_needed() is None
+
+    monkeypatch.setattr(connection.network, "repair_tun_dns", lambda: True)
+    assert "restored" in conn.repair_dns_if_needed()
+
+    monkeypatch.setattr(connection.network, "repair_tun_dns", lambda: False)
+    assert "WARNING" in conn.repair_dns_if_needed()
+    assert conn.repair_dns_if_needed() is None  # not repeated every 15 seconds
+    assert sum("WARNING" in s for s in steps) == 1
+
+
+@LINUX_ONLY
 def test_dns_that_did_not_take_is_retried(monkeypatch):
     ran = _resolved(monkeypatch, sticks_after=3)
 
@@ -253,8 +301,10 @@ def test_only_our_own_xray_is_matched(monkeypatch, tmp_path):
 
 
 @LINUX_ONLY
-def test_foreign_tunnel_names_the_device_another_vpn_steers_through(monkeypatch):
-    _record(monkeypatch, stdout='[{"dst":"1.1.1.1","dev":"singbox_tun"}]')
+def test_foreign_tunnel_names_a_vpn_whose_policy_rules_outvote_ours(monkeypatch):
+    # Real v2rayN/sing-box output: its rules send traffic to table 2022.
+    _record(monkeypatch, stdout='[{"dst":"1.1.1.1","gateway":"172.18.0.2",'
+                                '"dev":"singbox_tun","table":"2022"}]')
     assert posix.foreign_tunnel("enx0") == "singbox_tun"
 
     _record(monkeypatch, stdout='[{"dst":"1.1.1.1","gateway":"172.21.1.1","dev":"enx0"}]')
@@ -262,6 +312,47 @@ def test_foreign_tunnel_names_the_device_another_vpn_steers_through(monkeypatch)
 
     _record(monkeypatch, stdout="")  # offline: `ip route get` prints nothing
     assert posix.foreign_tunnel("enx0") is None
+
+
+@LINUX_ONLY
+def test_openvpn_default_route_in_main_table_is_allowed_alongside(monkeypatch):
+    # OpenVPN's default (metric 50) loses to our /1 routes: no reason to refuse.
+    _record(monkeypatch, stdout='[{"dst":"1.1.1.1","gateway":"172.16.0.1","dev":"tun0"}]')
+    assert posix.foreign_tunnel("wlp2s0") is None
+
+
+def _detect_with(monkeypatch, routes: str, links: str):
+    def stdout(args):
+        if args[:4] == ["ip", "-j", "route", "show"]:
+            return routes
+        if args[:4] == ["ip", "-j", "link", "show"]:
+            return links
+        return '[{"addr_info":[{"family":"inet","local":"172.20.10.2"}]}]'
+    _record(monkeypatch, stdout=stdout)
+    return posix._linux_detect()
+
+
+# Real output with two NetworkManager OpenVPN connections up over Wi-Fi.
+_OPENVPN_ROUTES = ('[{"dst":"default","gateway":"172.16.0.1","dev":"tun0","metric":50},'
+                   '{"dst":"default","gateway":"172.10.1.1","dev":"tun1","metric":50},'
+                   '{"dst":"default","gateway":"172.20.10.1","dev":"wlp2s0","metric":600}]')
+_LINKS = ('[{"ifname":"lo","link_type":"loopback"},{"ifname":"wlp2s0","link_type":"ether"},'
+          '{"ifname":"tun0","link_type":"none"},{"ifname":"tun1","link_type":"none"}]')
+
+
+@LINUX_ONLY
+def test_uplink_is_the_physical_link_not_a_lower_metric_vpn(monkeypatch):
+    iface = _detect_with(monkeypatch, _OPENVPN_ROUTES, _LINKS)
+    # tun0 has the lowest metric, but binding Xray to it tunnels sushTun
+    # through the office VPN and dies whenever that VPN reconnects.
+    assert (iface.alias, iface.gateway) == ("wlp2s0", "172.20.10.1")
+
+
+@LINUX_ONLY
+def test_uplink_falls_back_to_a_tunnel_when_nothing_else_has_a_default(monkeypatch):
+    routes = '[{"dst":"default","gateway":"10.8.0.1","dev":"tun0","metric":50}]'
+    iface = _detect_with(monkeypatch, routes, _LINKS)
+    assert iface.alias == "tun0"
 
 
 def test_connect_refuses_while_another_vpn_owns_the_route(monkeypatch):

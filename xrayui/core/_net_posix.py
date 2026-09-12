@@ -29,12 +29,24 @@ TUN_DNS = "172.19.0.1"
 
 
 # -- interface detection ---------------------------------------------------
+def _link_types() -> dict[str, str]:
+    links = json.loads(proc.run(["ip", "-j", "link", "show"]).stdout or "[]")
+    return {link.get("ifname"): link.get("link_type", "") for link in links}
+
+
 def _linux_detect() -> Interface | None:
     routes = json.loads(proc.run(["ip", "-j", "route", "show", "default"]).stdout or "[]")
     routes = [r for r in routes if r.get("dev") != TUN_NAME and r.get("gateway")]
     if not routes:
         return None
-    r = routes[0]
+    # The uplink is the physical link, not simply the lowest-metric default:
+    # OpenVPN adds its own default at metric 50, under Wi-Fi's 600. Taking it
+    # tunneled sushTun through the other VPN (slower, and dropping whenever
+    # that VPN reconnects), and the gateway-change repair then never matched
+    # the adapter again. Tunnels have no link-layer type ("none").
+    types = _link_types()
+    physical = [r for r in routes if types.get(r["dev"]) not in ("none", "loopback")]
+    r = min(physical or routes, key=lambda route: route.get("metric", 0))
     dev, gw = r["dev"], r["gateway"]
     ip = ""
     addrs = json.loads(proc.run(["ip", "-j", "-4", "addr", "show", "dev", dev]).stdout or "[]")
@@ -145,6 +157,13 @@ def _claim_tun_dns(attempts: int = 5) -> bool:
     the physical link in the clear (seen live: resolvectl crashed on a bundled
     library, see proc.child_env). Read the setting back, retry, and report.
     """
+    if shutil.which("nmcli"):
+        # NetworkManager adopts xray0 as an external device, and while it did
+        # the tunnel's resolved settings were seen wiped without a trace minutes
+        # after connecting (no bus log, so a RevertLink). Suspected rather than
+        # proven, so repair_tun_dns() also re-checks on a timer. Runtime only:
+        # it lapses when xray0 disappears.
+        proc.run(["nmcli", "device", "set", TUN_NAME, "managed", "no"])
     applied = False
     for _ in range(attempts):
         proc.run(["resolvectl", "dns", TUN_NAME, TUN_DNS])
@@ -158,6 +177,17 @@ def _claim_tun_dns(attempts: int = 5) -> bool:
             break
     proc.run(["resolvectl", "flush-caches"])
     return applied
+
+
+def repair_tun_dns() -> bool | None:
+    """Re-claim the tunnel's DNS if another program cleared it.
+
+    None: nothing to do. True: it had been cleared and is back. False: it had
+    been cleared and would not come back, so lookups are leaving outside.
+    """
+    if IS_MAC or not _resolved_active() or _tun_dns_applied():
+        return None
+    return _claim_tun_dns(attempts=2)
 
 
 def restore_dns(alias: str, state: DnsState, retries: int = 1) -> bool:
@@ -280,16 +310,21 @@ def wait_for_tun(name: str = TUN_NAME, timeout: float = 30.0,
 
 
 def foreign_tunnel(iface: str) -> str | None:
-    """The device another VPN is steering traffic through, if any.
+    """The device another VPN steers traffic through ahead of ours, if any.
 
     Clients like v2rayN/sing-box install policy-routing rules that sit ahead of
-    the main table, so our routes there would be silently outvoted and DNS
-    split between two tunnels.
+    the main table, so our routes there would be silently outvoted. A VPN that
+    only adds a default route to the main table (OpenVPN, WireGuard via
+    NetworkManager) loses to our two /1 routes, so it can run alongside.
     """
     if IS_MAC:
         return None
     try:
-        dev = json.loads(proc.run(["ip", "-j", "route", "get", "1.1.1.1"]).stdout or "[]")[0]["dev"]
+        route = json.loads(proc.run(["ip", "-j", "route", "get", "1.1.1.1"]).stdout or "[]")[0]
+        dev = route["dev"]
     except (ValueError, IndexError, KeyError, TypeError):
         return None  # offline: nothing to conflict with
+    # `ip route get` names the table only when it is not main.
+    if route.get("table") in (None, "main"):
+        return None
     return dev if dev not in (iface, TUN_NAME) else None

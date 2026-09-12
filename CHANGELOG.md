@@ -1,5 +1,34 @@
 # Changelog
 
+## v0.1.12
+
+### Fixed (Linux: running alongside OpenVPN or other VPNs)
+- **sushTun could tunnel itself through another VPN.** It picked "the default route
+  with the lowest metric" as the internet connection, and NetworkManager's OpenVPN
+  routes (metric 50) beat Wi-Fi's (600). sushTun then reached its server *through* the
+  office VPN: slower, dropping whenever that VPN reconnected, and the automatic
+  gateway-change repair never matched the adapter again. It now picks the real network
+  card and uses a tunnel only when nothing else has a route.
+- **DNS silently fell back to other VPNs' servers minutes after connecting.** The tunnel's
+  DNS setting was wiped without a trace (NetworkManager suspected, since it adopts `xray0`
+  as an external device). sushTun now asks NetworkManager to leave `xray0` alone, and
+  checks every 15 seconds that the tunnel's DNS is still in place, restoring it and saying
+  so in the log if another program cleared it.
+- **The "another VPN" check no longer refuses OpenVPN.** It now blocks only VPNs whose
+  routing rules override sushTun's (v2rayN/sing-box). A VPN that just adds a default
+  route loses to sushTun's routes and can run alongside it.
+
+### Using an office VPN together with sushTun
+sushTun answers all DNS by default (`~.`), so an office VPN's internal names resolve only
+if its NetworkManager profile names its domain, for example:
+
+```bash
+nmcli connection modify "<office VPN>" ipv4.dns-search "~office.example"
+```
+
+Then reconnect that VPN. Names under `office.example` go to the office DNS; everything
+else goes through sushTun.
+
 ## v0.1.11
 
 ### Fixed (macOS — found by code review; still needs testing on a real Mac)
