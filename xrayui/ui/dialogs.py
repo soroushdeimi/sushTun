@@ -6,6 +6,7 @@ import time
 
 from PySide6.QtCore import QThreadPool
 from PySide6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QComboBox,
     QDialog,
@@ -19,6 +20,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QTabWidget,
     QVBoxLayout,
@@ -493,8 +495,10 @@ class SettingsDialog(QDialog):
     def __init__(self, settings: dict, parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Settings")
-        self.resize(400, 360)
-        layout = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+
+        content = QWidget()
+        layout = QVBoxLayout(content)
         form = QFormLayout()
         layout.addLayout(form)
 
@@ -652,16 +656,33 @@ class SettingsDialog(QDialog):
         layout.addWidget(CollapsibleSection("Advanced", adv_widget))
         self._sync_lan_warning()
 
+        scroll = QScrollArea()
+        scroll.setWidget(content)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+        outer.addWidget(scroll, 1)
+
         self._busy = False
         self.status_label = QLabel("")
         self.status_label.setObjectName("Muted")
-        layout.addWidget(self.status_label)
+        outer.addWidget(self.status_label)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         self.btn_save = buttons.button(QDialogButtonBox.Save)
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
+        outer.addWidget(buttons)
+
+        # The Advanced section alone can push this past 1000px, taller than
+        # a small laptop screen; cap the initial height instead of letting
+        # the dialog open bigger than the display, which -- unlike a window
+        # -- a user cannot always resize their way out of on first open.
+        width = 460
+        height = 600
+        screen = self.screen() or QApplication.primaryScreen()
+        if screen is not None:
+            height = int(screen.availableGeometry().height() * 0.85)
+        self.resize(width, height)
 
     def _sync_lan_warning(self) -> None:
         has_auth = bool(self.lan_user.text().strip()) and bool(self.lan_pass.text().strip())
