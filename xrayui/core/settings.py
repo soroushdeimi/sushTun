@@ -3,12 +3,18 @@ from __future__ import annotations
 
 import copy
 import json
+from collections.abc import Callable
 
 from .. import paths
 
 LOG_LEVELS = ("debug", "info", "warning", "error", "none")
 
+# Bump when DEFAULTS' shape changes, and add a migration below so an old
+# settings.json keeps loading instead of silently losing data to _merge.
+SCHEMA_VERSION = 1
+
 DEFAULTS: dict = {
+    "schema_version": SCHEMA_VERSION,
     "ping_target": "1.1.1.1",
     "sample_seconds": 5,
     "log_level": "warning",
@@ -51,6 +57,30 @@ DEFAULTS: dict = {
 }
 
 
+def _stamp_v1(data: dict) -> dict:
+    # No shape change yet: schema_version itself is the only thing being
+    # introduced. Later migrations reshape a specific key the way this one
+    # only stamps the version.
+    data["schema_version"] = 1
+    return data
+
+
+# Ordered (target_version, migration) pairs, applied in sequence starting
+# from the saved file's schema_version (0 for a file with no such key).
+_MIGRATIONS: list[tuple[int, Callable[[dict], dict]]] = [
+    (1, _stamp_v1),
+]
+
+
+def _migrate(data: dict) -> dict:
+    version = data.get("schema_version", 0)
+    for target, migrate in _MIGRATIONS:
+        if version < target:
+            data = migrate(data)
+            version = target
+    return data
+
+
 def _merge(base: dict, over: dict) -> dict:
     """Overlay saved values on the defaults, dropping keys we no longer define."""
     out = copy.deepcopy(base)
@@ -72,7 +102,7 @@ def load() -> dict:
     p = _path()
     if p.exists():
         try:
-            return _merge(DEFAULTS, json.loads(p.read_text(encoding="utf-8")))
+            return _merge(DEFAULTS, _migrate(json.loads(p.read_text(encoding="utf-8"))))
         except ValueError:
             pass
     return copy.deepcopy(DEFAULTS)
