@@ -6,6 +6,7 @@ import time
 
 from PySide6.QtCore import QThreadPool
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -28,11 +29,18 @@ from ..core import geo as geo_mod
 from ..core import importer
 from ..core import settings as app_settings
 from ..core.profiles import Profile
+from .rule_editor import CollapsibleSection
 from .workers import Worker
 
-_NETWORKS = ["tcp", "ws", "grpc", "h2", "kcp", "quic"]
+_NETWORKS = ["tcp", "ws", "grpc", "h2", "kcp", "quic", "xhttp", "httpupgrade"]
 _SECURITIES = ["none", "tls", "reality"]
-_PROTOCOLS = ["vless", "wireguard"]
+_PROTOCOLS = ["vless", "vmess", "trojan", "shadowsocks", "wireguard"]
+_VMESS_SECURITIES = ["auto", "aes-128-gcm", "chacha20-poly1305", "none", "zero"]
+_SS_METHODS = [
+    "aes-128-gcm", "aes-256-gcm", "chacha20-ietf-poly1305", "xchacha20-ietf-poly1305",
+    "2022-blake3-aes-128-gcm", "2022-blake3-aes-256-gcm", "2022-blake3-chacha20-poly1305",
+    "none",
+]
 
 
 class ImportDialog(QDialog):
@@ -130,7 +138,9 @@ class ProfileEditDialog(QDialog):
 
     def _form_tab(self, p: Profile) -> QWidget:
         w = QWidget()
-        form = QFormLayout(w)
+        outer = QVBoxLayout(w)
+        form = QFormLayout()
+        outer.addLayout(form)
         self.f_name = QLineEdit(p.name)
         self.f_protocol = QComboBox()
         self.f_protocol.addItems(_PROTOCOLS)
@@ -142,6 +152,14 @@ class ProfileEditDialog(QDialog):
         self.f_id = QLineEdit(p.id)
         self.f_encryption = QLineEdit(p.encryption)
         self.f_flow = QLineEdit(p.flow)
+        self.f_vmess_security = QComboBox()
+        self.f_vmess_security.addItems(_VMESS_SECURITIES)
+        self.f_vmess_security.setCurrentText(
+            p.vmess_security if p.vmess_security in _VMESS_SECURITIES else "auto")
+        self.f_ss_method = QComboBox()
+        self.f_ss_method.addItems(_SS_METHODS)
+        if p.ss_method in _SS_METHODS:
+            self.f_ss_method.setCurrentText(p.ss_method)
         self.f_network = QComboBox()
         self.f_network.addItems(_NETWORKS)
         self.f_network.setCurrentText(p.network)
@@ -173,9 +191,16 @@ class ProfileEditDialog(QDialog):
         self._add_row(form, "Port", self.f_port)
         self._lab_id = self._add_row(form, "UUID / private key", self.f_id)
         self._lab_pbk = self._add_row(form, "Peer / Reality public key", self.f_pbk)
-        self._vless_labs = [
+        self._vmess_labs = [self._add_row(form, "Security", self.f_vmess_security)]
+        self._vmess_fields = [self.f_vmess_security]
+        self._ss_labs = [self._add_row(form, "Method", self.f_ss_method)]
+        self._ss_fields = [self.f_ss_method]
+        self._vless_only_labs = [
             self._add_row(form, "Encryption", self.f_encryption),
             self._add_row(form, "Flow", self.f_flow),
+        ]
+        self._vless_only_fields = [self.f_encryption, self.f_flow]
+        self._stream_labs = [
             self._add_row(form, "Network", self.f_network),
             self._add_row(form, "Security", self.f_security),
             self._add_row(form, "SNI", self.f_sni),
@@ -187,10 +212,9 @@ class ProfileEditDialog(QDialog):
             self._add_row(form, "Host", self.f_host),
             self._add_row(form, "gRPC service", self.f_service),
         ]
-        self._vless_fields = [
-            self.f_encryption, self.f_flow, self.f_network, self.f_security,
-            self.f_sni, self.f_fp, self.f_alpn, self.f_sid, self.f_spx,
-            self.f_path, self.f_host, self.f_service,
+        self._stream_fields = [
+            self.f_network, self.f_security, self.f_sni, self.f_fp, self.f_alpn,
+            self.f_sid, self.f_spx, self.f_path, self.f_host, self.f_service,
         ]
         self._wg_labs = [
             self._add_row(form, "Local address", self.f_wg_local),
@@ -203,20 +227,60 @@ class ProfileEditDialog(QDialog):
             self.f_wg_local, self.f_wg_psk, self.f_wg_reserved,
             self.f_wg_mtu, self.f_wg_keepalive,
         ]
+
+        self.f_header_type = QLineEdit(p.header_type)
+        self.f_xhttp_mode = QLineEdit(p.xhttp_mode)
+        self.f_xhttp_extra = QLineEdit(p.xhttp_extra)
+        self.f_xhttp_extra.setPlaceholderText('{"headers": {"X-Extra": "1"}}')
+        self.f_allow_insecure = QCheckBox("Allow insecure")
+        self.f_allow_insecure.setChecked(bool(p.allow_insecure))
+        self.f_allow_insecure.setToolTip(
+            "Skips certificate checks — only for servers you control")
+        self.f_ech = QLineEdit(p.ech)
+        self.f_pcs = QLineEdit(p.pcs)
+        self.f_vcn = QLineEdit(p.vcn)
+
+        adv_widget = QWidget()
+        adv_form = QFormLayout(adv_widget)
+        adv_form.setContentsMargins(0, 4, 0, 0)
+        adv_form.addRow("Header type", self.f_header_type)
+        adv_form.addRow("xhttp mode", self.f_xhttp_mode)
+        adv_form.addRow("xhttp extra (JSON)", self.f_xhttp_extra)
+        adv_form.addRow(self.f_allow_insecure)
+        adv_form.addRow("ECH config list", self.f_ech)
+        adv_form.addRow("Pinned cert SHA-256", self.f_pcs)
+        adv_form.addRow("Verify cert name", self.f_vcn)
+        self._advanced = CollapsibleSection("Advanced", adv_widget)
+        outer.addWidget(self._advanced)
+
         self.f_protocol.currentTextChanged.connect(self._sync_protocol_fields)
         self._sync_protocol_fields(self.f_protocol.currentText())
         return w
 
     def _sync_protocol_fields(self, protocol: str) -> None:
         wg = protocol == "wireguard"
-        self._lab_id.setText("Private key" if wg else "UUID")
+        vless = protocol == "vless"
+        vmess = protocol == "vmess"
+        ss = protocol == "shadowsocks"
+        self._lab_id.setText("Private key" if wg else "Password" if protocol in
+                             ("trojan", "shadowsocks") else "UUID")
         self._lab_pbk.setText("Peer public key" if wg else "Reality public key")
-        for lab, field in zip(self._vless_labs, self._vless_fields, strict=True):
+        for lab, field in zip(self._stream_labs, self._stream_fields, strict=True):
             lab.setVisible(not wg)
             field.setVisible(not wg)
+        for lab, field in zip(self._vless_only_labs, self._vless_only_fields, strict=True):
+            lab.setVisible(vless)
+            field.setVisible(vless)
+        for lab, field in zip(self._vmess_labs, self._vmess_fields, strict=True):
+            lab.setVisible(vmess)
+            field.setVisible(vmess)
+        for lab, field in zip(self._ss_labs, self._ss_fields, strict=True):
+            lab.setVisible(ss)
+            field.setVisible(ss)
         for lab, field in zip(self._wg_labs, self._wg_fields, strict=True):
             lab.setVisible(wg)
             field.setVisible(wg)
+        self._advanced.setVisible(not wg)
 
     def result_profile(self) -> Profile:
         return self._profile
@@ -231,6 +295,17 @@ class ProfileEditDialog(QDialog):
             data["uid"] = self._profile.uid
             self._profile = Profile.from_dict(data)
         else:
+            xhttp_extra = self.f_xhttp_extra.text().strip()
+            if xhttp_extra:
+                try:
+                    parsed = json.loads(xhttp_extra)
+                except ValueError:
+                    parsed = None
+                if not isinstance(parsed, dict):
+                    QMessageBox.warning(self, "Invalid xhttp extra",
+                                        "xhttp extra must be a JSON object, e.g. "
+                                        '{"headers": {"X-Extra": "1"}}.')
+                    return
             p = self._profile
             p.name = self.f_name.text().strip() or "Profile"
             p.protocol = self.f_protocol.currentText()
@@ -239,6 +314,8 @@ class ProfileEditDialog(QDialog):
             p.id = self.f_id.text().strip()
             p.encryption = self.f_encryption.text().strip() or "none"
             p.flow = self.f_flow.text().strip()
+            p.vmess_security = self.f_vmess_security.currentText()
+            p.ss_method = self.f_ss_method.currentText()
             p.network = self.f_network.currentText()
             p.security = self.f_security.currentText()
             p.sni = self.f_sni.text().strip()
@@ -250,6 +327,13 @@ class ProfileEditDialog(QDialog):
             p.path = self.f_path.text().strip()
             p.host = self.f_host.text().strip()
             p.service_name = self.f_service.text().strip()
+            p.header_type = self.f_header_type.text().strip()
+            p.xhttp_mode = self.f_xhttp_mode.text().strip()
+            p.xhttp_extra = xhttp_extra
+            p.allow_insecure = self.f_allow_insecure.isChecked()
+            p.ech = self.f_ech.text().strip()
+            p.pcs = self.f_pcs.text().strip()
+            p.vcn = self.f_vcn.text().strip()
             p.wg_local_address = self.f_wg_local.text().strip()
             p.wg_preshared = self.f_wg_psk.text().strip()
             p.wg_reserved = self.f_wg_reserved.text().strip()

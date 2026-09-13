@@ -283,6 +283,78 @@ def test_profile_edit_dialog_round_trips_alpn_and_spiderx(qapp):
     assert saved.spx == "/spider"
 
 
+@pytest.mark.parametrize("protocol,id_label,vmess_vis,ss_vis,vless_vis,stream_vis,wg_vis", [
+    ("vless", "UUID", False, False, True, True, False),
+    ("vmess", "UUID", True, False, False, True, False),
+    ("trojan", "Password", False, False, False, True, False),
+    ("shadowsocks", "Password", False, True, False, True, False),
+    ("wireguard", "Private key", False, False, False, False, True),
+])
+def test_profile_edit_dialog_field_visibility_per_protocol(
+    qapp, protocol, id_label, vmess_vis, ss_vis, vless_vis, stream_vis, wg_vis,
+):
+    p = Profile(name="p", protocol=protocol, address="a.com", port=443, id="u", pbk="pb")
+    dlg = ProfileEditDialog(p)
+    assert dlg._lab_id.text() == id_label
+    assert not dlg.f_vmess_security.isHidden() == vmess_vis
+    assert not dlg.f_ss_method.isHidden() == ss_vis
+    assert not dlg.f_flow.isHidden() == vless_vis
+    assert not dlg.f_encryption.isHidden() == vless_vis
+    assert not dlg.f_network.isHidden() == stream_vis
+    assert not dlg.f_wg_local.isHidden() == wg_vis
+    assert not dlg._advanced.isHidden() == (not wg_vis)
+
+
+def test_profile_edit_dialog_advanced_fields_round_trip(qapp):
+    p = Profile(name="a", protocol="trojan", address="a.com", port=443, id="pw",
+               network="xhttp")
+    dlg = ProfileEditDialog(p)
+    dlg.f_header_type.setText("http")
+    dlg.f_xhttp_mode.setText("packet-up")
+    dlg.f_xhttp_extra.setText('{"headers": {"X": "1"}}')
+    dlg.f_allow_insecure.setChecked(True)
+    dlg.f_ech.setText("ECHCONFIG")
+    dlg.f_pcs.setText("ab" * 32)
+    dlg.f_vcn.setText("a.com")
+    dlg._save()
+    saved = dlg.result_profile()
+    assert saved.header_type == "http"
+    assert saved.xhttp_mode == "packet-up"
+    assert saved.xhttp_extra == '{"headers": {"X": "1"}}'
+    assert saved.allow_insecure is True
+    assert saved.ech == "ECHCONFIG"
+    assert saved.pcs == "ab" * 32
+    assert saved.vcn == "a.com"
+
+
+def test_profile_edit_dialog_refuses_invalid_xhttp_extra(qapp, warnings):
+    p = Profile(name="a", protocol="trojan", address="a.com", port=443, id="pw",
+               network="xhttp")
+    dlg = ProfileEditDialog(p)
+    dlg.f_xhttp_extra.setText("not json")
+    dlg._save()
+    assert warnings
+    assert dlg.result() == 0
+    dlg2 = ProfileEditDialog(p)
+    dlg2.f_xhttp_extra.setText("[1, 2]")  # valid JSON, not an object
+    dlg2._save()
+    assert dlg2.result() == 0
+
+
+def test_profile_edit_dialog_vmess_and_ss_credential_round_trip(qapp):
+    p = Profile(name="v", protocol="vmess", address="a.com", port=443, id="uid-1")
+    dlg = ProfileEditDialog(p)
+    dlg.f_vmess_security.setCurrentText("chacha20-poly1305")
+    dlg._save()
+    assert dlg.result_profile().vmess_security == "chacha20-poly1305"
+
+    p2 = Profile(name="s", protocol="shadowsocks", address="b.com", port=8388, id="pw")
+    dlg2 = ProfileEditDialog(p2)
+    dlg2.f_ss_method.setCurrentText("2022-blake3-aes-256-gcm")
+    dlg2._save()
+    assert dlg2.result_profile().ss_method == "2022-blake3-aes-256-gcm"
+
+
 # -- Main window -----------------------------------------------------------
 @pytest.fixture
 def window(qapp, tmp_path, monkeypatch):
