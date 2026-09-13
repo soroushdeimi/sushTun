@@ -317,9 +317,13 @@ def _is_hostname_server(entry) -> bool:
     return bool(host) and not _is_ip(host)
 
 
-def _pick_bootstrap_address(domestic: list[str], servers: list) -> str:
-    if domestic:
-        return domestic[0]
+def _pick_bootstrap_address(servers: list) -> str:
+    """The first literal-IP entry in the user's own (non-domestic) DNS
+    server list, or else "1.1.1.1". Never a domestic resolver: in Iran a
+    domestic resolver returns a poisoned answer for a blocked foreign
+    name -- exactly the kind of hostname (e.g. a DoH server) this
+    bootstrap exists to resolve correctly, so trusting it here would
+    defeat the deadlock guard's whole purpose."""
     for entry in servers:
         host = _server_host(entry)
         if host and _is_ip(host):
@@ -375,13 +379,23 @@ def raw_override_issues(raw: str) -> list[str]:
     return reasons
 
 
-def build_dns_and_rules(d: dict, direct_domains: list[str], proxy_address: str) -> tuple[dict, list[dict]]:
+def build_dns_and_rules(
+    d: dict, direct_domains: list[str], proxy_address: str, server_ip: str | None = None,
+) -> tuple[dict, list[dict]]:
     """The Xray `dns` object, plus any routing rules it needs.
 
     Domestic DNS and/or remote-via-tunnel each add one inboundTag routing
     rule; render.py inserts them right after the template's own rules and
     before user rules (see render._apply_dns_routing), so a user catch-all
     can never capture a DNS query these rules are meant to steer.
+
+    `server_ip` is the proxy's already-resolved address (connection.py
+    resolves it and pins a host route to it before Xray ever starts). When
+    it is known and the proxy address is a hostname, remote-via-tunnel pins
+    that hostname straight into the hosts map instead of bootstrapping it --
+    Xray then never needs to look it up at all. Pass None (e.g. the DNS
+    dialog's own validation render, which has no live connection to ask)
+    to fall back to the full: bootstrap entry.
     """
     raw = str(d.get("raw_override") or "").strip()
     if raw:
@@ -398,6 +412,9 @@ def build_dns_and_rules(d: dict, direct_domains: list[str], proxy_address: str) 
         # normal build below rather than raising.
 
     block = build_dns(d)
+    # The user's own servers, before any domestic entry is prepended --
+    # the only pool _pick_bootstrap_address may choose from (see there).
+    regular_servers = list(block.get("servers") or [])
     rules: list[dict] = []
     needs_direct_dns_rule = False
 
@@ -410,14 +427,29 @@ def build_dns_and_rules(d: dict, direct_domains: list[str], proxy_address: str) 
     if d.get("remote_via_tunnel"):
         block["tag"] = "dns-module"
         rules.append({"type": "field", "inboundTag": ["dns-module"], "outboundTag": "proxy"})
-        # Deadlock guard: the proxy outbound's address (and any hostname DNS
-        # server) must resolve WITHOUT going through this same DNS module,
-        # or resolving it never finishes -- the module can't answer until
-        # it can reach the proxy, which it can't reach until it has an
-        # answer for the proxy's own hostname.
-        hostnames = _hostnames_needing_bootstrap(proxy_address, block.get("servers") or [])
+
+        proxy_is_hostname = bool(proxy_address) and not _is_ip(proxy_address)
+        bootstrap_proxy = proxy_address
+        if proxy_is_hostname and server_ip:
+            # The host route is already pinned to server_ip, so Xray needs
+            # no DNS lookup for the proxy's own name at all -- pin it here
+            # instead of bootstrapping it, which also keeps Xray dialing
+            # exactly the IP that route protects. A user's own hosts entry
+            # for the same name wins.
+            hosts = dict(block.get("hosts") or {})
+            if proxy_address not in hosts:
+                hosts[proxy_address] = server_ip
+                block["hosts"] = hosts
+            bootstrap_proxy = None
+
+        # Deadlock guard: any DNS-server hostname still in play must resolve
+        # WITHOUT going through this same DNS module, or resolving it never
+        # finishes -- the module can't answer until it can reach the proxy,
+        # which (when the proxy itself isn't already pinned above) it can't
+        # reach until it has an answer for the proxy's own hostname.
+        hostnames = _hostnames_needing_bootstrap(bootstrap_proxy, block.get("servers") or [])
         if hostnames:
-            bootstrap_addr = _pick_bootstrap_address(domestic, block.get("servers") or [])
+            bootstrap_addr = _pick_bootstrap_address(regular_servers)
             bootstrap = {"address": bootstrap_addr,
                         "domains": [f"full:{h}" for h in hostnames],
                         "skipFallback": True, "tag": _DIRECT_DNS_TAG}

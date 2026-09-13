@@ -95,6 +95,7 @@ def build_text(
     log_level: str | None = None,
     dns_cfg: dict | None = None,
     tun_mtu: int | None = None,
+    server_ip: str | None = None,
 ) -> str:
     tmpl_path = template_path or paths.config_template()
     cfg = json.loads(tmpl_path.read_text(encoding="utf-8"))
@@ -106,7 +107,7 @@ def build_text(
     if dns_cfg:
         direct_domains = routing_mod.direct_domains(routing_rules or [])
         dns_block, dns_routing_rules = dns_mod.build_dns_and_rules(
-            dns_cfg, direct_domains, profile.address)
+            dns_cfg, direct_domains, profile.address, server_ip=server_ip)
         if dns_routing_rules:
             # Before _apply_routing: routing.rules only holds the
             # template's own rules right now, so this is where "after the
@@ -138,6 +139,7 @@ def build(
     log_level: str | None = None,
     dns_cfg: dict | None = None,
     tun_mtu: int | None = None,
+    server_ip: str | None = None,
 ) -> Path:
     out = paths.runtime_config()
     # Forward by keyword: a positional forward silently mis-binds the next time
@@ -154,6 +156,7 @@ def build(
             log_level=log_level,
             dns_cfg=dns_cfg,
             tun_mtu=tun_mtu,
+            server_ip=server_ip,
         ),
         encoding="utf-8",
     )

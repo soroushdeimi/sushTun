@@ -331,6 +331,47 @@ def test_hostname_proxy_gets_a_bootstrap_entry():
     assert {"type": "field", "inboundTag": ["direct-dns"], "outboundTag": "direct"} in rules
 
 
+def test_hostname_proxy_with_known_server_ip_is_pinned_not_bootstrapped():
+    # connection.py already resolves the proxy and pins a host route to it
+    # before Xray starts -- Xray needs no DNS lookup for that name at all.
+    block, rules = dns_mod.build_dns_and_rules(
+        _dns(remote_via_tunnel=True, servers=["1.1.1.1"]), [], PROXY_HOST,
+        server_ip="198.51.100.7")
+    assert block["hosts"] == {PROXY_HOST: "198.51.100.7"}
+    assert not any(isinstance(s, dict) and s.get("tag") == "direct-dns"
+                   for s in block["servers"])
+    # Only the proxy rule remains -- no direct-dns rule, since nothing
+    # needs the bootstrap once the proxy host is pinned.
+    assert rules == [{"type": "field", "inboundTag": ["dns-module"], "outboundTag": "proxy"}]
+
+
+def test_a_users_own_hosts_entry_for_the_proxy_host_wins_over_the_pin():
+    block, _ = dns_mod.build_dns_and_rules(
+        _dns(remote_via_tunnel=True, servers=["1.1.1.1"],
+             hosts=[f"{PROXY_HOST} = 9.9.9.9"]), [], PROXY_HOST,
+        server_ip="198.51.100.7")
+    assert block["hosts"][PROXY_HOST] == "9.9.9.9"
+
+
+def test_hostname_dns_server_still_gets_a_bootstrap_even_with_a_pinned_proxy():
+    block, rules = dns_mod.build_dns_and_rules(
+        _dns(remote_via_tunnel=True, servers=["https://dns.google/dns-query", "1.1.1.1"]),
+        [], PROXY_HOST, server_ip="198.51.100.7")
+    assert block["hosts"] == {PROXY_HOST: "198.51.100.7"}
+    bootstrap = next(s for s in block["servers"] if isinstance(s, dict)
+                     and s.get("tag") == "direct-dns")
+    assert bootstrap["domains"] == ["full:dns.google"]  # not the pinned proxy host
+    assert rules  # the direct-dns rule is still needed for the DoH bootstrap
+
+
+def test_server_ip_none_keeps_the_bootstrap_for_the_proxy_host():
+    block, _ = dns_mod.build_dns_and_rules(
+        _dns(remote_via_tunnel=True, servers=["1.1.1.1"]), [], PROXY_HOST, server_ip=None)
+    assert "hosts" not in block
+    bootstrap = block["servers"][0]
+    assert bootstrap["domains"] == [f"full:{PROXY_HOST}"]
+
+
 def test_hostname_dns_server_also_gets_a_bootstrap_entry():
     block, _ = dns_mod.build_dns_and_rules(
         _dns(remote_via_tunnel=True, servers=["https://dns.google/dns-query", "1.1.1.1"]),
@@ -347,13 +388,17 @@ def test_ip_proxy_with_ip_servers_gets_no_bootstrap():
     assert rules == [{"type": "field", "inboundTag": ["dns-module"], "outboundTag": "proxy"}]
 
 
-def test_bootstrap_prefers_domestic_server_when_present():
+def test_bootstrap_never_uses_a_domestic_server_even_when_one_is_set():
+    # A domestic resolver returns poisoned answers for blocked foreign
+    # names (e.g. a DoH hostname) in the exact scenario this bootstrap
+    # exists to resolve correctly, so it must never be picked here even
+    # when one is configured and would otherwise be preferred.
     block, _ = dns_mod.build_dns_and_rules(
         _dns(remote_via_tunnel=True, domestic_servers=["178.22.122.100"], servers=["1.1.1.1"]),
         ["domain:ir"], PROXY_HOST)
     bootstrap = next(s for s in block["servers"] if s.get("tag") == "direct-dns"
                       and f"full:{PROXY_HOST}" in s.get("domains", []))
-    assert bootstrap["address"] == "178.22.122.100"
+    assert bootstrap["address"] == "1.1.1.1"
 
 
 def test_bootstrap_falls_back_to_1111_with_no_domestic_or_literal_ip_servers():
@@ -432,6 +477,14 @@ def test_defaults_produce_no_dns_routing_rules_byte_identical_render():
     template = json.loads(TEMPLATE.read_text(encoding="utf-8"))
     out = _render(dns_cfg=_dns())
     assert out["routing"]["rules"] == template["routing"]["rules"]
+
+
+def test_server_ip_is_a_no_op_without_remote_via_tunnel():
+    # server_ip only matters once remote_via_tunnel is on; passing it with
+    # default DNS settings must render exactly as if it were never passed.
+    with_ip = _render(dns_cfg=_dns(), server_ip="198.51.100.7")
+    without_ip = _render(dns_cfg=_dns())
+    assert with_ip == without_ip
 
 
 def test_domestic_dns_rule_lands_after_template_rules_and_before_a_user_catch_all():

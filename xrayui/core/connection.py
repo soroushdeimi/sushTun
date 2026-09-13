@@ -129,7 +129,8 @@ class Connection:
         cfg = render.build(profile, iface.alias, routing_rules=rules,
                            domain_strategy=routing.domain_strategy_for(cfgs["routing"]),
                            stats=True, log_level=cfgs.get("log_level"),
-                           dns_cfg=cfgs.get("dns"), tun_mtu=cfgs.get("tun_mtu"))
+                           dns_cfg=cfgs.get("dns"), tun_mtu=cfgs.get("tun_mtu"),
+                           server_ip=server_ip)
 
         self._log("Starting Xray...")
         network.remove_routes(server_ip)
@@ -209,7 +210,7 @@ class Connection:
         cfg = render.build(profile, iface.alias, routing_rules=rules,
                             domain_strategy=routing.domain_strategy_for(cfgs["routing"]),
                             stats=True, include_tun=False, log_level=cfgs.get("log_level"),
-                            dns_cfg=cfgs.get("dns"))
+                            dns_cfg=cfgs.get("dns"), server_ip=server_ip)
 
         self._log("Starting Xray...")
         network.remove_routes(server_ip)
