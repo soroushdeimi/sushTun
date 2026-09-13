@@ -12,15 +12,19 @@ from pathlib import Path
 from .. import paths
 from . import dns as dns_mod
 from . import outbounds
+from . import routing as routing_mod
 from . import settings as app_settings
 from .metrics import STATS_API_PORT
 from .profiles import Profile
 
 
-def _apply_routing(cfg: dict, rules: list[dict]) -> None:
+def _apply_routing(cfg: dict, rules: list[dict], domain_strategy: str | None) -> None:
     routing = cfg.setdefault("routing", {})
+    # User rules go after the template's own (dns-in / port-53 rules), so a
+    # custom rule can never intercept a DNS query before it reaches dns-out.
     routing.setdefault("rules", []).extend(rules)
-    routing["domainStrategy"] = "IPIfNonMatch"
+    strategy = domain_strategy if domain_strategy in routing_mod.DOMAIN_STRATEGIES else None
+    routing["domainStrategy"] = strategy or "IPIfNonMatch"
 
 
 def _drop_tun_inbound(cfg: dict) -> None:
@@ -72,6 +76,7 @@ def build_text(
     iface_alias: str,
     template_path: Path | None = None,
     routing_rules: list[dict] | None = None,
+    domain_strategy: str | None = None,
     stats: bool = False,
     include_tun: bool = True,
     log_level: str | None = None,
@@ -84,7 +89,7 @@ def build_text(
     if not include_tun:
         _drop_tun_inbound(cfg)
     if routing_rules:
-        _apply_routing(cfg, routing_rules)
+        _apply_routing(cfg, routing_rules, domain_strategy)
     if stats:
         _apply_stats(cfg)
     if log_level:
@@ -102,6 +107,7 @@ def build(
     iface_alias: str,
     template_path: Path | None = None,
     routing_rules: list[dict] | None = None,
+    domain_strategy: str | None = None,
     stats: bool = False,
     include_tun: bool = True,
     log_level: str | None = None,
@@ -117,6 +123,7 @@ def build(
             iface_alias,
             template_path=template_path,
             routing_rules=routing_rules,
+            domain_strategy=domain_strategy,
             stats=stats,
             include_tun=include_tun,
             log_level=log_level,

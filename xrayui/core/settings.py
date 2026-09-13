@@ -30,6 +30,10 @@ DEFAULTS: dict = {
         "hosts": [],
     },
     "routing": {
+        # The flat toggles below are "Simple" mode -- unreshaped, so no
+        # migration is needed for them. "mode" is either "simple" or a
+        # sets[i]["id"]; an id that no longer exists falls back to simple
+        # (routing.build_rules never raises on a bad/missing mode).
         "low_usage": False,
         "block_ads": True,
         "direct_iran": True,
@@ -39,6 +43,15 @@ DEFAULTS: dict = {
         "bypass_domains": [],
         "bypass_ips": [],
         "proxy_domains": [],
+        "mode": "simple",
+        "domain_strategy": "IPIfNonMatch",
+        # Each set: {id, name, domain_strategy, rules: [rule, ...]}. Each
+        # rule: {remarks, enabled, outbound: proxy|direct|block, domain: [],
+        # ip: [], port: "", network: "", protocol: [], process: []}. A list,
+        # not a dict, so _merge replaces it wholesale like dns.hosts already
+        # does -- routing.convert_user_rule sanitizes every field on its own
+        # since nothing here validates the set's shape.
+        "sets": [],
     },
     "gateway": {
         "enabled": False,

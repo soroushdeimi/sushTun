@@ -126,8 +126,9 @@ class Connection:
         self._log("Building runtime config...")
         cfgs = app_settings.load()
         rules = routing.build_rules(cfgs["routing"])
-        cfg = render.build(profile, iface.alias, routing_rules=rules, stats=True,
-                           log_level=cfgs.get("log_level"),
+        cfg = render.build(profile, iface.alias, routing_rules=rules,
+                           domain_strategy=routing.domain_strategy_for(cfgs["routing"]),
+                           stats=True, log_level=cfgs.get("log_level"),
                            dns_cfg=cfgs.get("dns"), tun_mtu=cfgs.get("tun_mtu"))
 
         self._log("Starting Xray...")
@@ -205,8 +206,9 @@ class Connection:
         self._log("Building runtime config (macOS: SOCKS + tun2socks bridge)...")
         cfgs = app_settings.load()
         rules = routing.build_rules(cfgs["routing"])
-        cfg = render.build(profile, iface.alias, routing_rules=rules, stats=True,
-                            include_tun=False, log_level=cfgs.get("log_level"),
+        cfg = render.build(profile, iface.alias, routing_rules=rules,
+                            domain_strategy=routing.domain_strategy_for(cfgs["routing"]),
+                            stats=True, include_tun=False, log_level=cfgs.get("log_level"),
                             dns_cfg=cfgs.get("dns"))
 
         self._log("Starting Xray...")
