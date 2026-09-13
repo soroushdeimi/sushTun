@@ -29,7 +29,7 @@ a = Analysis(
     [str(ROOT / "app_main.py")],
     pathex=[str(ROOT)],
     datas=datas,
-    hiddenimports=["cv2"],
+    hiddenimports=["cv2", "segno"],
     excludes=["tkinter"],
     noarchive=False,
 )
