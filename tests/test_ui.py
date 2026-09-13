@@ -422,6 +422,7 @@ def test_settings_dialog_backup_button_writes_a_zip_and_confirms(
 
     dlg = SettingsDialog(defaults)
     dlg._backup_now()
+    _pump(lambda: not dlg._backup_busy)
 
     assert dest.exists()
     assert infos

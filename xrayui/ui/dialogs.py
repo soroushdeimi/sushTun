@@ -608,6 +608,7 @@ class SettingsDialog(QDialog):
         backup_layout.addLayout(backup_row)
         layout.addWidget(backup_group)
         self._restored = False
+        self._backup_busy = False
 
         # -- Advanced (Phase 5 core options) -----------------------------
         core_cfg = settings.get("core") or {}
@@ -845,17 +846,29 @@ class SettingsDialog(QDialog):
         return self._restored
 
     def _backup_now(self) -> None:
+        if self._backup_busy:
+            return
         default_name = f"sushTun-backup-{time.strftime('%Y%m%d')}.zip"
         path, _ = QFileDialog.getSaveFileName(self, "Back up sushTun", default_name,
                                               "Zip archives (*.zip)")
         if not path:
             return
-        try:
-            backup_mod.backup(Path(path))
-        except OSError as exc:
-            QMessageBox.warning(self, "Backup failed", str(exc))
-            return
-        QMessageBox.information(self, "Backup complete", f"Saved to {path}")
+        self._backup_busy = True
+        self.btn_backup.setEnabled(False)
+
+        def done(result=None, error=None):
+            self._backup_busy = False
+            self.btn_backup.setEnabled(True)
+            if error:
+                QMessageBox.warning(self, "Backup failed", str(error))
+                return
+            QMessageBox.information(self, "Backup complete", f"Saved to {path}")
+
+        # When elevated, backup() writes the finished zip through
+        # core.userfs, which spawns a few short-lived subprocesses (each
+        # with its own timeout) rather than a single instant local write --
+        # off the UI thread, same as the Startup save already runs.
+        self._run_async(lambda: backup_mod.backup(Path(path)), done)
 
     def _restore_now(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self, "Restore sushTun backup", "",
