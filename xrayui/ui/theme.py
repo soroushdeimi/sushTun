@@ -15,9 +15,15 @@ LINE = "#38383c"
 _FONT = '"-apple-system", "SF Pro Text", "Inter", "Segoe UI", "Ubuntu", "Cantarell", sans-serif'
 _MONO = '"SF Mono", "JetBrains Mono", "Cascadia Code", "Ubuntu Mono", "Consolas", monospace'
 
-STYLESHEET = f"""
+
+def build_stylesheet(font: str = _FONT) -> str:
+    """The stylesheet with `font` as the UI font family list -- ui/app.py
+    calls this with Persian fonts prepended to _FONT when the language is
+    fa, since STYLESHEET below is already baked in at import time and
+    can't pick up a later change to _FONT on its own."""
+    return f"""
 * {{
-    font-family: {_FONT};
+    font-family: {font};
     font-size: 13px;
     color: {TEXT};
 }}
@@ -149,3 +155,6 @@ QMenu::item {{ padding: 5px 22px 5px 12px; border-radius: 5px; background: trans
 QMenu::item:selected {{ background: {ACCENT}; color: white; }}
 QMenu::separator {{ height: 1px; background: #45454a; margin: 4px 8px; }}
 """
+
+
+STYLESHEET = build_stylesheet()
