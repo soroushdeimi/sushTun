@@ -6,9 +6,49 @@ gecko are out of scope; only the salamander obfuscation mask is built.
 """
 from __future__ import annotations
 
-from ..profiles import Profile
+import re
+
+from ..profiles import Profile, normalize_pcs, valid_pcs
 
 _PLACEHOLDER = "__IFACE__"
+
+_PORTS_RE = re.compile(r"^\d+(-\d+)?(,\d+(-\d+)?)*$")
+
+
+def normalize_ports(raw: str) -> str | None:
+    """udpHop.ports goes straight into an Xray range/list expression, so a
+    bad value must be caught here rather than only breaking port-hopping
+    at connect time. ':' is accepted as an alternate separator some links
+    use and normalized to '-'; anything that isn't a valid range/list of
+    ports 1-65535 is dropped entirely -- udpHop is omitted rather than
+    sent malformed, so the server's plain listening port still works.
+    """
+    s = (raw or "").replace(":", "-").replace(" ", "")
+    if not s or not _PORTS_RE.match(s):
+        return None
+    for part in s.split(","):
+        for bound in part.split("-"):
+            if not 1 <= int(bound) <= 65535:
+                return None
+    return s
+
+
+def normalize_hop_interval(raw: str) -> str | None:
+    """udpHop.interval: Xray accepts a plain integer (seconds) or its own
+    "1-2" range form, but -- confirmed against a real xray binary --
+    refuses a unit suffix like "30s" outright ('Invalid integer range').
+    A bare number or one with a trailing "s" are both accepted here and
+    normalized; anything else (including empty) is omitted so Xray falls
+    back to its own default instead of refusing to start.
+    """
+    s = (raw or "").strip()
+    if s.isdigit():
+        return s
+    if s.endswith("s") and s[:-1].isdigit():
+        return s[:-1]
+    if re.fullmatch(r"\d+-\d+", s):
+        return s
+    return None
 
 
 def apply(proxy: dict, p: Profile) -> None:
@@ -21,7 +61,9 @@ def apply(proxy: dict, p: Profile) -> None:
     if p.alpn:
         tls["alpn"] = [a.strip() for a in p.alpn.split(",") if a.strip()]
     if p.pcs:
-        tls["pinnedPeerCertSha256"] = p.pcs
+        pcs = normalize_pcs(p.pcs)
+        if valid_pcs(pcs):
+            tls["pinnedPeerCertSha256"] = pcs
     if p.vcn:
         tls["verifyPeerCertByName"] = p.vcn
 
@@ -30,8 +72,13 @@ def apply(proxy: dict, p: Profile) -> None:
     # hard-refuses "allowInsecure" now.
 
     quic: dict = {}
-    if p.hy2_ports:
-        quic["udpHop"] = {"ports": p.hy2_ports, "interval": p.hy2_hop_interval or "30"}
+    ports = normalize_ports(p.hy2_ports)
+    if ports:
+        hop: dict = {"ports": ports}
+        interval = normalize_hop_interval(p.hy2_hop_interval)
+        if interval:
+            hop["interval"] = interval
+        quic["udpHop"] = hop
     if p.hy2_up_mbps > 0 or p.hy2_down_mbps > 0:
         quic["congestion"] = "brutal"
         if p.hy2_up_mbps > 0:

@@ -227,9 +227,11 @@ def test_hysteria2_port_hopping():
     }
 
 
-def test_hysteria2_port_hopping_defaults_interval_to_30():
+def test_hysteria2_port_hopping_without_interval_omits_it():
+    # No interval typed: omit the key entirely and let Xray use its own
+    # default, rather than us guessing one.
     out = outbounds.build(_hy2(hy2_ports="20000-30000"), "proxy")
-    assert out["streamSettings"]["finalmask"]["quicParams"]["udpHop"]["interval"] == "30"
+    assert "interval" not in out["streamSettings"]["finalmask"]["quicParams"]["udpHop"]
 
 
 def test_hysteria2_brutal_up_down():
@@ -256,6 +258,94 @@ def test_hysteria2_new_tls_keys():
     assert tls["alpn"] == ["h3"]
     assert tls["pinnedPeerCertSha256"] == "ab" * 32
     assert tls["verifyPeerCertByName"] == "a.example.com"
+
+
+# -- hop interval / port range / pcs hardening (review fix round) -----------
+def test_hysteria2_hop_interval_accepts_bare_seconds_and_trailing_s():
+    from xrayui.core.outbounds.hysteria2 import normalize_hop_interval
+    assert normalize_hop_interval("30") == "30"
+    assert normalize_hop_interval("30s") == "30"
+    assert normalize_hop_interval("10-30") == "10-30"
+
+
+def test_hysteria2_hop_interval_rejects_junk_without_raising():
+    from xrayui.core.outbounds.hysteria2 import normalize_hop_interval
+    assert normalize_hop_interval("abc") is None
+    assert normalize_hop_interval("") is None
+    assert normalize_hop_interval("30x") is None
+
+
+@pytest.mark.parametrize("interval,expect_key", [
+    ("30s", True), ("abc", False), ("10-30", True),
+])
+def test_hysteria2_xray_test_accepts_or_omits_hop_interval(
+    tmp_path, monkeypatch, interval, expect_key,
+):
+    _skip_if_no_binary()
+    monkeypatch.setattr(xraycheck.paths, "state_dir", lambda: tmp_path)
+    p = _hy2(hy2_ports="20000-30000", hy2_hop_interval=interval)
+    out = outbounds.build(p, "proxy")
+    has_key = "interval" in out["streamSettings"]["finalmask"]["quicParams"]["udpHop"]
+    assert has_key == expect_key
+    text = render.build_text(p, "lo", TEMPLATE, include_tun=False)
+    assert xraycheck.check_config(text) is None, interval
+
+
+def test_hysteria2_ports_accepts_colon_and_comma_forms():
+    from xrayui.core.outbounds.hysteria2 import normalize_ports
+    assert normalize_ports("20000-30000") == "20000-30000"
+    assert normalize_ports("20000:30000") == "20000-30000"
+    assert normalize_ports("20000, 30000-31000") == "20000,30000-31000"
+
+
+def test_hysteria2_ports_rejects_junk_and_out_of_range_without_raising():
+    from xrayui.core.outbounds.hysteria2 import normalize_ports
+    assert normalize_ports("garbage") is None
+    assert normalize_ports("") is None
+    assert normalize_ports("0-70000") is None
+    assert normalize_ports("99999") is None
+
+
+def test_hysteria2_garbage_ports_omits_udphop_but_still_validates(tmp_path, monkeypatch):
+    _skip_if_no_binary()
+    monkeypatch.setattr(xraycheck.paths, "state_dir", lambda: tmp_path)
+    p = _hy2(hy2_ports="not-a-port-range")
+    out = outbounds.build(p, "proxy")
+    assert "udpHop" not in out["streamSettings"]["finalmask"]["quicParams"]
+    text = render.build_text(p, "lo", TEMPLATE, include_tun=False)
+    assert xraycheck.check_config(text) is None
+
+
+def test_hysteria2_pcs_is_normalized_from_colon_uppercase_form():
+    colon_form = ":".join(["AB"] * 32)
+    out = outbounds.build(_hy2(pcs=colon_form), "proxy")
+    assert out["streamSettings"]["tlsSettings"]["pinnedPeerCertSha256"] == "ab" * 32
+
+
+def test_hysteria2_invalid_pcs_is_dropped_not_rendered():
+    out = outbounds.build(_hy2(pcs="not-a-valid-pin"), "proxy")
+    assert "pinnedPeerCertSha256" not in out["streamSettings"]["tlsSettings"]
+
+
+@pytest.mark.parametrize("protocol", ["vless", "vmess", "trojan", "shadowsocks"])
+def test_pcs_is_normalized_for_every_stream_protocol(protocol):
+    id_ = "11111111-1111-1111-1111-111111111111" if protocol == "vmess" else "pw"
+    kwargs = {"ss_method": "aes-256-gcm"} if protocol == "shadowsocks" else {}
+    colon_form = ":".join(["CD"] * 32)
+    p = Profile(protocol=protocol, address="a.example.com", port=443, id=id_,
+               security="tls", sni="a.example.com", pcs=colon_form, **kwargs)
+    out = outbounds.build(p, "proxy")
+    assert out["streamSettings"]["tlsSettings"]["pinnedPeerCertSha256"] == "cd" * 32
+
+
+@pytest.mark.parametrize("protocol", ["vless", "vmess", "trojan", "shadowsocks"])
+def test_invalid_pcs_is_dropped_for_every_stream_protocol(protocol):
+    id_ = "11111111-1111-1111-1111-111111111111" if protocol == "vmess" else "pw"
+    kwargs = {"ss_method": "aes-256-gcm"} if protocol == "shadowsocks" else {}
+    p = Profile(protocol=protocol, address="a.example.com", port=443, id=id_,
+               security="tls", sni="a.example.com", pcs="garbage", **kwargs)
+    out = outbounds.build(p, "proxy")
+    assert "pinnedPeerCertSha256" not in out["streamSettings"]["tlsSettings"]
 
 
 @pytest.mark.parametrize("variant,kwargs", [
