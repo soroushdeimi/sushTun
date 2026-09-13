@@ -4,6 +4,7 @@ path and subprocess call is monkeypatched.
 """
 from __future__ import annotations
 
+import os
 import types
 
 import pytest
@@ -21,6 +22,12 @@ def test_polkit_rule_text_for_a_given_user():
     assert "polkit.Result.YES" in text
     # Never the broad exec grant -- that would let anyone run any command.
     assert "org.freedesktop.policykit.exec" not in text
+
+
+def test_polkit_rule_text_refuses_a_username_with_a_quote():
+    # A crafted account name must never be interpolated raw into the JS rule.
+    with pytest.raises(ValueError):
+        autostart.polkit_rule_text('alice" || true; //')
 
 
 def test_desktop_file_text_points_at_the_installed_exe_with_autostart_flag():
@@ -99,7 +106,7 @@ def test_is_supported_linux_installed_with_a_real_user(monkeypatch):
 
 
 # -- enable/disable: Linux ----------------------------------------------------
-def test_enable_linux_writes_the_rule_and_desktop_file_and_chowns_them(monkeypatch, tmp_path):
+def test_enable_linux_writes_the_rule_and_desktop_file_without_chowning(monkeypatch, tmp_path):
     monkeypatch.setattr(autostart, "IS_WIN", False)
     monkeypatch.setattr(autostart, "IS_MAC", False)
     monkeypatch.setattr(autostart.paths, "installed", lambda: True)
@@ -111,11 +118,17 @@ def test_enable_linux_writes_the_rule_and_desktop_file_and_chowns_them(monkeypat
     monkeypatch.setattr(autostart, "_desktop_file",
                         lambda user: home / ".config" / "autostart" / "sushtun.desktop")
 
-    chowned = []
-    monkeypatch.setattr(autostart.os, "chown", lambda path, uid, gid: chowned.append((path, uid, gid)))
+    # The desktop file is now written as the real user (core/userfs.py), so
+    # it is already owned by them the moment it's created -- a chown here
+    # would mean root touched a user-controlled path, exactly the bug this
+    # was fixed for.
+    def raise_chown(*a, **k):
+        raise AssertionError("must never chown: the file is created by the user, not root")
+    monkeypatch.setattr(autostart.os, "chown", raise_chown)
     monkeypatch.setattr(
         "pwd.getpwnam",
-        lambda name: types.SimpleNamespace(pw_name=name, pw_uid=1000, pw_gid=1000, pw_dir=str(home)),
+        lambda name: types.SimpleNamespace(pw_name=name, pw_uid=os.getuid(), pw_gid=os.getgid(),
+                                            pw_dir=str(home)),
     )
 
     autostart.enable()
@@ -125,10 +138,19 @@ def test_enable_linux_writes_the_rule_and_desktop_file_and_chowns_them(monkeypat
     desktop = home / ".config" / "autostart" / "sushtun.desktop"
     assert desktop.exists()
     assert "--autostart" in desktop.read_text()
-    # The desktop file, its parent and grandparent dirs were all handed back.
-    chowned_paths = {str(c[0]) for c in chowned}
-    assert str(desktop) in chowned_paths
-    assert all(uid == 1000 and gid == 1000 for _, uid, gid in chowned)
+
+
+def test_write_polkit_rule_refuses_a_pre_existing_symlink(monkeypatch, tmp_path):
+    real = tmp_path / "real.rules"
+    real.write_text("old", encoding="utf-8")
+    link = tmp_path / "49-sushtun.rules"
+    link.symlink_to(real)
+    monkeypatch.setattr(autostart, "POLKIT_RULE", link)
+
+    with pytest.raises(RuntimeError):
+        autostart._write_polkit_rule("alice")
+
+    assert real.read_text(encoding="utf-8") == "old"
 
 
 def test_disable_linux_removes_both_files(monkeypatch, tmp_path):
@@ -141,6 +163,10 @@ def test_disable_linux_removes_both_files(monkeypatch, tmp_path):
     desktop.write_text("x")
     monkeypatch.setattr(autostart, "_real_user", lambda: "alice")
     monkeypatch.setattr(autostart, "_desktop_file", lambda user: desktop)
+    monkeypatch.setattr(
+        "pwd.getpwnam",
+        lambda name: types.SimpleNamespace(pw_name=name, pw_uid=os.getuid(), pw_gid=os.getgid()),
+    )
 
     autostart.disable()
 

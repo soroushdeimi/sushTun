@@ -8,12 +8,14 @@ later -- a much broader hole than this feature is worth.
 """
 from __future__ import annotations
 
+import json
 import os
+import re
 import sys
 from pathlib import Path
 
 from .. import paths
-from . import proc
+from . import proc, userfs
 
 IS_WIN = sys.platform == "win32"
 IS_MAC = sys.platform == "darwin"
@@ -46,13 +48,22 @@ def _desktop_file(user: str) -> Path:
     return home / ".config" / "autostart" / "sushtun.desktop"
 
 
+_USERNAME_RE = re.compile(r"^[A-Za-z0-9._@-]{1,64}$")
+
+
 def polkit_rule_text(user: str) -> str:
     # Scoped to exactly our own action id, this one user, and only while
     # they're the active local session -- never org.freedesktop.policykit.
-    # exec, which would grant running arbitrary commands as root.
+    # exec, which would grant running arbitrary commands as root. The
+    # username comes from pwd (the system's own account database), but
+    # it's still interpolated into a JS literal: validate the character
+    # set and use json.dumps for the actual quoting/escaping rather than
+    # trusting a raw f-string to be safe against a crafted account name.
+    if not _USERNAME_RE.match(user):
+        raise ValueError(f"unexpected user name for the login rule: {user!r}")
     return (
         "polkit.addRule(function(action, subject) {\n"
-        f'    if (action.id == "{POLICY_ID}" && subject.user == "{user}" '
+        f'    if (action.id == "{POLICY_ID}" && subject.user == {json.dumps(user)} '
         "&& subject.local && subject.active) {\n"
         "        return polkit.Result.YES;\n"
         "    }\n"
@@ -100,6 +111,19 @@ def disable() -> None:
         _disable_linux()
 
 
+def _write_polkit_rule(user: str) -> None:
+    # /etc/polkit-1/rules.d is root-owned, so this part legitimately stays
+    # a root write -- but still atomic (tmp + os.replace) and refusing to
+    # write through a pre-existing symlink at the rule's own path.
+    POLKIT_RULE.parent.mkdir(parents=True, exist_ok=True)
+    if POLKIT_RULE.is_symlink():
+        raise RuntimeError(f"refusing to write through a symlink at {POLKIT_RULE}")
+    tmp = POLKIT_RULE.with_suffix(".tmp")
+    tmp.write_text(polkit_rule_text(user), encoding="utf-8")
+    tmp.chmod(0o644)
+    os.replace(tmp, POLKIT_RULE)
+
+
 def _enable_linux() -> None:
     user = _real_user()
     if user is None:
@@ -107,26 +131,24 @@ def _enable_linux() -> None:
     import pwd
     pw = pwd.getpwnam(user)
 
-    POLKIT_RULE.parent.mkdir(parents=True, exist_ok=True)
-    POLKIT_RULE.write_text(polkit_rule_text(user), encoding="utf-8")
-    POLKIT_RULE.chmod(0o644)
+    _write_polkit_rule(user)
 
+    # ~/.config/autostart is entirely user-controlled: a local user could
+    # have pre-planted it (or the .desktop file itself) as a symlink to a
+    # root-owned file. Writing it as that user, not as root, means such a
+    # symlink can only ever be followed to wherever the user could already
+    # write themselves -- so no chown is needed, or safe, afterwards.
     desktop = _desktop_file(user)
-    desktop.parent.mkdir(parents=True, exist_ok=True)
-    desktop.write_text(_desktop_file_text(), encoding="utf-8")
-    desktop.chmod(0o644)
-    # Written as root (via pkexec); hand it back to the real user so their
-    # own session can read and later remove it.
-    os.chown(desktop.parent.parent, pw.pw_uid, pw.pw_gid)  # ~/.config
-    os.chown(desktop.parent, pw.pw_uid, pw.pw_gid)  # ~/.config/autostart
-    os.chown(desktop, pw.pw_uid, pw.pw_gid)
+    userfs.write_as_user(desktop, _desktop_file_text().encode("utf-8"), pw.pw_uid, pw.pw_gid)
 
 
 def _disable_linux() -> None:
     POLKIT_RULE.unlink(missing_ok=True)
     user = _real_user()
     if user is not None:
-        _desktop_file(user).unlink(missing_ok=True)
+        import pwd
+        pw = pwd.getpwnam(user)
+        userfs.unlink_as_user(_desktop_file(user), pw.pw_uid, pw.pw_gid)
 
 
 _REGISTER_PS = """
@@ -148,6 +170,12 @@ def _action() -> tuple[str, str]:
 
 
 def _enable_windows() -> None:
+    # $env:USERNAME is the standard user who launched sushTun, not whoever
+    # supplied the UAC credentials -- but "over-the-shoulder" UAC (a
+    # standard user elevating with a different admin's password) still
+    # registers the task for the standard user's own session, which is
+    # what New-ScheduledTaskPrincipal -UserId actually names. A known,
+    # accepted limitation, not something this fixes.
     exe, arg = _action()
     proc.powershell(
         _REGISTER_PS,
