@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from xrayui.core import render
+from xrayui.core import outbounds, render
 from xrayui.core.importer import parse_vless
 from xrayui.core.profiles import Profile
 
@@ -97,3 +97,17 @@ def test_wireguard_ipv6_endpoint_is_bracketed():
     out = json.loads(render.build_text(p, "Wi-Fi", TEMPLATE))
     proxy = [o for o in out["outbounds"] if o.get("tag") == "proxy"][0]
     assert proxy["settings"]["peers"][0]["endpoint"] == "[2606:4700:d0::a29f:c001]:2408"
+
+
+def test_outbounds_build_returns_a_standalone_tagged_outbound():
+    p = parse_vless(SAMPLE)
+    out = outbounds.build(p, "out-123")
+    assert out["tag"] == "out-123"
+    assert out["protocol"] == "vless"
+    assert out["settings"]["vnext"][0]["address"] == p.address
+
+    wg = Profile(protocol="wireguard", address="1.2.3.4", port=51820, id="S", pbk="P")
+    wg_out = outbounds.build(wg, "out-wg")
+    assert wg_out["tag"] == "out-wg"
+    assert wg_out["protocol"] == "wireguard"
+    assert "streamSettings" not in wg_out

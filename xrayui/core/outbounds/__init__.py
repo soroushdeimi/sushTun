@@ -13,9 +13,23 @@ _BUILDERS = {
 }
 
 
+def _builder_for(p: Profile):
+    return _BUILDERS.get((p.protocol or "").lower(), vless.apply)
+
+
 def apply_profile(cfg: dict, p: Profile) -> None:
     proxy = next((o for o in cfg.get("outbounds", []) if o.get("tag") == "proxy"), None)
     if proxy is None:
         raise ValueError("template has no outbound tagged 'proxy'")
-    builder = _BUILDERS.get((p.protocol or "").lower(), vless.apply)
-    builder(proxy, p)
+    _builder_for(p)(proxy, p)
+
+
+def build(p: Profile, tag: str) -> dict:
+    """A standalone outbound dict for p, tagged `tag`.
+
+    Used to build one-off outbounds outside config.template.json (the speed
+    test builds a whole config from scratch, one outbound per profile).
+    """
+    proxy: dict = {"tag": tag}
+    _builder_for(p)(proxy, p)
+    return proxy
