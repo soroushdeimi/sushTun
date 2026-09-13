@@ -228,9 +228,26 @@ def _profile_from_config(cfg: dict) -> Profile:
     user = (vnext.get("users") or [{}])[0]
     stream = proxy.get("streamSettings", {})
     security = stream.get("security", "none")
+    network = stream.get("network", "tcp")
     tls = stream.get("tlsSettings", {}) if security == "tls" else {}
     reality = stream.get("realitySettings", {}) if security == "reality" else {}
     alpn = tls.get("alpn", [])
+
+    path = host = service_name = ""
+    if network == "ws":
+        ws = stream.get("wsSettings", {}) or {}
+        path = ws.get("path", "")
+        headers = ws.get("headers", {}) or {}
+        host = headers.get("Host") or headers.get("host") or ""
+    elif network == "grpc":
+        grpc = stream.get("grpcSettings", {}) or {}
+        service_name = grpc.get("serviceName", "")
+    elif network in ("h2", "http"):
+        h2 = stream.get("httpSettings", {}) or {}
+        path = h2.get("path", "")
+        h2_host = h2.get("host", [])
+        host = ",".join(h2_host) if isinstance(h2_host, list) else str(h2_host)
+
     return Profile(
         name=vnext.get("address", "imported"),
         protocol=proxy.get("protocol", "vless"),
@@ -239,7 +256,7 @@ def _profile_from_config(cfg: dict) -> Profile:
         id=user.get("id", ""),
         encryption=user.get("encryption", "none") or "none",
         flow=user.get("flow", ""),
-        network=stream.get("network", "tcp"),
+        network=network,
         security=security,
         sni=tls.get("serverName", "") or reality.get("serverName", ""),
         fp=tls.get("fingerprint", "") or reality.get("fingerprint", ""),
@@ -247,6 +264,9 @@ def _profile_from_config(cfg: dict) -> Profile:
         pbk=reality.get("publicKey", ""),
         sid=reality.get("shortId", ""),
         spx=reality.get("spiderX", ""),
+        path=path,
+        host=host,
+        service_name=service_name,
     )
 
 

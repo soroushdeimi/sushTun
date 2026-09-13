@@ -61,6 +61,68 @@ def test_parse_json_full_config():
     assert p.network == "ws" and p.security == "tls" and p.sni == "a.com"
 
 
+def test_parse_json_keeps_ws_path_and_host():
+    cfg = {
+        "outbounds": [
+            {
+                "tag": "proxy",
+                "protocol": "vless",
+                "settings": {"vnext": [{"address": "1.2.3.4", "port": 443,
+                                        "users": [{"id": "u", "encryption": "none"}]}]},
+                "streamSettings": {
+                    "network": "ws", "security": "tls",
+                    "tlsSettings": {"serverName": "a.com"},
+                    "wsSettings": {"path": "/ws-path", "headers": {"Host": "a.com"}},
+                },
+            }
+        ]
+    }
+    p = importer.parse_json(json.dumps(cfg))
+    assert p.path == "/ws-path"
+    assert p.host == "a.com"
+
+
+def test_parse_json_keeps_grpc_service_name():
+    cfg = {
+        "outbounds": [
+            {
+                "tag": "proxy",
+                "protocol": "vless",
+                "settings": {"vnext": [{"address": "1.2.3.4", "port": 443,
+                                        "users": [{"id": "u", "encryption": "none"}]}]},
+                "streamSettings": {
+                    "network": "grpc", "security": "tls",
+                    "tlsSettings": {"serverName": "a.com"},
+                    "grpcSettings": {"serviceName": "my-grpc-svc"},
+                },
+            }
+        ]
+    }
+    p = importer.parse_json(json.dumps(cfg))
+    assert p.service_name == "my-grpc-svc"
+
+
+def test_parse_json_keeps_h2_path_and_hosts():
+    cfg = {
+        "outbounds": [
+            {
+                "tag": "proxy",
+                "protocol": "vless",
+                "settings": {"vnext": [{"address": "1.2.3.4", "port": 443,
+                                        "users": [{"id": "u", "encryption": "none"}]}]},
+                "streamSettings": {
+                    "network": "h2", "security": "tls",
+                    "tlsSettings": {"serverName": "a.com"},
+                    "httpSettings": {"path": "/h2", "host": ["a.com", "b.com"]},
+                },
+            }
+        ]
+    }
+    p = importer.parse_json(json.dumps(cfg))
+    assert p.path == "/h2"
+    assert p.host == "a.com,b.com"
+
+
 WG_LINK = (
     "wireguard://cCWrsuGEXF6jGYh13IXrgA2lh7eJFRGX3h1VOZrNkmE="
     "@engage.cloudflareclient.com:2408"
