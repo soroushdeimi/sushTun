@@ -8,6 +8,7 @@ reverted it by hand.
 """
 from __future__ import annotations
 
+import http.client
 import os
 import shutil
 import urllib.request
@@ -30,6 +31,15 @@ SOURCES: dict[str, str] = {
 _MIN_SIZE = 100 * 1024  # a truncated download or an HTML error page is nowhere near this
 _FILES = ("geoip.dat", "geosite.dat")
 
+# Every geo source ships these, and validating with them forces Xray to
+# actually parse both files -- with no baseline, a user with every routing
+# toggle off has zero rules, so a truncated/garbage download that's still
+# over _MIN_SIZE would otherwise sail through unvalidated.
+_BASELINE_RULES = [
+    {"type": "field", "domain": ["geosite:private"], "outboundTag": "direct"},
+    {"type": "field", "ip": ["geoip:private"], "outboundTag": "direct"},
+]
+
 Fetch = Callable[[str], bytes]
 
 
@@ -39,8 +49,19 @@ class GeoUpdateError(Exception):
 
 def _default_fetch(url: str, timeout: float = 60.0) -> bytes:
     req = urllib.request.Request(url, headers={"User-Agent": "sushTun"})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 (fixed release URLs)
-        return resp.read()
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
+            data = resp.read()
+            length = resp.headers.get("Content-Length")
+    except http.client.IncompleteRead as exc:
+        # The connection closed before every promised byte arrived --
+        # resp.read() itself raises this rather than returning short.
+        raise GeoUpdateError(f"download incomplete: {exc}") from exc
+    if length is not None and len(data) != int(length):
+        # The full body arrived but doesn't match what the server promised
+        # (a lying/broken proxy, say) -- resp.read() alone wouldn't catch this.
+        raise GeoUpdateError(f"download incomplete: got {len(data)} bytes, expected {length}")
+    return data
 
 
 def update(source: str, fetch: Fetch | None = None) -> None:
@@ -68,7 +89,10 @@ def update(source: str, fetch: Fetch | None = None) -> None:
                 raise GeoUpdateError(f"{name} download looks truncated ({len(data)} bytes)")
             (new_dir / name).write_bytes(data)
 
-        rules = routing_mod.build_rules(app_settings.load()["routing"])
+        # The union of every mode's rules, not just the one active right
+        # now: switching to a different saved set later must not suddenly
+        # hit a category this source never had.
+        rules = _BASELINE_RULES + routing_mod.all_possible_rules(app_settings.load()["routing"])
         error = xraycheck.check_rules(rules, asset_dir=new_dir)
         if error:
             raise GeoUpdateError(f"new geo data rejected: {error}")

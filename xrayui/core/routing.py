@@ -255,3 +255,25 @@ def build_rules(r: dict) -> list[dict]:
 
 def has_custom_routing(r: dict) -> bool:
     return bool(build_rules(r))
+
+
+def all_possible_rules(r: dict) -> list[dict]:
+    """Every rule any mode -- simple, or any saved set -- could produce.
+
+    Used to validate a candidate geo data source before it's swapped in:
+    only checking the currently-active mode would let someone switch to a
+    different set later and immediately hit a geo category the new data
+    never had.
+    """
+    rules = list(_simple_rules(r))
+    for s in r.get("sets") or []:
+        if not isinstance(s, dict):
+            continue
+        for rule in s.get("rules") or []:
+            if not isinstance(rule, dict):
+                continue
+            try:
+                rules.extend(convert_user_rule(rule))
+            except Exception:
+                continue
+    return rules

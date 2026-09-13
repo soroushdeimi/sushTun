@@ -81,6 +81,61 @@ def test_unknown_source_raises_without_fetching(tmp_path, monkeypatch):
             AssertionError("should not fetch")))
 
 
+def test_garbage_over_min_size_is_rejected_even_with_zero_user_rules(tmp_path, monkeypatch):
+    # A user with every routing toggle off produces zero rules from
+    # build_rules(); without baseline geosite:private/geoip:private rules,
+    # a truncated-but->100KB download would sail through unvalidated
+    # because nothing would ever ask Xray to actually parse either file.
+    _skip_if_no_binary_or_real_geo_data()
+    _setup(tmp_path, monkeypatch, real=True)
+    import json
+    (tmp_path / "settings.json").write_text(json.dumps({
+        "routing": {"block_ads": False, "direct_iran": False, "direct_russia": False,
+                    "direct_china": False, "direct_private": False, "low_usage": False,
+                    "mode": "simple", "sets": []},
+    }), encoding="utf-8")
+
+    from xrayui.core import routing
+    from xrayui.core import settings as app_settings
+    assert routing.build_rules(app_settings.load()["routing"]) == []
+
+    def fetch(url):
+        return b"garbage padding, not a real geo file at all " * 3000  # > 100 KB
+
+    with pytest.raises(geo.GeoUpdateError):
+        geo.update("Loyalsoldier", fetch=fetch)
+    assert not (tmp_path / "geo.new").exists()
+
+
+def test_default_fetch_rejects_a_content_length_mismatch(monkeypatch):
+    import http.server
+    import threading
+
+    body = b"short body"
+
+    class _Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(body) + 500))  # lies
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args):
+            pass
+
+    srv = http.server.HTTPServer(("127.0.0.1", 0), _Handler)
+    port = srv.server_address[1]
+    thread = threading.Thread(target=srv.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with pytest.raises(geo.GeoUpdateError, match="incomplete"):
+            geo._default_fetch(f"http://127.0.0.1:{port}/geoip.dat", timeout=5)
+    finally:
+        srv.shutdown()
+        srv.server_close()
+        thread.join(timeout=2)
+
+
 def test_asset_dir_prefers_geo_dir_only_when_both_files_are_present(tmp_path, monkeypatch):
     monkeypatch.setattr(paths, "base_dir", lambda: tmp_path)
     monkeypatch.setattr(paths, "resource_dir", lambda: tmp_path)
