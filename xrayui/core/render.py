@@ -18,10 +18,23 @@ from .metrics import STATS_API_PORT
 from .profiles import Profile
 
 
+def _apply_dns_routing(cfg: dict, dns_rules: list[dict]) -> None:
+    """Insert DNS-related routing rules (domestic DNS / remote-via-tunnel)
+    right after the template's own rules and before any user rule. Called
+    before _apply_routing appends user rules, so "extend now" already
+    means "insert at the right index" -- routing.rules only holds the
+    template's own rules at this point. Without this, a user catch-all
+    ("port 0-65535 -> proxy") could capture a DNS query these rules exist
+    specifically to steer around it.
+    """
+    cfg.setdefault("routing", {}).setdefault("rules", []).extend(dns_rules)
+
+
 def _apply_routing(cfg: dict, rules: list[dict], domain_strategy: str | None) -> None:
     routing = cfg.setdefault("routing", {})
-    # User rules go after the template's own (dns-in / port-53 rules), so a
-    # custom rule can never intercept a DNS query before it reaches dns-out.
+    # User rules go after the template's own (dns-in / port-53 rules) and
+    # any DNS routing rules _apply_dns_routing already added, so a custom
+    # rule can never intercept a DNS query before it reaches dns-out.
     routing.setdefault("rules", []).extend(rules)
     strategy = domain_strategy if domain_strategy in routing_mod.DOMAIN_STRATEGIES else None
     routing["domainStrategy"] = strategy or "IPIfNonMatch"
@@ -39,9 +52,9 @@ def _apply_log_level(cfg: dict, level: str) -> None:
     cfg.setdefault("log", {})["loglevel"] = level
 
 
-def _apply_dns(cfg: dict, dns_cfg: dict) -> None:
-    """Overlay user DNS settings. Untouched keys keep the template's values."""
-    block = dns_mod.build_dns(dns_cfg)
+def _apply_dns_block(cfg: dict, block: dict) -> None:
+    """Overlay an already-built dns block. Untouched keys keep the
+    template's values."""
     if not block:
         return
     cfg.setdefault("dns", {}).update(block)
@@ -88,14 +101,26 @@ def build_text(
     outbounds.apply_profile(cfg, profile)
     if not include_tun:
         _drop_tun_inbound(cfg)
+
+    dns_block: dict = {}
+    if dns_cfg:
+        direct_domains = routing_mod.direct_domains(routing_rules or [])
+        dns_block, dns_routing_rules = dns_mod.build_dns_and_rules(
+            dns_cfg, direct_domains, profile.address)
+        if dns_routing_rules:
+            # Before _apply_routing: routing.rules only holds the
+            # template's own rules right now, so this is where "after the
+            # template's rules, before any user rule" actually happens.
+            _apply_dns_routing(cfg, dns_routing_rules)
+
     if routing_rules:
         _apply_routing(cfg, routing_rules, domain_strategy)
     if stats:
         _apply_stats(cfg)
     if log_level:
         _apply_log_level(cfg, log_level)
-    if dns_cfg:
-        _apply_dns(cfg, dns_cfg)
+    if dns_block:
+        _apply_dns_block(cfg, dns_block)
     if tun_mtu:
         _apply_mtu(cfg, tun_mtu)
     text = json.dumps(cfg, indent=2, ensure_ascii=False)
