@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 
 from ..core import share as share_mod
 from ..core.profiles import Profile
+from ..i18n import tr
 from .server_table import (
     COL_ACTIVE,
     COL_DELAY,
@@ -99,9 +100,9 @@ class StatusCard(QFrame):
         grid.setHorizontalSpacing(14)
         grid.setVerticalSpacing(8)
 
-        title = QLabel("Connection")
+        title = QLabel(tr("Connection"))
         title.setObjectName("H1")
-        self.pill = QLabel("DISCONNECTED")
+        self.pill = QLabel(tr("DISCONNECTED"))
         self.pill.setObjectName("PillOff")
         self.pill.setAlignment(Qt.AlignCenter)
         top = QHBoxLayout()
@@ -112,14 +113,14 @@ class StatusCard(QFrame):
 
         self._vals: dict[str, QLabel] = {}
         rows = [
-            ("Relay", "endpoint"),
-            ("Xray process", "process"),
-            ("Interface", "iface"),
-            ("Source IPv4", "ip"),
-            ("Gateway", "gateway"),
-            ("Tunnel ifIndex", "tun"),
-            ("Throughput", "throughput"),
-            ("Used this session", "used"),
+            (tr("Relay"), "endpoint"),
+            (tr("Xray process"), "process"),
+            (tr("Interface"), "iface"),
+            (tr("Source IPv4"), "ip"),
+            (tr("Gateway"), "gateway"),
+            (tr("Tunnel ifIndex"), "tun"),
+            (tr("Throughput"), "throughput"),
+            (tr("Used this session"), "used"),
         ]
         for i, (label, key) in enumerate(rows, start=1):
             k, v = _row(label)
@@ -133,7 +134,7 @@ class StatusCard(QFrame):
             self._vals[key].setText(value or "—")
 
     def set_connected(self, connected: bool) -> None:
-        self.pill.setText("CONNECTED" if connected else "DISCONNECTED")
+        self.pill.setText(tr("CONNECTED") if connected else tr("DISCONNECTED"))
         self.pill.setObjectName("PillOn" if connected else "PillOff")
         self.pill.style().unpolish(self.pill)
         self.pill.style().polish(self.pill)
@@ -161,12 +162,12 @@ class ProfilePanel(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        header = QLabel("Servers")
+        header = QLabel(tr("Servers"))
         header.setObjectName("H1")
         layout.addWidget(header)
 
         self.filter_edit = QLineEdit()
-        self.filter_edit.setPlaceholderText("Filter by name or address…")
+        self.filter_edit.setPlaceholderText(tr("Filter by name or address…"))
         layout.addWidget(self.filter_edit)
 
         self.model = ProfileTableModel()
@@ -205,28 +206,28 @@ class ProfilePanel(QWidget):
 
         self._testing = False
         toolbar = QHBoxLayout()
-        self.btn_import = QPushButton("Import")
+        self.btn_import = QPushButton(tr("Import"))
         self.btn_import.setObjectName("Primary")
         self.btn_import.clicked.connect(self.importRequested)
 
         self.btn_test = QToolButton()
-        self.btn_test.setText("Test")
+        self.btn_test.setText(tr("Test"))
         self.btn_test.setPopupMode(QToolButton.MenuButtonPopup)
         self.btn_test.clicked.connect(lambda: self._start_test(real=True))
         test_menu = QMenu(self.btn_test)
-        test_menu.addAction("Real delay", lambda: self._start_test(real=True))
-        test_menu.addAction("TCP ping", lambda: self._start_test(real=False))
+        test_menu.addAction(tr("Real delay"), lambda: self._start_test(real=True))
+        test_menu.addAction(tr("TCP ping"), lambda: self._start_test(real=False))
         self.btn_test.setMenu(test_menu)
 
-        self.btn_fastest = QPushButton("Use fastest")
+        self.btn_fastest = QPushButton(tr("Use fastest"))
         self.btn_fastest.clicked.connect(self._use_fastest)
 
         self.btn_more = QToolButton()
         self.btn_more.setText("⋯")
         self.btn_more.setPopupMode(QToolButton.InstantPopup)
         more_menu = QMenu(self.btn_more)
-        more_menu.addAction("Remove failed", self.removeFailedRequested)
-        more_menu.addAction("Remove duplicates", self.removeDuplicatesRequested)
+        more_menu.addAction(tr("Remove failed"), self.removeFailedRequested)
+        more_menu.addAction(tr("Remove duplicates"), self.removeDuplicatesRequested)
         self.btn_more.setMenu(more_menu)
 
         for w in (self.btn_import, self.btn_test, self.btn_fastest, self.btn_more):
@@ -264,7 +265,7 @@ class ProfilePanel(QWidget):
 
     def set_testing(self, active: bool) -> None:
         self._testing = active
-        self.btn_test.setText("Cancel" if active else "Test")
+        self.btn_test.setText(tr("Cancel") if active else tr("Test"))
         self.btn_fastest.setEnabled(not active)
         self.btn_more.setEnabled(not active)
 
@@ -365,7 +366,8 @@ class ProfilePanel(QWidget):
             self.deleteManyRequested.emit(uids)
 
     def _no_share_link(self) -> None:
-        QMessageBox.information(self, "No share link", "No share link for this server type.")
+        QMessageBox.information(self, tr("No share link"),
+                                tr("No share link for this server type."))
 
     def _copy_link(self, uid: str) -> None:
         p = self._profile(uid)
@@ -394,22 +396,22 @@ class ProfilePanel(QWidget):
         menu = QMenu(self)
         if len(uids) == 1:
             uid = uids[0]
-            menu.addAction("Set active", lambda: self.activated.emit(uid))
-            menu.addAction("Edit", lambda: self.editRequested.emit(uid))
-            menu.addAction("Clone", lambda: self.duplicateRequested.emit(uid))
-        menu.addAction("Test real delay", lambda: self.testRealDelayRequested.emit(uids))
-        menu.addAction("TCP ping", lambda: self.tcpPingRequested.emit(uids))
+            menu.addAction(tr("Set active"), lambda: self.activated.emit(uid))
+            menu.addAction(tr("Edit"), lambda: self.editRequested.emit(uid))
+            menu.addAction(tr("Clone"), lambda: self.duplicateRequested.emit(uid))
+        menu.addAction(tr("Test real delay"), lambda: self.testRealDelayRequested.emit(uids))
+        menu.addAction(tr("TCP ping"), lambda: self.tcpPingRequested.emit(uids))
         if len(uids) == 1:
-            menu.addAction("Copy share link", lambda: self._copy_link(uids[0]))
-            menu.addAction("Show QR", lambda: self._show_qr(uids[0]))
+            menu.addAction(tr("Copy share link"), lambda: self._copy_link(uids[0]))
+            menu.addAction(tr("Show QR"), lambda: self._show_qr(uids[0]))
         menu.addSeparator()
-        menu.addAction("Delete", lambda: self._delete_selected(uids))
+        menu.addAction(tr("Delete"), lambda: self._delete_selected(uids))
         menu.exec(self.table.viewport().mapToGlobal(pos))
 
     def _build_header_menu(self) -> QMenu:
         menu = QMenu(self)
         for col, label in OPTIONAL_COLUMNS:
-            action = menu.addAction(label)
+            action = menu.addAction(tr(label))
             action.setCheckable(True)
             action.setChecked(not self.table.isColumnHidden(col))
             action.toggled.connect(lambda checked, c=col: self.table.setColumnHidden(c, not checked))
