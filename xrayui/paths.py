@@ -72,8 +72,22 @@ def config_template() -> Path:
     return _first_existing("config.template.json")
 
 
+def geo_dir() -> Path:
+    """Where geo.update() puts an updated geoip.dat/geosite.dat."""
+    return base_dir() / "geo"
+
+
 def asset_dir() -> Path:
-    """Directory holding geoip.dat / geosite.dat (XRAY_LOCATION_ASSET)."""
+    """Directory holding geoip.dat / geosite.dat (XRAY_LOCATION_ASSET).
+
+    An updated pair in geo_dir() wins over the bundled one -- checked as a
+    pair, since XRAY_LOCATION_ASSET is one directory for both files, and a
+    partial geo/ (an interrupted update) must not shadow a working bundled
+    geosite.dat with a missing geoip.dat or vice versa.
+    """
+    updated = geo_dir()
+    if (updated / "geoip.dat").exists() and (updated / "geosite.dat").exists():
+        return updated
     return _first_existing("geoip.dat").parent
 
 

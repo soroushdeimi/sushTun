@@ -72,6 +72,11 @@ DEFAULTS: dict = {
         "timeout_s": 10,
         "batch_size": 50,
     },
+    "geo": {
+        # Matches the source scripts/fetch_deps.py bundles.
+        "source": "Loyalsoldier",
+        "auto_update_hours": 0,  # 0 = off
+    },
 }
 
 
