@@ -161,6 +161,14 @@ class MainWindow(QMainWindow):
         self.btn_low.setCheckable(True)
         self.btn_low.setChecked(self.settings["routing"]["low_usage"])
         self.btn_low.toggled.connect(self._toggle_low_usage)
+        self.btn_fragment = QPushButton("Anti-filter")
+        self.btn_fragment.setCheckable(True)
+        self.btn_fragment.setChecked(self.settings["core"]["fragment"]["enabled"])
+        self.btn_fragment.setToolTip(
+            "Splits the TLS handshake into small pieces so filtering can't read it — "
+            "try this if servers connect but sites won't load."
+        )
+        self.btn_fragment.toggled.connect(self._toggle_fragment)
         self.btn_routing = QPushButton("Routing…")
         self.btn_routing.clicked.connect(self._open_routing)
         self.routing_combo = QComboBox()
@@ -188,6 +196,7 @@ class MainWindow(QMainWindow):
 
         actions2 = QHBoxLayout()
         actions2.addWidget(self.btn_low)
+        actions2.addWidget(self.btn_fragment)
         actions2.addWidget(self.btn_gateway)
         actions2.addWidget(self.btn_routing)
         actions2.addWidget(self.routing_combo)
@@ -775,14 +784,17 @@ class MainWindow(QMainWindow):
     def _open_settings(self) -> None:
         old_mtu = self.settings.get("tun_mtu")
         old_log = self.settings.get("log_level")
+        old_core = copy.deepcopy(self.settings.get("core"))
         dlg = SettingsDialog(self.settings, self)
         if dlg.exec():
             values = dlg.values()
             self.settings.update(values)
             app_settings.save(self.settings)
+            self.btn_fragment.setChecked(self.settings["core"]["fragment"]["enabled"])
             changed = [label for label, old, new in (
                 ("MTU", old_mtu, values["tun_mtu"]),
                 ("Log level", old_log, values["log_level"]),
+                ("Core options", old_core, values["core"]),
             ) if old != new]
             if changed:
                 self._needs_reconnect(", ".join(changed) + " changed")
@@ -809,6 +821,11 @@ class MainWindow(QMainWindow):
         self.settings["routing"]["low_usage"] = checked
         app_settings.save(self.settings)
         self._needs_reconnect(f"Low usage {'on' if checked else 'off'}")
+
+    def _toggle_fragment(self, checked: bool) -> None:
+        self.settings["core"]["fragment"]["enabled"] = checked
+        app_settings.save(self.settings)
+        self._needs_reconnect(f"Anti-filter {'on' if checked else 'off'}")
 
     # Routing mode: main-window combo, and the tray's checkable submenu -----
     def _refresh_routing_combo(self) -> None:

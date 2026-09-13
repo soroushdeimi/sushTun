@@ -6,6 +6,7 @@ import time
 
 from PySide6.QtCore import QThreadPool
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -24,8 +25,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..core import coreopts, importer, render, xraycheck
 from ..core import geo as geo_mod
-from ..core import importer
 from ..core import settings as app_settings
 from ..core.outbounds.hysteria2 import normalize_ports
 from ..core.profiles import Profile, normalize_pcs, valid_pcs
@@ -41,6 +42,16 @@ _SS_METHODS = [
     "2022-blake3-aes-128-gcm", "2022-blake3-aes-256-gcm", "2022-blake3-chacha20-poly1305",
     "none",
 ]
+
+# A placeholder profile for validating candidate settings before saving them
+# -- security=tls so fragment/mux eligibility is actually exercised when a
+# Save turns either on. No live server is ever dialed; this only runs
+# `xray run -test` against a throwaway config.
+_SETTINGS_CHECK_PROFILE = Profile(
+    name="settings check", protocol="vless", address="203.0.113.1", port=443,
+    id="11111111-1111-1111-1111-111111111111", encryption="none",
+    network="tcp", security="tls", sni="settings-check.invalid",
+)
 
 
 class ImportDialog(QDialog):
@@ -545,10 +556,116 @@ class SettingsDialog(QDialog):
 
         layout.addWidget(geo_group)
 
+        # -- Advanced (Phase 5 core options) -----------------------------
+        core_cfg = settings.get("core") or {}
+        frag_cfg = core_cfg.get("fragment") or {}
+        mux_cfg = core_cfg.get("mux") or {}
+        sniff_cfg = core_cfg.get("sniffing") or {}
+
+        adv_widget = QWidget()
+        adv_layout = QVBoxLayout(adv_widget)
+        adv_layout.setContentsMargins(0, 4, 0, 0)
+
+        frag_group = QGroupBox("Anti-filter")
+        frag_form = QFormLayout(frag_group)
+        self.frag_enabled = QCheckBox("Enabled")
+        self.frag_enabled.setChecked(bool(frag_cfg.get("enabled")))
+        frag_form.addRow(self.frag_enabled)
+        self.frag_packets = QLineEdit(str(frag_cfg.get("packets") or "tlshello"))
+        frag_form.addRow("Packets", self.frag_packets)
+        self.frag_length = QLineEdit(str(frag_cfg.get("length") or "100-200"))
+        frag_form.addRow("Length", self.frag_length)
+        self.frag_interval = QLineEdit(str(frag_cfg.get("interval") or "10-20"))
+        frag_form.addRow("Interval", self.frag_interval)
+        self.frag_max_split = QSpinBox()
+        self.frag_max_split.setRange(0, 10000)
+        self.frag_max_split.setValue(int(frag_cfg.get("max_split") or 0))
+        frag_form.addRow("Max split", self.frag_max_split)
+        adv_layout.addWidget(frag_group)
+
+        mux_group = QGroupBox("Multiplexing")
+        mux_form = QFormLayout(mux_group)
+        self.mux_enabled = QCheckBox("Enabled")
+        self.mux_enabled.setChecked(bool(mux_cfg.get("enabled")))
+        mux_form.addRow(self.mux_enabled)
+        self.mux_concurrency = QSpinBox()
+        self.mux_concurrency.setRange(1, 1024)
+        self.mux_concurrency.setValue(int(mux_cfg.get("concurrency") or 8))
+        mux_form.addRow("Concurrency", self.mux_concurrency)
+        self.mux_xudp_concurrency = QSpinBox()
+        self.mux_xudp_concurrency.setRange(1, 1024)
+        self.mux_xudp_concurrency.setValue(int(mux_cfg.get("xudp_concurrency") or 16))
+        mux_form.addRow("XUDP concurrency", self.mux_xudp_concurrency)
+        self.mux_xudp_udp443 = QComboBox()
+        self.mux_xudp_udp443.addItems(list(coreopts.XUDP_UDP443_CHOICES))
+        current_udp443 = str(mux_cfg.get("xudp_proxy_udp443") or "reject")
+        if current_udp443 in coreopts.XUDP_UDP443_CHOICES:
+            self.mux_xudp_udp443.setCurrentText(current_udp443)
+        mux_form.addRow("XUDP UDP443", self.mux_xudp_udp443)
+        adv_layout.addWidget(mux_group)
+
+        sniff_group = QGroupBox("Sniffing")
+        sniff_form = QFormLayout(sniff_group)
+        self.sniff_enabled = QCheckBox("Enabled")
+        self.sniff_enabled.setChecked(bool(sniff_cfg.get("enabled", True)))
+        sniff_form.addRow(self.sniff_enabled)
+        self.sniff_route_only = QCheckBox("Route only")
+        self.sniff_route_only.setChecked(bool(sniff_cfg.get("route_only")))
+        sniff_form.addRow(self.sniff_route_only)
+        adv_layout.addWidget(sniff_group)
+
+        proxy_group = QGroupBox("Local proxy")
+        proxy_form = QFormLayout(proxy_group)
+        self.socks_port = QSpinBox()
+        self.socks_port.setRange(1024, 65535)
+        self.socks_port.setValue(coreopts.valid_socks_port(core_cfg.get("socks_port")))
+        proxy_form.addRow("Port", self.socks_port)
+        self.allow_lan = QCheckBox("Allow other devices on your network")
+        self.allow_lan.setChecked(bool(core_cfg.get("allow_lan")))
+        proxy_form.addRow(self.allow_lan)
+        self.lan_user = QLineEdit(str(core_cfg.get("lan_user") or ""))
+        proxy_form.addRow("User", self.lan_user)
+        self.lan_pass = QLineEdit(str(core_cfg.get("lan_pass") or ""))
+        self.lan_pass.setEchoMode(QLineEdit.Password)
+        proxy_form.addRow("Password", self.lan_pass)
+        self.lan_warning = QLabel(
+            "LAN sharing is on with no password — anyone on your network can use this proxy.")
+        self.lan_warning.setObjectName("Muted")
+        self.lan_warning.setWordWrap(True)
+        proxy_form.addRow(self.lan_warning)
+        self.allow_lan.toggled.connect(self._sync_lan_warning)
+        self.lan_user.textChanged.connect(self._sync_lan_warning)
+        self.lan_pass.textChanged.connect(self._sync_lan_warning)
+        adv_layout.addWidget(proxy_group)
+
+        fp_group = QGroupBox("Default TLS fingerprint")
+        fp_form = QFormLayout(fp_group)
+        self.default_fp = QComboBox()
+        self.default_fp.addItem("(off)", "")
+        for name in coreopts.DEFAULT_FP_CHOICES:
+            self.default_fp.addItem(name, name)
+        current_fp = str(core_cfg.get("default_fp") or "")
+        self.default_fp.setCurrentIndex(max(0, self.default_fp.findData(current_fp)))
+        fp_form.addRow("Fingerprint", self.default_fp)
+        adv_layout.addWidget(fp_group)
+
+        layout.addWidget(CollapsibleSection("Advanced", adv_widget))
+        self._sync_lan_warning()
+
+        self._busy = False
+        self.status_label = QLabel("")
+        self.status_label.setObjectName("Muted")
+        layout.addWidget(self.status_label)
+
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
+        self.btn_save = buttons.button(QDialogButtonBox.Save)
+        buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+
+    def _sync_lan_warning(self) -> None:
+        has_auth = bool(self.lan_user.text().strip()) and bool(self.lan_pass.text().strip())
+        self.lan_warning.setVisible(self.allow_lan.isChecked() and not has_auth)
 
     def _format_last_update(self) -> str:
         if not self._last_update:
@@ -605,6 +722,32 @@ class SettingsDialog(QDialog):
         """Whether Update now succeeded while this dialog was open."""
         return self._geo_updated
 
+    def _core_values(self) -> dict:
+        return {
+            "fragment": {
+                "enabled": self.frag_enabled.isChecked(),
+                "packets": self.frag_packets.text().strip() or "tlshello",
+                "length": self.frag_length.text().strip() or "100-200",
+                "interval": self.frag_interval.text().strip() or "10-20",
+                "max_split": self.frag_max_split.value(),
+            },
+            "mux": {
+                "enabled": self.mux_enabled.isChecked(),
+                "concurrency": self.mux_concurrency.value(),
+                "xudp_concurrency": self.mux_xudp_concurrency.value(),
+                "xudp_proxy_udp443": self.mux_xudp_udp443.currentText(),
+            },
+            "sniffing": {
+                "enabled": self.sniff_enabled.isChecked(),
+                "route_only": self.sniff_route_only.isChecked(),
+            },
+            "socks_port": self.socks_port.value(),
+            "allow_lan": self.allow_lan.isChecked(),
+            "lan_user": self.lan_user.text().strip(),
+            "lan_pass": self.lan_pass.text().strip(),
+            "default_fp": self.default_fp.currentData() or "",
+        }
+
     def values(self) -> dict:
         return {
             "ping_target": self.ping_target.text().strip() or "1.1.1.1",
@@ -616,4 +759,33 @@ class SettingsDialog(QDialog):
                 "auto_update_hours": self.geo_auto_hours.value(),
                 "last_update": self._last_update,
             },
+            "core": self._core_values(),
         }
+
+    def _save(self) -> None:
+        if self._busy:
+            return
+        self._busy = True
+        self.btn_save.setEnabled(False)
+        self.status_label.setText("Validating…")
+        core_cfg = self._core_values()
+
+        def work():
+            text = render.build_text(
+                _SETTINGS_CHECK_PROFILE, "lo", include_tun=False, core_cfg=core_cfg,
+            )
+            return xraycheck.check_config(text)
+
+        def done(result=None, error=None):
+            self._busy = False
+            self.btn_save.setEnabled(True)
+            self.status_label.setText("")
+            if error:
+                QMessageBox.warning(self, "Validation failed", str(error))
+                return
+            if result:
+                QMessageBox.warning(self, "Settings invalid", result)
+                return
+            self.accept()
+
+        self._run_async(work, done)

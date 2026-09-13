@@ -268,6 +268,70 @@ def test_settings_dialog_offers_every_known_log_level(qapp, defaults):
     assert shown == list(app_settings.LOG_LEVELS)
 
 
+def test_settings_dialog_advanced_fields_persist(qapp, defaults, warnings, dns_check_state):
+    dlg = SettingsDialog(defaults)
+    dlg.frag_enabled.setChecked(True)
+    dlg.frag_packets.setText("1-3")
+    dlg.frag_length.setText("50-100")
+    dlg.frag_interval.setText("5-10")
+    dlg.frag_max_split.setValue(100)
+    dlg.mux_enabled.setChecked(True)
+    dlg.mux_concurrency.setValue(4)
+    dlg.mux_xudp_concurrency.setValue(32)
+    dlg.mux_xudp_udp443.setCurrentText("allow")
+    dlg.sniff_enabled.setChecked(False)
+    dlg.socks_port.setValue(23456)
+    dlg.allow_lan.setChecked(True)
+    dlg.lan_user.setText("u1")
+    dlg.lan_pass.setText("p1")
+    dlg.default_fp.setCurrentIndex(dlg.default_fp.findData("chrome"))
+    _save_and_wait(dlg)
+
+    assert not warnings
+    core = dlg.values()["core"]
+    assert core["fragment"] == {"enabled": True, "packets": "1-3", "length": "50-100",
+                                "interval": "5-10", "max_split": 100}
+    assert core["mux"] == {"enabled": True, "concurrency": 4, "xudp_concurrency": 32,
+                           "xudp_proxy_udp443": "allow"}
+    assert core["sniffing"] == {"enabled": False, "route_only": False}
+    assert core["socks_port"] == 23456
+    assert core["allow_lan"] is True
+    assert core["lan_user"] == "u1" and core["lan_pass"] == "p1"
+    assert core["default_fp"] == "chrome"
+
+
+def test_settings_dialog_lan_warning_shows_only_without_a_password(qapp, defaults):
+    dlg = SettingsDialog(defaults)
+    assert dlg.lan_warning.isHidden()
+    dlg.allow_lan.setChecked(True)
+    assert not dlg.lan_warning.isHidden()
+    dlg.lan_user.setText("u1")
+    dlg.lan_pass.setText("p1")
+    assert dlg.lan_warning.isHidden()
+    dlg.lan_pass.setText("")
+    assert not dlg.lan_warning.isHidden()
+
+
+def test_settings_dialog_save_blocked_by_a_check_failure_leaves_settings_unchanged(
+    qapp, defaults, warnings, monkeypatch,
+):
+    # Every core-option builder self-heals bad input rather than emitting
+    # something xray -test would reject, so a real failure can't be
+    # triggered through the dialog's own fields; force one at the
+    # xraycheck layer instead, to prove Save still refuses to close on any
+    # failure regardless of cause, and never touches the caller's settings.
+    monkeypatch.setattr(dialogs_mod.xraycheck, "check_config", lambda *a, **k: "simulated failure")
+    dlg = SettingsDialog(defaults)
+    dlg.frag_enabled.setChecked(True)
+    dlg.socks_port.setValue(23456)
+    _save_and_wait(dlg)
+
+    assert warnings
+    assert dlg.result() == 0
+    assert defaults["core"]["fragment"]["enabled"] is False
+    assert defaults["core"]["socks_port"] == 10808
+
+
 # -- Profile edit dialog -----------------------------------------------------
 def test_profile_edit_dialog_round_trips_alpn_and_spiderx(qapp):
     p = Profile(name="r", address="a.com", port=443, id="u", network="ws",
@@ -683,6 +747,23 @@ def test_routing_combo_lists_sets_and_writes_mode(window):
 
     window.routing_combo.setCurrentIndex(window.routing_combo.findData("s1"))
     assert window.settings["routing"]["mode"] == "s1"
+
+
+def test_anti_filter_button_toggles_and_persists(window):
+    assert not window.btn_fragment.isChecked()
+    assert not window.settings["core"]["fragment"]["enabled"]
+
+    window.btn_fragment.setChecked(True)
+    assert window.settings["core"]["fragment"]["enabled"] is True
+    saved = app_settings.load()
+    assert saved["core"]["fragment"]["enabled"] is True
+
+
+def test_anti_filter_button_shows_reconnect_when_connected(window, monkeypatch):
+    monkeypatch.setattr(window.conn, "is_connected", lambda: True)
+    window.btn_fragment.setChecked(True)
+    assert not window.btn_reconnect.isHidden()
+    assert "Anti-filter" in window.step_label.text()
 
 
 def test_reconnect_now_hidden_when_disconnected(window):

@@ -17,7 +17,8 @@ from .profiles import Profile
 _PACKETS_RE = re.compile(r"^(tlshello|\d+(-\d+)?)$")
 _RANGE_RE = re.compile(r"^\d+(-\d+)?$")
 _MUX_ELIGIBLE_PROTOCOLS = frozenset({"vmess", "trojan", "shadowsocks"})
-_XUDP_UDP443_VALUES = ("reject", "allow", "skip")
+XUDP_UDP443_CHOICES = ("reject", "allow", "skip")
+_XUDP_UDP443_VALUES = XUDP_UDP443_CHOICES
 _DEFAULT_FP_VALUES = frozenset(
     {"chrome", "firefox", "safari", "edge", "ios", "android", "random", "randomized"}
 )
