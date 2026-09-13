@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import zipfile
 
 import pytest
@@ -53,6 +54,32 @@ def test_backup_contains_the_expected_files_and_excludes_the_rest(tmp_path, monk
     assert not any(n.startswith("state/") for n in names)
     assert "xray.log" not in names
     assert "config.runtime.json" not in names
+
+
+def test_backup_writes_through_userfs_when_running_elevated(tmp_path, monkeypatch):
+    # When elevated, the destination is a path the invoking (non-root) user
+    # chose; the finished zip must be handed to userfs to write as them,
+    # never written directly by this (root) process.
+    base = _setup(tmp_path, monkeypatch)
+    (base / "settings.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(backup.os, "geteuid", lambda: 0)
+    monkeypatch.setenv("PKEXEC_UID", str(os.getuid()))
+
+    calls = []
+    monkeypatch.setattr(
+        backup.userfs, "write_as_user",
+        lambda path, data, uid, gid: calls.append((path, uid, gid, len(data))),
+    )
+
+    dest = tmp_path / "out.zip"
+    backup.backup(dest)
+
+    assert len(calls) == 1
+    path, uid, gid, size = calls[0]
+    assert path == dest
+    assert uid == os.getuid()
+    assert size > 0
+    assert not dest.exists()  # the (mocked) real write never happened here
 
 
 def test_restore_round_trips_everything(tmp_path, monkeypatch):
@@ -172,4 +199,75 @@ def test_restore_rejects_corrupt_json_inside_an_otherwise_valid_zip(tmp_path, mo
 
     with pytest.raises(ValueError):
         backup.restore(bad_json)
+    assert json.loads((base / "settings.json").read_text()) == {"marker": "original"}
+
+
+# -- Windows-style traversal in a profile member name ------------------------
+@pytest.mark.parametrize("bad_name", [
+    "profiles/a\\..\\..\\evil.json",   # no "/" at all -- a backslash traversal
+    "profiles/C:evil.json",            # a drive-letter-style prefix
+    "profiles/.hidden.json",           # a leading dot
+    "profiles/" + "a" * 65 + ".json",  # longer than any real uuid4().hex uid
+])
+def test_restore_rejects_non_uid_shaped_profile_member_names(tmp_path, monkeypatch, bad_name):
+    base = _setup(tmp_path, monkeypatch)
+    (base / "settings.json").write_text(json.dumps({"marker": "original"}), encoding="utf-8")
+    evil = tmp_path / "evil.zip"
+    with zipfile.ZipFile(evil, "w") as zf:
+        zf.writestr("manifest.json", json.dumps({"app": "sushTun"}))
+        zf.writestr(bad_name, "{}")
+
+    with pytest.raises(ValueError):
+        backup.restore(evil)
+    assert json.loads((base / "settings.json").read_text()) == {"marker": "original"}
+
+
+# -- Zip bomb: a member's declared size lies ---------------------------------
+def test_restore_rejects_a_member_whose_declared_size_is_a_bomb(tmp_path, monkeypatch):
+    base = _setup(tmp_path, monkeypatch)
+    (base / "settings.json").write_text(json.dumps({"marker": "original"}), encoding="utf-8")
+    zip_path = tmp_path / "bomb.zip"
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        zf.writestr("manifest.json", json.dumps({"app": "sushTun"}))
+        zf.writestr("settings.json", "{}")
+
+    real_getinfo = zipfile.ZipFile.getinfo
+
+    def fake_getinfo(self, name):
+        info = real_getinfo(self, name)
+        if name == "settings.json":
+            info.file_size = 999 * 1024 * 1024  # a crafted ZipInfo, not a real 999 MB file
+        return info
+
+    monkeypatch.setattr(zipfile.ZipFile, "getinfo", fake_getinfo)
+
+    with pytest.raises(ValueError, match="too large"):
+        backup.restore(zip_path)
+    assert json.loads((base / "settings.json").read_text()) == {"marker": "original"}
+
+
+def test_restore_rejects_many_members_whose_combined_declared_size_is_a_bomb(
+    tmp_path, monkeypatch,
+):
+    base = _setup(tmp_path, monkeypatch)
+    (base / "settings.json").write_text(json.dumps({"marker": "original"}), encoding="utf-8")
+    zip_path = tmp_path / "bomb.zip"
+    uids = [f"{i:032x}" for i in range(5)]
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        zf.writestr("manifest.json", json.dumps({"app": "sushTun"}))
+        for uid in uids:
+            zf.writestr(f"profiles/{uid}.json", "{}")
+
+    real_getinfo = zipfile.ZipFile.getinfo
+
+    def fake_getinfo(self, name):
+        info = real_getinfo(self, name)
+        if name.startswith("profiles/"):
+            info.file_size = 30 * 1024 * 1024  # 5 * 30MB > the 100MB total cap
+        return info
+
+    monkeypatch.setattr(zipfile.ZipFile, "getinfo", fake_getinfo)
+
+    with pytest.raises(ValueError, match="too large"):
+        backup.restore(zip_path)
     assert json.loads((base / "settings.json").read_text()) == {"marker": "original"}

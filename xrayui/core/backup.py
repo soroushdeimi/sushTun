@@ -8,8 +8,10 @@ do on disk; callers must warn about that before writing one.
 """
 from __future__ import annotations
 
+import io
 import json
 import os
+import re
 import sys
 import tempfile
 import time
@@ -17,6 +19,7 @@ import zipfile
 from pathlib import Path
 
 from .. import __version__, paths
+from . import userfs
 
 IS_LINUX = sys.platform.startswith("linux")
 
@@ -31,14 +34,18 @@ _FIXED_NAMES = frozenset({
     "profile_stats.json",
 })
 
+# Profile uids are uuid4().hex (32 lowercase hex chars); this is
+# deliberately tighter than "no slash", since on Windows a name like
+# "a\\..\\..\\evil.json" contains no forward slash at all and would
+# resolve outside base_dir() once joined onto it with backslashes intact.
+_PROFILE_MEMBER_RE = re.compile(r"^profiles/[A-Za-z0-9_-]{1,64}\.json$")
+
+_MAX_MEMBER_BYTES = 20 * 1024 * 1024
+_MAX_TOTAL_BYTES = 100 * 1024 * 1024
+
 
 def _is_allowed_member(name: str) -> bool:
-    if name in _FIXED_NAMES:
-        return True
-    if name.startswith("profiles/") and name.endswith(".json"):
-        rest = name[len("profiles/"):]
-        return bool(rest) and "/" not in rest and rest != ".." and not rest.startswith(".")
-    return False
+    return name in _FIXED_NAMES or bool(_PROFILE_MEMBER_RE.match(name))
 
 
 def _profile_json_files() -> list[Path]:
@@ -53,9 +60,15 @@ def _manifest() -> dict:
 
 
 def backup(dest_zip: Path) -> None:
+    # Reads happen as whatever this process already is (root, when
+    # elevated) from base_dir()/profiles_dir(), which this app owns --
+    # only the destination is a path the invoking user chose (a save
+    # dialog), so only the write of the finished bytes needs to happen as
+    # that user rather than as root.
     base = paths.base_dir()
     pdir = paths.profiles_dir()
-    with zipfile.ZipFile(dest_zip, "w", zipfile.ZIP_DEFLATED) as zf:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("manifest.json", json.dumps(_manifest(), indent=2))
         settings_path = base / "settings.json"
         if settings_path.exists():
@@ -71,36 +84,51 @@ def backup(dest_zip: Path) -> None:
         stats = base / "profile_stats.json"
         if stats.exists():
             zf.write(stats, "profile_stats.json")
-    _chown_to_real_user(dest_zip)
+    data = buf.getvalue()
+
+    ids = _real_user_ids()
+    if ids is not None:
+        userfs.write_as_user(dest_zip, data, *ids)
+    else:
+        fd = os.open(str(dest_zip), os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o644)
+        try:
+            os.write(fd, data)
+        finally:
+            os.close(fd)
 
 
-def _chown_to_real_user(path: Path) -> None:
-    """On Linux, when running elevated (root via pkexec/sudo), hand the
-    freshly-written file back to the real user so they can open it."""
+def _real_user_ids() -> tuple[int, int] | None:
+    """On Linux, when running elevated (root via pkexec/sudo), the uid/gid
+    of the user who invoked it -- so the backup can be written as them
+    instead of as root writing into a path they control."""
     if not IS_LINUX or os.geteuid() != 0:
-        return
+        return None
     uid_s = os.environ.get("PKEXEC_UID") or os.environ.get("SUDO_UID")
     if not uid_s:
-        return
+        return None
     try:
         import pwd
         pw = pwd.getpwuid(int(uid_s))
-        os.chown(path, pw.pw_uid, pw.pw_gid)
-    except (ValueError, KeyError, OSError):
-        pass
+        return pw.pw_uid, pw.pw_gid
+    except (ValueError, KeyError):
+        return None
 
 
 def restore(src_zip: Path) -> None:
     """Replace settings/profiles/subscriptions from `src_zip`. Raises
     ValueError for anything wrong with the archive itself -- a bad zip, a
-    missing/foreign manifest, an unexpected member name, or a corrupt
-    JSON file -- and changes nothing on disk when it does. Every member
-    is read and validated before the first byte is written for real.
+    missing/foreign manifest, an unexpected member name, an oversized
+    member, or a corrupt JSON file -- and changes nothing on disk when it
+    does. Every member is read and validated before the first byte is
+    written for real.
     """
     try:
         zf = zipfile.ZipFile(src_zip)
     except zipfile.BadZipFile as e:
         raise ValueError("not a valid zip file") from e
+
+    base = paths.base_dir()
+    resolved_base = base.resolve()
 
     with zf:
         names = zf.namelist()
@@ -114,17 +142,32 @@ def restore(src_zip: Path) -> None:
             raise ValueError("not a sushTun backup")
 
         payload: dict[str, bytes] = {}
+        total_bytes = 0
         for name in names:
             if name == "manifest.json":
                 continue
             if not _is_allowed_member(name):
+                raise ValueError(f"unexpected file in backup: {name}")
+            # A forged .zip can declare any size in its central directory;
+            # reject the obviously-a-bomb case before ever calling read(),
+            # which decompresses the full member into memory.
+            info = zf.getinfo(name)
+            if info.file_size > _MAX_MEMBER_BYTES:
+                raise ValueError(f"backup is too large: {name}")
+            total_bytes += info.file_size
+            if total_bytes > _MAX_TOTAL_BYTES:
+                raise ValueError("backup is too large")
+            # Belt and braces alongside the member-name pattern above: even
+            # a name the regex allowed must still land inside base_dir()
+            # once actually joined and resolved.
+            dest = (base / name).resolve()
+            if resolved_base not in dest.parents:
                 raise ValueError(f"unexpected file in backup: {name}")
             data = zf.read(name)
             if name.endswith(".json"):
                 json.loads(data)  # raises ValueError on corruption
             payload[name] = data
 
-    base = paths.base_dir()
     pdir = paths.profiles_dir()
     pdir.mkdir(parents=True, exist_ok=True)
 
