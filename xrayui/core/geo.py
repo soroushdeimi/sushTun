@@ -11,6 +11,7 @@ from __future__ import annotations
 import http.client
 import os
 import shutil
+import threading
 import time
 import urllib.request
 from collections.abc import Callable
@@ -43,6 +44,12 @@ _BASELINE_RULES = [
 
 Fetch = Callable[[str], bytes]
 
+# The UI has its own busy flags (MainWindow's hourly timer, SettingsDialog's
+# Update now), but they're two independent paths with no way to see each
+# other -- both could start a download and both rmtree/write geo.new/ at
+# once. The lock lives here, in core, as the one place that actually knows.
+_lock = threading.Lock()
+
 
 class GeoUpdateError(Exception):
     pass
@@ -71,8 +78,18 @@ def update(source: str, fetch: Fetch | None = None) -> None:
     Safe to call while connected: Xray only reads XRAY_LOCATION_ASSET at
     startup, so this takes effect on the next connect. Raises
     GeoUpdateError (with a short reason) and leaves the current files
-    untouched on any failure.
+    untouched on any failure -- including a concurrent update already in
+    progress, rather than blocking behind it or racing it.
     """
+    if not _lock.acquire(blocking=False):
+        raise GeoUpdateError("a geo update is already running")
+    try:
+        _do_update(source, fetch)
+    finally:
+        _lock.release()
+
+
+def _do_update(source: str, fetch: Fetch | None) -> None:
     tmpl = SOURCES.get(source)
     if tmpl is None:
         raise GeoUpdateError(f"unknown geo source: {source!r}")

@@ -81,6 +81,39 @@ def test_unknown_source_raises_without_fetching(tmp_path, monkeypatch):
             AssertionError("should not fetch")))
 
 
+def test_a_concurrent_update_is_rejected_while_one_is_in_progress(tmp_path, monkeypatch):
+    # MainWindow's hourly timer and SettingsDialog's Update now are two
+    # independent UI paths with no way to see each other; the guard has to
+    # live in core, not in either UI's own busy flag.
+    _setup(tmp_path, monkeypatch)
+    import threading
+
+    started = threading.Event()
+    release = threading.Event()
+
+    def blocking_fetch(url):
+        started.set()
+        release.wait(timeout=5)
+        return b"irrelevant, the first call's own outcome isn't the point"
+
+    def run_first():
+        try:
+            geo.update("Loyalsoldier", fetch=blocking_fetch)
+        except geo.GeoUpdateError:
+            pass  # its own outcome isn't the point; only that it held the lock
+
+    thread = threading.Thread(target=run_first, daemon=True)
+    thread.start()
+    try:
+        assert started.wait(timeout=5)
+
+        with pytest.raises(geo.GeoUpdateError, match="already running"):
+            geo.update("Loyalsoldier", fetch=lambda url: b"should never be called")
+    finally:
+        release.set()
+        thread.join(timeout=5)
+
+
 def test_garbage_over_min_size_is_rejected_even_with_zero_user_rules(tmp_path, monkeypatch):
     # A user with every routing toggle off produces zero rules from
     # build_rules(); without baseline geosite:private/geoip:private rules,
