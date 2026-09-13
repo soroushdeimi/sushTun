@@ -9,6 +9,8 @@ from PySide6.QtCore import QPointF, QRectF, QSize, Qt
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QAbstractButton, QHBoxLayout, QLabel, QWidget
 
+from ..i18n import tr
+
 # (fill, rim) per button, taken from macOS.
 _COLORS = {
     "close": ("#ff5f57", "#e14640"),
@@ -16,7 +18,6 @@ _COLORS = {
     "zoom": ("#28c840", "#1dad2b"),
 }
 _INACTIVE = ("#4b4e54", "#3f4247")
-_TIPS = {"close": "Close", "minimize": "Minimize", "zoom": "Zoom"}
 _DIAMETER = 12.0
 
 
@@ -29,7 +30,11 @@ class TrafficLight(QAbstractButton):
         self.setObjectName(f"Light_{kind}")
         self.setFixedSize(QSize(14, 14))
         self.setFocusPolicy(Qt.NoFocus)
-        self.setToolTip(_TIPS[kind])
+        # Evaluated per-instance, not at module level, so it picks up
+        # whatever language i18n.set_language() has set by the time a
+        # TitleBar is actually built (after startup, before module import).
+        tips = {"close": tr("Close"), "minimize": tr("Minimize"), "zoom": tr("Zoom")}
+        self.setToolTip(tips[kind])
         self._glyph = False
         self._active = True
 
@@ -110,6 +115,9 @@ class TitleBar(QWidget):
     def __init__(self, window: QWidget) -> None:
         super().__init__()
         self.setObjectName("TitleBar")
+        # The traffic lights stay where macOS/Windows/Linux users expect
+        # them regardless of the app's own RTL direction in fa.
+        self.setLayoutDirection(Qt.LeftToRight)
         self.setFixedHeight(self.HEIGHT)
         self._win = window
         self._drag_offset = None

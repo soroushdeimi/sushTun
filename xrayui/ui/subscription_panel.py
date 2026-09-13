@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 
 from ..core.alerts import human_bytes
 from ..core.subscription import Subscription
+from ..i18n import tr
 from .theme import ERR, OK, WARN
 
 
@@ -31,13 +32,13 @@ def _bar_color(percent_left: float | None) -> str:
 
 def _ago(ts: float) -> str:
     if not ts:
-        return "never"
+        return tr("never")
     mins = (time.time() - ts) / 60
     if mins < 60:
-        return f"{mins:.0f}m ago"
+        return tr("{n}m ago", n=f"{mins:.0f}")
     if mins < 1440:
-        return f"{mins / 60:.0f}h ago"
-    return f"{mins / 1440:.0f}d ago"
+        return tr("{n}h ago", n=f"{mins / 60:.0f}")
+    return tr("{n}d ago", n=f"{mins / 1440:.0f}")
 
 
 class SubscriptionRow(QFrame):
@@ -90,15 +91,15 @@ class SubscriptionRow(QFrame):
 
         parts = []
         if not sub.enabled:
-            parts.append("disabled")
+            parts.append(tr("disabled"))
         if u.total:
             parts.append(f"{human_bytes(u.used)} / {human_bytes(u.total)}")
-            parts.append(f"{human_bytes(u.remaining)} left")
+            parts.append(tr("{amount} left", amount=human_bytes(u.remaining)))
         else:
-            parts.append("usage unknown")
+            parts.append(tr("usage unknown"))
         if u.days_left is not None:
-            parts.append(f"expires in {max(u.days_left, 0):.0f}d")
-        parts.append(f"updated {_ago(sub.updated)}")
+            parts.append(tr("expires in {n}d", n=f"{max(u.days_left, 0):.0f}"))
+        parts.append(tr("updated {ago}", ago=_ago(sub.updated)))
         meta = QLabel("  •  ".join(parts))
         meta.setObjectName("Muted")
         layout.addWidget(meta)
@@ -121,11 +122,11 @@ class SubscriptionPanel(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
 
         head = QHBoxLayout()
-        title = QLabel("Subscriptions")
+        title = QLabel(tr("Subscriptions"))
         title.setObjectName("H1")
-        update_all = QPushButton("Update all")
+        update_all = QPushButton(tr("Update all"))
         update_all.clicked.connect(self.updateAllRequested)
-        add = QPushButton("Add")
+        add = QPushButton(tr("Add"))
         add.clicked.connect(self.addRequested)
         head.addWidget(title)
         head.addStretch(1)
@@ -136,7 +137,7 @@ class SubscriptionPanel(QWidget):
         self._rows = QVBoxLayout()
         self._rows.setSpacing(8)
         outer.addLayout(self._rows)
-        self._empty = QLabel("No subscriptions yet.")
+        self._empty = QLabel(tr("No subscriptions yet."))
         self._empty.setObjectName("Muted")
         outer.addWidget(self._empty)
         outer.addStretch(1)

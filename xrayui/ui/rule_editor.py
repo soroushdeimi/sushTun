@@ -20,7 +20,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-_NETWORKS = [("Any", ""), ("TCP", "tcp"), ("UDP", "udp"), ("TCP+UDP", "tcp,udp")]
+from ..i18n import tr
+
 _PROTOCOLS = ["http", "tls", "bittorrent"]
 
 
@@ -63,7 +64,7 @@ def default_rule() -> dict:
 class RuleEditorDialog(QDialog):
     def __init__(self, rule: dict | None, parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Edit rule")
+        self.setWindowTitle(tr("Edit rule"))
         self.resize(480, 560)
         self._rule = dict(rule) if rule else default_rule()
         r = self._rule
@@ -71,42 +72,48 @@ class RuleEditorDialog(QDialog):
 
         form = QFormLayout()
         self.remarks = QLineEdit(r.get("remarks", ""))
-        form.addRow("Remarks", self.remarks)
+        form.addRow(tr("Remarks"), self.remarks)
 
         action_row = QHBoxLayout()
-        self.rb_proxy = QRadioButton("Proxy")
-        self.rb_direct = QRadioButton("Direct")
-        self.rb_block = QRadioButton("Block")
+        self.rb_proxy = QRadioButton(tr("Proxy"))
+        self.rb_direct = QRadioButton(tr("Direct"))
+        self.rb_block = QRadioButton(tr("Block"))
         for rb in (self.rb_proxy, self.rb_direct, self.rb_block):
             action_row.addWidget(rb)
         {"proxy": self.rb_proxy, "direct": self.rb_direct,
          "block": self.rb_block}.get(r.get("outbound", "proxy"), self.rb_proxy).setChecked(True)
-        form.addRow("Action", action_row)
+        form.addRow(tr("Action"), action_row)
         layout.addLayout(form)
 
-        layout.addWidget(QLabel("Domains (one per line):"))
+        layout.addWidget(QLabel(tr("Domains (one per line):")))
         self.domains = QPlainTextEdit("\n".join(r.get("domain") or []))
+        # Routing-rule syntax examples (domain:/full:/geosite:/keyword: are
+        # Xray's own prefixes) -- technical, left in English, and the field
+        # itself stays LTR regardless of the app's own direction.
         self.domains.setPlaceholderText("domain:example.com\nfull:exact.example.com\n"
                                         "geosite:google\nkeyword:ads")
+        self.domains.setLayoutDirection(Qt.LeftToRight)
         layout.addWidget(self.domains, 1)
 
-        layout.addWidget(QLabel("IPs / CIDRs (one per line):"))
+        layout.addWidget(QLabel(tr("IPs / CIDRs (one per line):")))
         self.ips = QPlainTextEdit("\n".join(r.get("ip") or []))
         self.ips.setPlaceholderText("10.0.0.0/8\ngeoip:ir")
+        self.ips.setLayoutDirection(Qt.LeftToRight)
         layout.addWidget(self.ips, 1)
 
         adv_widget = QWidget()
         adv_form = QFormLayout(adv_widget)
         self.port = QLineEdit(r.get("port", ""))
         self.port.setPlaceholderText("443 or 1000-2000 or 80,443,8000-9000")
-        adv_form.addRow("Port", self.port)
+        adv_form.addRow(tr("Port"), self.port)
 
         self.network = QComboBox()
-        for label, value in _NETWORKS:
+        networks = [(tr("Any"), ""), ("TCP", "tcp"), ("UDP", "udp"), ("TCP+UDP", "tcp,udp")]
+        for label, value in networks:
             self.network.addItem(label, value)
         idx = self.network.findData(r.get("network", ""))
         self.network.setCurrentIndex(idx if idx >= 0 else 0)
-        adv_form.addRow("Network", self.network)
+        adv_form.addRow(tr("Network"), self.network)
 
         proto_row = QHBoxLayout()
         self.protocol_boxes: dict[str, QCheckBox] = {}
@@ -115,14 +122,14 @@ class RuleEditorDialog(QDialog):
             cb.setChecked(name in (r.get("protocol") or []))
             self.protocol_boxes[name] = cb
             proto_row.addWidget(cb)
-        adv_form.addRow("Protocol", proto_row)
+        adv_form.addRow(tr("Protocol"), proto_row)
 
         self.process = QPlainTextEdit("\n".join(r.get("process") or []))
-        self.process.setToolTip("Linux/Windows process names")
+        self.process.setToolTip(tr("Linux/Windows process names"))
         self.process.setMaximumHeight(70)
-        adv_form.addRow("Process", self.process)
+        adv_form.addRow(tr("Process"), self.process)
 
-        layout.addWidget(CollapsibleSection("Advanced", adv_widget))
+        layout.addWidget(CollapsibleSection(tr("Advanced"), adv_widget))
 
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self._save)
@@ -142,8 +149,8 @@ class RuleEditorDialog(QDialog):
         process = self._lines(self.process)
 
         if not (domains or ips or port or network or protocol or process):
-            QMessageBox.warning(self, "Empty rule",
-                                "This rule would match nothing. Add at least one condition.")
+            QMessageBox.warning(self, tr("Empty rule"),
+                                tr("This rule would match nothing. Add at least one condition."))
             return
 
         outbound = "proxy"

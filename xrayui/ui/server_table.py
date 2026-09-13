@@ -13,6 +13,7 @@ from PySide6.QtGui import QColor, QPixmap
 from PySide6.QtWidgets import QApplication, QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
 
 from ..core.profiles import Profile
+from ..i18n import tr
 from .theme import ERR, MUTED, OK, WARN
 
 COLUMNS = ["", "Name", "Delay", "Transport", "Subscription", "Type"]
@@ -120,7 +121,7 @@ class ProfileTableModel(QAbstractTableModel):
 
     def headerData(self, section, orientation, role=Qt.DisplayRole):
         if orientation == Qt.Horizontal and role == Qt.DisplayRole:
-            return COLUMNS[section]
+            return tr(COLUMNS[section])
         return None
 
     def data(self, index, role=Qt.DisplayRole):
@@ -152,8 +153,8 @@ class ProfileTableModel(QAbstractTableModel):
                 if delay is not None:
                     return f"{round(delay)} ms"
                 if result.get("skipped"):
-                    return "n/a"
-                return "Failed" if result.get("error") else "—"
+                    return tr("n/a")
+                return tr("Failed") if result.get("error") else "—"
             return None
 
         if role == Qt.ToolTipRole and col == COL_DELAY:
@@ -211,7 +212,7 @@ class QrDialog(QDialog):
 
     def __init__(self, name: str, link: str, parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle(f"QR — {name}")
+        self.setWindowTitle(tr("QR — {name}", name=name))
         self._link = link
 
         self.image_label = QLabel()
@@ -222,9 +223,9 @@ class QrDialog(QDialog):
         pix.loadFromData(buf.getvalue(), "PNG")
         self.image_label.setPixmap(pix)
 
-        copy_btn = QPushButton("Copy link")
+        copy_btn = QPushButton(tr("Copy link"))
         copy_btn.clicked.connect(self._copy)
-        close_btn = QPushButton("Close")
+        close_btn = QPushButton(tr("Close"))
         close_btn.clicked.connect(self.accept)
         row = QHBoxLayout()
         row.addWidget(copy_btn)

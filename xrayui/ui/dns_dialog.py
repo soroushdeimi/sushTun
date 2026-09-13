@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 
-from PySide6.QtCore import QThreadPool
+from PySide6.QtCore import Qt, QThreadPool
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -27,10 +27,10 @@ from ..core import dns as dns_mod
 from ..core import render, xraycheck
 from ..core import routing as routing_mod
 from ..core.profiles import Profile
+from ..i18n import tr
 from .rule_editor import CollapsibleSection
 from .workers import Worker
 
-_INHERIT = "Template default"
 _CHECK_PROFILE = Profile(
     name="dns check", protocol="vless", address="203.0.113.1", port=443,
     id="11111111-1111-1111-1111-111111111111", encryption="none",
@@ -51,7 +51,7 @@ class DnsDialog(QDialog):
         layout = QVBoxLayout(self)
 
         presets = QHBoxLayout()
-        presets.addWidget(QLabel("Preset:"))
+        presets.addWidget(QLabel(tr("Preset:")))
         for name, servers in dns_mod.PRESETS.items():
             btn = QPushButton(name)
             btn.clicked.connect(lambda _=False, s=servers: self._fill(s))
@@ -59,61 +59,64 @@ class DnsDialog(QDialog):
         presets.addStretch(1)
         layout.addLayout(presets)
 
-        layout.addWidget(QLabel("Resolvers (one per line, in order):"))
+        layout.addWidget(QLabel(tr("Resolvers (one per line, in order):")))
         self.servers = QPlainTextEdit("\n".join(dns.get("servers") or []))
         self.servers.setPlaceholderText(
-            "Leave empty to keep the template's servers.\n"
+            tr("Leave empty to keep the template's servers.") + "\n"
             "https://1.1.1.1/dns-query\n"
             "tcp://9.9.9.9:53\n"
             "8.8.8.8\n"
-            "Use literal IPs — a hostname needs another resolver to look it up first."
+            + tr("Use literal IPs — a hostname needs another resolver to look it up first.")
         )
+        self.servers.setLayoutDirection(Qt.LeftToRight)
         layout.addWidget(self.servers, 2)
 
         strategy = QHBoxLayout()
-        strategy.addWidget(QLabel("Query strategy:"))
+        strategy.addWidget(QLabel(tr("Query strategy:")))
         self.strategy = QComboBox()
-        self.strategy.addItem(_INHERIT, "")
+        self.strategy.addItem(tr("Template default"), "")
         for name in dns_mod.QUERY_STRATEGIES:
             self.strategy.addItem(name, name)
         current = str(dns.get("query_strategy") or "")
         self.strategy.setCurrentIndex(max(0, self.strategy.findData(current)))
         self.strategy.setToolTip(
-            "UseIPv4 avoids AAAA answers this IPv4-only tunnel cannot route.\n"
-            "UseIP or UseIPv6 can make clients prefer an IPv6 path that leaves\n"
-            "over your physical adapter instead of the tunnel."
+            tr("UseIPv4 avoids AAAA answers this IPv4-only tunnel cannot route.") + "\n"
+            + tr("UseIP or UseIPv6 can make clients prefer an IPv6 path that leaves\n"
+                "over your physical adapter instead of the tunnel.")
         )
         strategy.addWidget(self.strategy, 1)
         layout.addLayout(strategy)
 
-        layout.addWidget(QLabel("Static overrides (domain = address):"))
+        layout.addWidget(QLabel(tr("Static overrides (domain = address):")))
         self.hosts = QPlainTextEdit("\n".join(dns.get("hosts") or []))
         self.hosts.setPlaceholderText(
             "example.com = 93.184.216.34\ncdn.example.com = 1.2.3.4, 5.6.7.8")
+        self.hosts.setLayoutDirection(Qt.LeftToRight)
         layout.addWidget(self.hosts, 1)
 
         # -- Domestic DNS ----------------------------------------------
-        dom_label = QLabel("Domestic DNS (for sites that go direct):")
-        dom_label.setToolTip("Used only for domains your active routing sends direct.")
+        dom_label = QLabel(tr("Domestic DNS (for sites that go direct):"))
+        dom_label.setToolTip(tr("Used only for domains your active routing sends direct."))
         layout.addWidget(dom_label)
         dom_row = QHBoxLayout()
         self.domestic = QLineEdit(", ".join(dns.get("domestic_servers") or []))
         self.domestic.setPlaceholderText("178.22.122.100, 185.51.200.2")
-        self.domestic.setToolTip("Used only for domains your active routing sends direct.")
+        self.domestic.setToolTip(tr("Used only for domains your active routing sends direct."))
+        self.domestic.setLayoutDirection(Qt.LeftToRight)
         dom_row.addWidget(self.domestic, 1)
         for name, addrs in dns_mod.DOMESTIC_PRESETS.items():
             btn = QPushButton(name)
             btn.clicked.connect(lambda _=False, a=addrs: self._fill_domestic(a))
             dom_row.addWidget(btn)
-        off_btn = QPushButton("Off")
+        off_btn = QPushButton(tr("Off"))
         off_btn.clicked.connect(lambda: self._fill_domestic([]))
         dom_row.addWidget(off_btn)
         layout.addLayout(dom_row)
 
         # -- Remote via tunnel -------------------------------------------
-        self.remote_via_tunnel = QCheckBox("Resolve other sites through the tunnel")
+        self.remote_via_tunnel = QCheckBox(tr("Resolve other sites through the tunnel"))
         self.remote_via_tunnel.setToolTip(
-            "Recommended if your ISP blocks or tampers with DNS.")
+            tr("Recommended if your ISP blocks or tampers with DNS."))
         self.remote_via_tunnel.setChecked(bool(dns.get("remote_via_tunnel")))
         self.remote_via_tunnel.toggled.connect(self._update_note)
         layout.addWidget(self.remote_via_tunnel)
@@ -127,17 +130,18 @@ class DnsDialog(QDialog):
         adv_widget = QWidget()
         adv = QVBoxLayout(adv_widget)
         adv.setContentsMargins(0, 4, 0, 0)
-        self.parallel_query = QCheckBox("Parallel query")
+        self.parallel_query = QCheckBox(tr("Parallel query"))
         self.parallel_query.setChecked(bool(dns.get("parallel_query")))
         adv.addWidget(self.parallel_query)
-        self.serve_stale = QCheckBox("Serve stale")
+        self.serve_stale = QCheckBox(tr("Serve stale"))
         self.serve_stale.setChecked(bool(dns.get("serve_stale")))
         adv.addWidget(self.serve_stale)
-        adv.addWidget(QLabel("Raw DNS override (replaces everything above):"))
+        adv.addWidget(QLabel(tr("Raw DNS override (replaces everything above):")))
         self.raw_override = QPlainTextEdit(str(dns.get("raw_override") or ""))
         self.raw_override.setPlaceholderText('{"servers": [...]}')
+        self.raw_override.setLayoutDirection(Qt.LeftToRight)
         adv.addWidget(self.raw_override)
-        layout.addWidget(CollapsibleSection("Advanced", adv_widget))
+        layout.addWidget(CollapsibleSection(tr("Advanced"), adv_widget))
 
         self.status_label = QLabel("")
         self.status_label.setObjectName("Muted")
@@ -157,11 +161,12 @@ class DnsDialog(QDialog):
 
     def _update_note(self) -> None:
         if self.remote_via_tunnel.isChecked():
-            self.note.setText(
+            self.note.setText(tr(
                 "DNS queries for other sites go through the tunnel; "
-                "the proxy and any resolver hostname still resolve directly.")
+                "the proxy and any resolver hostname still resolve directly."))
         else:
-            self.note.setText("DNS queries leave over your normal connection, not the tunnel.")
+            self.note.setText(
+                tr("DNS queries leave over your normal connection, not the tunnel."))
 
     @staticmethod
     def _lines(widget: QPlainTextEdit) -> list[str]:
@@ -206,22 +211,28 @@ class DnsDialog(QDialog):
             return
         # Xray exits on a config it cannot parse, so refuse to save a bad entry
         # rather than let the next connect fail with nothing to explain it.
-        bad = dns_mod.invalid_servers(self._lines(self.servers))
+        # Each *_reasons() pair is (value, an unformatted English template);
+        # tr() translates the template and fills in the value itself, which
+        # stays as the user actually typed it either way.
+        bad = dns_mod.invalid_server_reasons(self._lines(self.servers))
         if bad:
-            QMessageBox.warning(self, "Invalid resolver", "\n\n".join(bad[:8]))
+            message = "\n\n".join(tr(tmpl, value=value) for value, tmpl in bad[:8])
+            QMessageBox.warning(self, tr("Invalid resolver"), message)
             return
-        bad_domestic = dns_mod.validate_domestic(self._domestic_entries())
+        bad_domestic = dns_mod.validate_domestic_reasons(self._domestic_entries())
         if bad_domestic:
-            QMessageBox.warning(self, "Invalid domestic resolver", "\n\n".join(bad_domestic[:8]))
+            message = "\n\n".join(tr(tmpl, value=value) for value, tmpl in bad_domestic[:8])
+            QMessageBox.warning(self, tr("Invalid domestic resolver"), message)
             return
-        raw_issues = dns_mod.raw_override_issues(self.raw_override.toPlainText())
+        raw_issues = dns_mod.raw_override_issue_reasons(self.raw_override.toPlainText())
         if raw_issues:
-            QMessageBox.warning(self, "Invalid DNS override", "\n\n".join(raw_issues[:8]))
+            message = "\n\n".join(tr(tmpl, value=value) for value, tmpl in raw_issues[:8])
+            QMessageBox.warning(self, tr("Invalid DNS override"), message)
             return
 
         candidate = self._collect()
         self._set_busy(True)
-        self.status_label.setText("Validating…")
+        self.status_label.setText(tr("Validating…"))
         routing_cfg = self._routing_cfg
 
         def work():
@@ -242,10 +253,15 @@ class DnsDialog(QDialog):
             self._set_busy(False)
             self.status_label.setText("")
             if error:
-                QMessageBox.warning(self, "Validation failed", str(error))
+                # A raw failure from the validation plumbing itself (OS/IO),
+                # not a translated app message -- stays in English.
+                QMessageBox.warning(self, tr("Validation failed"), str(error))
                 return
             if result:
-                QMessageBox.warning(self, "DNS settings invalid", result)
+                # xraycheck.check_config's own text is Xray's raw parser
+                # output -- also stays in English, same as any other error
+                # straight from Xray or the OS.
+                QMessageBox.warning(self, tr("DNS settings invalid"), result)
                 return
             self._dns = candidate
             self.accept()

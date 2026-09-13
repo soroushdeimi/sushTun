@@ -1,7 +1,7 @@
 """Diagnostics tools: ping, TCP delay, throughput, diagnostics."""
 from __future__ import annotations
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QHBoxLayout,
@@ -10,6 +10,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+from ..i18n import tr
 
 
 class ToolsPanel(QWidget):
@@ -27,11 +29,11 @@ class ToolsPanel(QWidget):
         row = QHBoxLayout()
         self._buttons = []
         for text, signal in (
-            ("Ping", self.pingRequested),
-            ("Relay TCP delay", self.delayRequested),
-            ("Throughput", self.throughputRequested),
-            ("Baseline", self.baselineRequested),
-            ("Diagnostics", self.diagnosticsRequested),
+            (tr("Ping"), self.pingRequested),
+            (tr("Relay TCP delay"), self.delayRequested),
+            (tr("Throughput"), self.throughputRequested),
+            (tr("Baseline"), self.baselineRequested),
+            (tr("Diagnostics"), self.diagnosticsRequested),
         ):
             b = QPushButton(text)
             b.clicked.connect(signal)
@@ -42,6 +44,8 @@ class ToolsPanel(QWidget):
         self.output = QTextEdit()
         self.output.setReadOnly(True)
         self.output.setFont(QFont("Cascadia Code", 10))
+        # Diagnostic output (raw ping/delay/throughput numbers and paths).
+        self.output.setLayoutDirection(Qt.LeftToRight)
         layout.addWidget(self.output, 1)
 
     def set_busy(self, busy: bool) -> None:
