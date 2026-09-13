@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMenu,
+    QMessageBox,
     QPushButton,
     QTableView,
     QTextEdit,
@@ -343,15 +344,28 @@ class ProfilePanel(QWidget):
         else:
             self.deleteManyRequested.emit(uids)
 
+    def _no_share_link(self) -> None:
+        QMessageBox.information(self, "No share link", "No share link for this server type.")
+
     def _copy_link(self, uid: str) -> None:
         p = self._profile(uid)
-        if p:
-            QApplication.clipboard().setText(share_mod.share_link(p))
+        if not p:
+            return
+        link = share_mod.share_link(p)
+        if link is None:
+            self._no_share_link()
+            return
+        QApplication.clipboard().setText(link)
 
     def _show_qr(self, uid: str) -> None:
         p = self._profile(uid)
-        if p:
-            QrDialog(p.name, share_mod.share_link(p), self).exec()
+        if not p:
+            return
+        link = share_mod.share_link(p)
+        if link is None:
+            self._no_share_link()
+            return
+        QrDialog(p.name, link, self).exec()
 
     def _show_menu(self, pos) -> None:
         uids = self.selected_uids()

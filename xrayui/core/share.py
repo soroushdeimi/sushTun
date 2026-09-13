@@ -1,6 +1,8 @@
 """Turn a Profile back into a share link: the reverse of importer.py."""
 from __future__ import annotations
 
+import base64
+import json
 from urllib.parse import quote, urlencode
 
 from .profiles import Profile
@@ -12,14 +14,13 @@ def _authority(address: str, port: int) -> str:
     return f"{address}:{port}"
 
 
-def _vless_query(p: Profile) -> dict[str, str]:
+def _transport_query(p: Profile) -> dict[str, str]:
+    """Transport/TLS query keys shared by vless, trojan and the std vmess://
+    URI form -- the reverse of importer._std_query_fields."""
     q: dict[str, str] = {
-        "encryption": p.encryption or "none",
         "type": p.network or "tcp",
         "security": p.security or "none",
     }
-    if p.flow:
-        q["flow"] = p.flow
     if p.sni:
         q["sni"] = p.sni
     if p.fp:
@@ -38,6 +39,29 @@ def _vless_query(p: Profile) -> dict[str, str]:
         q["host"] = p.host
     if p.network == "grpc" and p.service_name:
         q["serviceName"] = p.service_name
+    if p.network == "tcp" and p.header_type:
+        q["headerType"] = p.header_type
+    if p.network == "xhttp":
+        if p.xhttp_mode:
+            q["mode"] = p.xhttp_mode
+        if p.xhttp_extra:
+            q["extra"] = p.xhttp_extra
+    if p.allow_insecure:
+        q["allowInsecure"] = "1"
+    if p.ech:
+        q["ech"] = p.ech
+    if p.pcs:
+        q["pcs"] = p.pcs
+    if p.vcn:
+        q["vcn"] = p.vcn
+    return q
+
+
+def _vless_query(p: Profile) -> dict[str, str]:
+    q: dict[str, str] = {"encryption": p.encryption or "none"}
+    q.update(_transport_query(p))
+    if p.flow:
+        q["flow"] = p.flow
     return q
 
 
@@ -45,6 +69,61 @@ def share_vless(p: Profile) -> str:
     query = urlencode(_vless_query(p), quote_via=quote)
     userinfo = quote(p.id, safe="")
     return f"vless://{userinfo}@{_authority(p.address, p.port)}?{query}#{quote(p.name)}"
+
+
+def share_trojan(p: Profile) -> str:
+    query = urlencode(_transport_query(p), quote_via=quote)
+    userinfo = quote(p.id, safe="")
+    return f"trojan://{userinfo}@{_authority(p.address, p.port)}?{query}#{quote(p.name)}"
+
+
+def _vmess_dict(p: Profile) -> dict:
+    """The legacy base64(JSON) vmess:// form -- v2rayN's VmessQRCode shape.
+    grpc uses host as the service authority and path as the service name;
+    xhttp's "type" doubles as the mode, tcp's as the raw header type. No
+    "aid": Xray 26.3 is AEAD-only and has no alterId concept to write.
+    """
+    net = p.network or "tcp"
+    host, path, service_name = p.host, p.path, p.service_name
+    if net == "grpc":
+        path, service_name = service_name, ""
+    type_field = ""
+    if net == "xhttp":
+        type_field = p.xhttp_mode
+    elif net == "tcp":
+        type_field = p.header_type
+    data: dict = {
+        "v": "2", "ps": p.name, "add": p.address, "port": p.port, "id": p.id,
+        "scy": p.vmess_security or "auto", "net": net, "type": type_field,
+        "host": host, "path": path, "tls": p.security or "none",
+        "sni": p.sni, "alpn": p.alpn, "fp": p.fp,
+    }
+    if p.allow_insecure:
+        data["insecure"] = "1"
+    if p.vcn:
+        data["vcn"] = p.vcn
+    if p.pcs:
+        data["pcs"] = p.pcs
+    return data
+
+
+def share_vmess(p: Profile) -> str:
+    encoded = base64.b64encode(
+        json.dumps(_vmess_dict(p), ensure_ascii=False).encode()
+    ).decode()
+    return f"vmess://{encoded}"
+
+
+def share_shadowsocks(p: Profile) -> str | None:
+    """SIP002, base64url userinfo, plain tcp only. Anything SIP002 cannot
+    express -- a transport, or an obfuscating header -- has no share link:
+    a link that silently dropped the transport would point at a server
+    that isn't actually listening the way the link implies.
+    """
+    if not p.ss_method or (p.network not in ("", "tcp")) or p.header_type:
+        return None
+    userinfo = base64.urlsafe_b64encode(f"{p.ss_method}:{p.id}".encode()).decode().rstrip("=")
+    return f"ss://{userinfo}@{_authority(p.address, p.port)}#{quote(p.name)}"
 
 
 def _wireguard_query(p: Profile) -> dict[str, str]:
@@ -71,7 +150,14 @@ def share_wireguard(p: Profile) -> str:
     return f"wireguard://{userinfo}@{_authority(p.address, p.port)}?{query}#{quote(p.name)}"
 
 
-def share_link(p: Profile) -> str:
-    if (p.protocol or "").lower() == "wireguard":
+def share_link(p: Profile) -> str | None:
+    protocol = (p.protocol or "").lower()
+    if protocol == "wireguard":
         return share_wireguard(p)
+    if protocol == "vmess":
+        return share_vmess(p)
+    if protocol == "trojan":
+        return share_trojan(p)
+    if protocol == "shadowsocks":
+        return share_shadowsocks(p)
     return share_vless(p)
