@@ -35,6 +35,7 @@ from xrayui.core import network as network_mod  # noqa: E402
 from xrayui.core import settings as app_settings  # noqa: E402
 from xrayui.core import speedtest as speedtest_mod  # noqa: E402
 from xrayui.core.profiles import Profile  # noqa: E402
+from xrayui.ui import dialogs as dialogs_mod  # noqa: E402
 from xrayui.ui.dialogs import ProfileEditDialog, SettingsDialog  # noqa: E402
 from xrayui.ui.dns_dialog import DnsDialog  # noqa: E402
 from xrayui.ui.server_table import COL_DELAY  # noqa: E402
@@ -133,6 +134,41 @@ def test_settings_dialog_round_trips_the_new_knobs(qapp, defaults):
     assert values["tun_mtu"] == 1280
     assert values["log_level"] == "debug"
     assert values["ping_target"] == "1.1.1.1"
+
+
+def test_geo_update_now_success_sets_last_update_and_status(qapp, defaults, tmp_path,
+                                                              monkeypatch):
+    monkeypatch.setattr(dialogs_mod.app_settings.paths, "base_dir", lambda: tmp_path)
+    monkeypatch.setattr(dialogs_mod.geo_mod, "update", lambda source, fetch=None: None)
+    dlg = SettingsDialog(defaults)
+    assert dlg.geo_status.text() == "Never updated"
+
+    dlg._update_geo_now()
+    _pump(lambda: not dlg._geo_busy)
+
+    assert dlg.geo_updated()
+    assert dlg.geo_status.text() != "Never updated"
+    assert dlg.values()["geo"]["last_update"] > 0
+
+
+def test_geo_update_now_failure_shows_inline_no_popup(qapp, defaults, tmp_path, monkeypatch):
+    monkeypatch.setattr(dialogs_mod.app_settings.paths, "base_dir", lambda: tmp_path)
+
+    def fake_update(source, fetch=None):
+        raise dialogs_mod.geo_mod.GeoUpdateError("new geo data rejected: bad category")
+
+    monkeypatch.setattr(dialogs_mod.geo_mod, "update", fake_update)
+    popups = []
+    monkeypatch.setattr(QMessageBox, "warning",
+                        staticmethod(lambda *a, **k: popups.append(a) or None), raising=False)
+
+    dlg = SettingsDialog(defaults)
+    dlg._update_geo_now()
+    _pump(lambda: not dlg._geo_busy)
+
+    assert not dlg.geo_updated()
+    assert "bad category" in dlg.geo_status.text()
+    assert popups == []
 
 
 def test_settings_dialog_offers_every_known_log_level(qapp, defaults):

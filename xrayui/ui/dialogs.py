@@ -2,13 +2,16 @@
 from __future__ import annotations
 
 import json
+import time
 
+from PySide6.QtCore import QThreadPool
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
     QFormLayout,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -21,9 +24,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..core import geo as geo_mod
 from ..core import importer
 from ..core import settings as app_settings
 from ..core.profiles import Profile
+from .workers import Worker
 
 _NETWORKS = ["tcp", "ws", "grpc", "h2", "kcp", "quic"]
 _SECURITIES = ["none", "tls", "reality"]
@@ -263,8 +268,10 @@ class SettingsDialog(QDialog):
     def __init__(self, settings: dict, parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Settings")
-        self.resize(360, 200)
-        form = QFormLayout(self)
+        self.resize(400, 360)
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+        layout.addLayout(form)
 
         self.ping_target = QLineEdit(str(settings.get("ping_target", "1.1.1.1")))
         self.sample_seconds = QSpinBox()
@@ -288,10 +295,96 @@ class SettingsDialog(QDialog):
         form.addRow("Tunnel MTU", self.tun_mtu)
         form.addRow("Xray log level", self.log_level)
 
+        # -- Geo data ---------------------------------------------------
+        geo_cfg = settings.get("geo") or {}
+        self._last_update = geo_cfg.get("last_update", 0)
+        self._geo_busy = False
+        self._geo_updated = False
+        self.pool = QThreadPool.globalInstance()
+        self._workers: set = set()
+
+        geo_group = QGroupBox("Geo data")
+        geo_form = QFormLayout(geo_group)
+
+        self.geo_source = QComboBox()
+        self.geo_source.addItems(list(geo_mod.SOURCES))
+        current_source = str(geo_cfg.get("source", ""))
+        if current_source in geo_mod.SOURCES:
+            self.geo_source.setCurrentText(current_source)
+        geo_form.addRow("Source", self.geo_source)
+
+        update_row = QHBoxLayout()
+        self.btn_geo_update = QPushButton("Update now")
+        self.btn_geo_update.clicked.connect(self._update_geo_now)
+        self.geo_status = QLabel(self._format_last_update())
+        self.geo_status.setObjectName("Muted")
+        self.geo_status.setWordWrap(True)
+        update_row.addWidget(self.btn_geo_update)
+        update_row.addWidget(self.geo_status, 1)
+        geo_form.addRow(update_row)
+
+        self.geo_auto_hours = QSpinBox()
+        self.geo_auto_hours.setRange(0, 168)
+        self.geo_auto_hours.setValue(int(geo_cfg.get("auto_update_hours", 0)))
+        self.geo_auto_hours.setSpecialValueText("Off")
+        geo_form.addRow("Auto-update every (hours)", self.geo_auto_hours)
+
+        layout.addWidget(geo_group)
+
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
-        form.addRow(buttons)
+        layout.addWidget(buttons)
+
+    def _format_last_update(self) -> str:
+        if not self._last_update:
+            return "Never updated"
+        age_hours = (time.time() - self._last_update) / 3600
+        if age_hours < 1:
+            return f"Updated {max(1, round(age_hours * 60))}m ago"
+        return f"Updated {round(age_hours)}h ago"
+
+    def _run_async(self, fn, done) -> None:
+        worker = Worker(fn)
+
+        def finish(result=None, error=None):
+            self._workers.discard(worker)
+            done(result=result, error=error)
+
+        worker.signals.finished.connect(lambda r: finish(result=r))
+        worker.signals.error.connect(lambda e: finish(error=e))
+        self._workers.add(worker)
+        self.pool.start(worker)
+
+    def _update_geo_now(self) -> None:
+        if self._geo_busy:
+            return
+        self._geo_busy = True
+        self.btn_geo_update.setEnabled(False)
+        self.geo_status.setText("Updating…")
+        source = self.geo_source.currentText()
+
+        def done(result=None, error=None):
+            self._geo_busy = False
+            self.btn_geo_update.setEnabled(True)
+            if error:
+                self.geo_status.setText(str(error))
+                return
+            self._last_update = time.time()
+            self._geo_updated = True
+            # The files were already swapped on disk by geo.update() -- persist
+            # last_update right away rather than waiting on this dialog's own
+            # Save, so it survives even if the user then hits Cancel.
+            data = app_settings.load()
+            data.setdefault("geo", {})["last_update"] = self._last_update
+            app_settings.save(data)
+            self.geo_status.setText(self._format_last_update())
+
+        self._run_async(lambda: geo_mod.update(source), done)
+
+    def geo_updated(self) -> bool:
+        """Whether Update now succeeded while this dialog was open."""
+        return self._geo_updated
 
     def values(self) -> dict:
         return {
@@ -299,4 +392,9 @@ class SettingsDialog(QDialog):
             "sample_seconds": self.sample_seconds.value(),
             "tun_mtu": self.tun_mtu.value(),
             "log_level": self.log_level.currentText(),
+            "geo": {
+                "source": self.geo_source.currentText(),
+                "auto_update_hours": self.geo_auto_hours.value(),
+                "last_update": self._last_update,
+            },
         }
