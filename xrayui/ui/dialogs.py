@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import re
 import time
+from pathlib import Path
 
 from PySide6.QtCore import QThreadPool
 from PySide6.QtWidgets import (
@@ -28,7 +29,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..core import coreopts, importer, render, xraycheck
+from ..core import autostart, coreopts, importer, render, xraycheck
+from ..core import backup as backup_mod
 from ..core import geo as geo_mod
 from ..core import settings as app_settings
 from ..core.outbounds.hysteria2 import normalize_ports
@@ -521,10 +523,15 @@ class SettingsDialog(QDialog):
         if current in app_settings.LOG_LEVELS:
             self.log_level.setCurrentText(current)
 
+        self.check_updates = QCheckBox("Check for updates")
+        self.check_updates.setChecked(bool((settings.get("updates") or {}).get("check", True)))
+        self._updates_extra = dict(settings.get("updates") or {})
+
         form.addRow("Ping target", self.ping_target)
         form.addRow("Throughput sample (s)", self.sample_seconds)
         form.addRow("Tunnel MTU", self.tun_mtu)
         form.addRow("Xray log level", self.log_level)
+        form.addRow(self.check_updates)
 
         # -- Geo data ---------------------------------------------------
         geo_cfg = settings.get("geo") or {}
@@ -561,6 +568,46 @@ class SettingsDialog(QDialog):
         geo_form.addRow("Auto-update every (hours)", self.geo_auto_hours)
 
         layout.addWidget(geo_group)
+
+        # -- Startup ------------------------------------------------------
+        startup_cfg = settings.get("startup") or {}
+        startup_group = QGroupBox("Startup")
+        startup_form = QFormLayout(startup_group)
+        self._autostart_ok, autostart_reason = autostart.is_supported()
+        self.start_on_login = QCheckBox("Start sushTun when I log in")
+        self.start_on_login.setChecked(bool(startup_cfg.get("start_on_login")))
+        self.start_on_login.setEnabled(self._autostart_ok)
+        if not self._autostart_ok:
+            self.start_on_login.setToolTip(autostart_reason)
+        startup_form.addRow(self.start_on_login)
+        self.start_minimized = QCheckBox("Start minimized to the tray")
+        self.start_minimized.setChecked(bool(startup_cfg.get("start_minimized")))
+        startup_form.addRow(self.start_minimized)
+        self.auto_connect = QCheckBox("Connect automatically on start")
+        self.auto_connect.setChecked(bool(startup_cfg.get("auto_connect")))
+        startup_form.addRow(self.auto_connect)
+        layout.addWidget(startup_group)
+        self._start_on_login_was = self.start_on_login.isChecked()
+
+        # -- Backup & restore ----------------------------------------------
+        backup_group = QGroupBox("Backup & restore")
+        backup_layout = QVBoxLayout(backup_group)
+        backup_warning = QLabel(
+            "A backup file contains your server passwords in plain text — "
+            "store and share it carefully.")
+        backup_warning.setObjectName("Muted")
+        backup_warning.setWordWrap(True)
+        backup_layout.addWidget(backup_warning)
+        backup_row = QHBoxLayout()
+        self.btn_backup = QPushButton("Back up…")
+        self.btn_backup.clicked.connect(self._backup_now)
+        self.btn_restore = QPushButton("Restore…")
+        self.btn_restore.clicked.connect(self._restore_now)
+        backup_row.addWidget(self.btn_backup)
+        backup_row.addWidget(self.btn_restore)
+        backup_layout.addLayout(backup_row)
+        layout.addWidget(backup_group)
+        self._restored = False
 
         # -- Advanced (Phase 5 core options) -----------------------------
         core_cfg = settings.get("core") or {}
@@ -783,7 +830,51 @@ class SettingsDialog(QDialog):
                 "last_update": self._last_update,
             },
             "core": self._core_values(),
+            "startup": {
+                "start_on_login": self.start_on_login.isChecked(),
+                "start_minimized": self.start_minimized.isChecked(),
+                "auto_connect": self.auto_connect.isChecked(),
+            },
+            # last_check/notified_version are not user-editable fields --
+            # carried through from whatever they already were.
+            "updates": {**self._updates_extra, "check": self.check_updates.isChecked()},
         }
+
+    def restored(self) -> bool:
+        """Whether Restore… succeeded while this dialog was open."""
+        return self._restored
+
+    def _backup_now(self) -> None:
+        default_name = f"sushTun-backup-{time.strftime('%Y%m%d')}.zip"
+        path, _ = QFileDialog.getSaveFileName(self, "Back up sushTun", default_name,
+                                              "Zip archives (*.zip)")
+        if not path:
+            return
+        try:
+            backup_mod.backup(Path(path))
+        except OSError as exc:
+            QMessageBox.warning(self, "Backup failed", str(exc))
+            return
+        QMessageBox.information(self, "Backup complete", f"Saved to {path}")
+
+    def _restore_now(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "Restore sushTun backup", "",
+                                              "Zip archives (*.zip)")
+        if not path:
+            return
+        if QMessageBox.question(
+            self, "Restore backup",
+            "This replaces your current servers and settings with the backup's. Continue?",
+        ) != QMessageBox.Yes:
+            return
+        try:
+            backup_mod.restore(Path(path))
+        except (ValueError, OSError) as exc:
+            QMessageBox.warning(self, "Restore failed", str(exc))
+            return
+        self._restored = True
+        QMessageBox.information(self, "Restore complete",
+                                "Restored. sushTun will reload your settings and servers.")
 
     def _save(self) -> None:
         if self._busy:
@@ -792,12 +883,22 @@ class SettingsDialog(QDialog):
         self.btn_save.setEnabled(False)
         self.status_label.setText("Validating…")
         core_cfg = self._core_values()
+        toggle_login = self.start_on_login.isChecked() != self._start_on_login_was
+        want_login = self.start_on_login.isChecked()
 
         def work():
             text = render.build_text(
                 _SETTINGS_CHECK_PROFILE, "lo", include_tun=False, core_cfg=core_cfg,
             )
-            return xraycheck.check_config(text)
+            check_result = xraycheck.check_config(text)
+            if check_result:
+                return check_result, None
+            if toggle_login:
+                try:
+                    (autostart.enable if want_login else autostart.disable)()
+                except Exception as exc:
+                    return None, str(exc)
+            return None, None
 
         def done(result=None, error=None):
             self._busy = False
@@ -806,9 +907,14 @@ class SettingsDialog(QDialog):
             if error:
                 QMessageBox.warning(self, "Validation failed", str(error))
                 return
-            if result:
-                QMessageBox.warning(self, "Settings invalid", result)
+            check_result, startup_error = result
+            if check_result:
+                QMessageBox.warning(self, "Settings invalid", check_result)
                 return
+            if startup_error:
+                QMessageBox.warning(self, "Startup setting failed", startup_error)
+                return
+            self._start_on_login_was = want_login
             self.accept()
 
         self._run_async(work, done)
