@@ -6,7 +6,6 @@ import time
 
 from PySide6.QtCore import QThreadPool
 from PySide6.QtWidgets import (
-    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -191,31 +190,21 @@ class ProfileEditDialog(QDialog):
         self._add_row(form, "Port", self.f_port)
         self._lab_id = self._add_row(form, "UUID / private key", self.f_id)
         self._lab_pbk = self._add_row(form, "Peer / Reality public key", self.f_pbk)
-        self._vmess_labs = [self._add_row(form, "Security", self.f_vmess_security)]
-        self._vmess_fields = [self.f_vmess_security]
-        self._ss_labs = [self._add_row(form, "Method", self.f_ss_method)]
-        self._ss_fields = [self.f_ss_method]
-        self._vless_only_labs = [
-            self._add_row(form, "Encryption", self.f_encryption),
-            self._add_row(form, "Flow", self.f_flow),
-        ]
-        self._vless_only_fields = [self.f_encryption, self.f_flow]
-        self._stream_labs = [
-            self._add_row(form, "Network", self.f_network),
-            self._add_row(form, "Security", self.f_security),
-            self._add_row(form, "SNI", self.f_sni),
-            self._add_row(form, "Fingerprint", self.f_fp),
-            self._add_row(form, "ALPN", self.f_alpn),
-            self._add_row(form, "Reality sid", self.f_sid),
-            self._add_row(form, "Reality spiderX", self.f_spx),
-            self._add_row(form, "Path", self.f_path),
-            self._add_row(form, "Host", self.f_host),
-            self._add_row(form, "gRPC service", self.f_service),
-        ]
-        self._stream_fields = [
-            self.f_network, self.f_security, self.f_sni, self.f_fp, self.f_alpn,
-            self.f_sid, self.f_spx, self.f_path, self.f_host, self.f_service,
-        ]
+        lab_vmess_sec = self._add_row(form, "VMess security", self.f_vmess_security)
+        lab_ss_method = self._add_row(form, "Method", self.f_ss_method)
+        lab_encryption = self._add_row(form, "Encryption", self.f_encryption)
+        lab_flow = self._add_row(form, "Flow", self.f_flow)
+        lab_network = self._add_row(form, "Network", self.f_network)
+        lab_security = self._add_row(form, "Security", self.f_security)
+        lab_sni = self._add_row(form, "SNI", self.f_sni)
+        lab_fp = self._add_row(form, "Fingerprint", self.f_fp)
+        lab_alpn = self._add_row(form, "ALPN", self.f_alpn)
+        lab_sid = self._add_row(form, "Reality sid", self.f_sid)
+        lab_spx = self._add_row(form, "Reality spiderX", self.f_spx)
+        lab_path = self._add_row(form, "Path", self.f_path)
+        lab_host = self._add_row(form, "Host", self.f_host)
+        lab_service = self._add_row(form, "gRPC service", self.f_service)
+
         self._wg_labs = [
             self._add_row(form, "Local address", self.f_wg_local),
             self._add_row(form, "Preshared key", self.f_wg_psk),
@@ -232,10 +221,6 @@ class ProfileEditDialog(QDialog):
         self.f_xhttp_mode = QLineEdit(p.xhttp_mode)
         self.f_xhttp_extra = QLineEdit(p.xhttp_extra)
         self.f_xhttp_extra.setPlaceholderText('{"headers": {"X-Extra": "1"}}')
-        self.f_allow_insecure = QCheckBox("Allow insecure")
-        self.f_allow_insecure.setChecked(bool(p.allow_insecure))
-        self.f_allow_insecure.setToolTip(
-            "Skips certificate checks — only for servers you control")
         self.f_ech = QLineEdit(p.ech)
         self.f_pcs = QLineEdit(p.pcs)
         self.f_vcn = QLineEdit(p.vcn)
@@ -243,40 +228,117 @@ class ProfileEditDialog(QDialog):
         adv_widget = QWidget()
         adv_form = QFormLayout(adv_widget)
         adv_form.setContentsMargins(0, 4, 0, 0)
-        adv_form.addRow("Header type", self.f_header_type)
-        adv_form.addRow("xhttp mode", self.f_xhttp_mode)
-        adv_form.addRow("xhttp extra (JSON)", self.f_xhttp_extra)
-        adv_form.addRow(self.f_allow_insecure)
-        adv_form.addRow("ECH config list", self.f_ech)
-        adv_form.addRow("Pinned cert SHA-256", self.f_pcs)
-        adv_form.addRow("Verify cert name", self.f_vcn)
+        lab_header_type = self._add_row(adv_form, "Header type", self.f_header_type)
+        lab_xhttp_mode = self._add_row(adv_form, "xhttp mode", self.f_xhttp_mode)
+        lab_xhttp_extra = self._add_row(adv_form, "xhttp extra (JSON)", self.f_xhttp_extra)
+        lab_ech = self._add_row(adv_form, "ECH config list", self.f_ech)
+        lab_pcs = self._add_row(adv_form, "Pinned cert SHA-256", self.f_pcs)
+        lab_vcn = self._add_row(adv_form, "Verify cert name", self.f_vcn)
+
+        # allow_insecure has no editor control any more: the bundled Xray
+        # binary hard-refuses "allowInsecure" now (see
+        # core/outbounds/_common.py), so a checkbox for it would silently do
+        # nothing -- worse than not offering it. The field itself, and its
+        # import/share round-trip, are untouched; this just surfaces it.
+        self.insecure_note = QLabel(
+            "This server's link asks to skip certificate checks. This Xray "
+            "version no longer allows that — pin the certificate's SHA-256 "
+            "instead."
+        )
+        self.insecure_note.setObjectName("Muted")
+        self.insecure_note.setWordWrap(True)
+        self.insecure_note.setVisible(bool(p.allow_insecure))
+        adv_form.addRow(self.insecure_note)
+
         self._advanced = CollapsibleSection("Advanced", adv_widget)
         outer.addWidget(self._advanced)
+        if p.allow_insecure:
+            self._advanced.set_expanded(True)
 
-        self.f_protocol.currentTextChanged.connect(self._sync_protocol_fields)
-        self._sync_protocol_fields(self.f_protocol.currentText())
+        def wg() -> bool:
+            return self.f_protocol.currentText() == "wireguard"
+
+        def vless() -> bool:
+            return self.f_protocol.currentText() == "vless"
+
+        def vmess() -> bool:
+            return self.f_protocol.currentText() == "vmess"
+
+        def ss() -> bool:
+            return self.f_protocol.currentText() == "shadowsocks"
+
+        def stream() -> bool:
+            return not wg()
+
+        def is_reality() -> bool:
+            return stream() and self.f_security.currentText() == "reality"
+
+        def is_tls_or_reality() -> bool:
+            return stream() and self.f_security.currentText() in ("tls", "reality")
+
+        def is_tls() -> bool:
+            return stream() and self.f_security.currentText() == "tls"
+
+        def is_grpc() -> bool:
+            return stream() and self.f_network.currentText() == "grpc"
+
+        def is_xhttp() -> bool:
+            return stream() and self.f_network.currentText() == "xhttp"
+
+        def is_tcp() -> bool:
+            return stream() and self.f_network.currentText() == "tcp"
+
+        def has_path_host() -> bool:
+            if not stream():
+                return False
+            if self.f_network.currentText() in ("ws", "httpupgrade", "xhttp", "h2"):
+                return True
+            return (self.f_network.currentText() == "tcp"
+                    and self.f_header_type.text().strip() == "http")
+
+        self._pbk_visible = lambda: wg() or is_reality()
+        self._visibility_rules = [
+            (lab_vmess_sec, self.f_vmess_security, vmess),
+            (lab_ss_method, self.f_ss_method, ss),
+            (lab_encryption, self.f_encryption, vless),
+            (lab_flow, self.f_flow, vless),
+            (lab_network, self.f_network, stream),
+            (lab_security, self.f_security, stream),
+            (lab_sni, self.f_sni, is_tls_or_reality),
+            (lab_fp, self.f_fp, is_tls_or_reality),
+            (lab_alpn, self.f_alpn, is_tls),
+            (lab_sid, self.f_sid, is_reality),
+            (lab_spx, self.f_spx, is_reality),
+            (lab_path, self.f_path, has_path_host),
+            (lab_host, self.f_host, has_path_host),
+            (lab_service, self.f_service, is_grpc),
+            (lab_header_type, self.f_header_type, is_tcp),
+            (lab_xhttp_mode, self.f_xhttp_mode, is_xhttp),
+            (lab_xhttp_extra, self.f_xhttp_extra, is_xhttp),
+            (lab_ech, self.f_ech, is_tls),
+            (lab_pcs, self.f_pcs, is_tls),
+            (lab_vcn, self.f_vcn, is_tls),
+        ]
+
+        for combo in (self.f_protocol, self.f_network, self.f_security):
+            combo.currentTextChanged.connect(self._sync_field_visibility)
+        self.f_header_type.textChanged.connect(self._sync_field_visibility)
+        self._sync_field_visibility()
         return w
 
-    def _sync_protocol_fields(self, protocol: str) -> None:
+    def _sync_field_visibility(self, *_args) -> None:
+        protocol = self.f_protocol.currentText()
         wg = protocol == "wireguard"
-        vless = protocol == "vless"
-        vmess = protocol == "vmess"
-        ss = protocol == "shadowsocks"
         self._lab_id.setText("Private key" if wg else "Password" if protocol in
                              ("trojan", "shadowsocks") else "UUID")
         self._lab_pbk.setText("Peer public key" if wg else "Reality public key")
-        for lab, field in zip(self._stream_labs, self._stream_fields, strict=True):
-            lab.setVisible(not wg)
-            field.setVisible(not wg)
-        for lab, field in zip(self._vless_only_labs, self._vless_only_fields, strict=True):
-            lab.setVisible(vless)
-            field.setVisible(vless)
-        for lab, field in zip(self._vmess_labs, self._vmess_fields, strict=True):
-            lab.setVisible(vmess)
-            field.setVisible(vmess)
-        for lab, field in zip(self._ss_labs, self._ss_fields, strict=True):
-            lab.setVisible(ss)
-            field.setVisible(ss)
+        pbk_visible = self._pbk_visible()
+        self._lab_pbk.setVisible(pbk_visible)
+        self.f_pbk.setVisible(pbk_visible)
+        for lab, field, rule in self._visibility_rules:
+            visible = rule()
+            lab.setVisible(visible)
+            field.setVisible(visible)
         for lab, field in zip(self._wg_labs, self._wg_fields, strict=True):
             lab.setVisible(wg)
             field.setVisible(wg)
@@ -330,7 +392,8 @@ class ProfileEditDialog(QDialog):
             p.header_type = self.f_header_type.text().strip()
             p.xhttp_mode = self.f_xhttp_mode.text().strip()
             p.xhttp_extra = xhttp_extra
-            p.allow_insecure = self.f_allow_insecure.isChecked()
+            # allow_insecure has no editor control -- never touched here, so
+            # a profile that had it set keeps it set (see _form_tab).
             p.ech = self.f_ech.text().strip()
             p.pcs = self.f_pcs.text().strip()
             p.vcn = self.f_vcn.text().strip()

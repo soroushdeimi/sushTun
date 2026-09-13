@@ -312,7 +312,6 @@ def test_profile_edit_dialog_advanced_fields_round_trip(qapp):
     dlg.f_header_type.setText("http")
     dlg.f_xhttp_mode.setText("packet-up")
     dlg.f_xhttp_extra.setText('{"headers": {"X": "1"}}')
-    dlg.f_allow_insecure.setChecked(True)
     dlg.f_ech.setText("ECHCONFIG")
     dlg.f_pcs.setText("ab" * 32)
     dlg.f_vcn.setText("a.com")
@@ -321,10 +320,68 @@ def test_profile_edit_dialog_advanced_fields_round_trip(qapp):
     assert saved.header_type == "http"
     assert saved.xhttp_mode == "packet-up"
     assert saved.xhttp_extra == '{"headers": {"X": "1"}}'
-    assert saved.allow_insecure is True
     assert saved.ech == "ECHCONFIG"
     assert saved.pcs == "ab" * 32
     assert saved.vcn == "a.com"
+
+
+def test_profile_edit_dialog_has_no_allow_insecure_control(qapp):
+    # The checkbox was removed (it silently did nothing against the
+    # bundled Xray binary); the field itself must still survive Save
+    # untouched, whichever way it started.
+    assert not hasattr(ProfileEditDialog(
+        Profile(name="a", protocol="trojan", address="a.com", port=443, id="pw")), "f_allow_insecure")
+
+    on = Profile(name="a", protocol="trojan", address="a.com", port=443, id="pw",
+                allow_insecure=True)
+    dlg_on = ProfileEditDialog(on)
+    dlg_on._save()
+    assert dlg_on.result_profile().allow_insecure is True
+
+    off = Profile(name="a", protocol="trojan", address="a.com", port=443, id="pw",
+                 allow_insecure=False)
+    dlg_off = ProfileEditDialog(off)
+    dlg_off._save()
+    assert dlg_off.result_profile().allow_insecure is False
+
+
+def test_profile_edit_dialog_insecure_note_shown_and_advanced_expanded_only_when_set(qapp):
+    on = ProfileEditDialog(Profile(name="a", protocol="vless", address="a.com", port=443,
+                                   id="u", allow_insecure=True))
+    assert not on.insecure_note.isHidden()
+
+    off = ProfileEditDialog(Profile(name="b", protocol="vless", address="a.com", port=443,
+                                    id="u", allow_insecure=False))
+    assert off.insecure_note.isHidden()
+
+
+@pytest.mark.parametrize("protocol,network,security,header_type,expect_visible,expect_hidden", [
+    ("trojan", "xhttp", "tls", "", ["path", "host", "xhttp_mode", "xhttp_extra", "sni", "fp",
+                                    "alpn", "ech", "pcs", "vcn"], ["sid", "spx", "service", "pbk"]),
+    ("vless", "grpc", "tls", "", ["service", "sni", "fp", "alpn"],
+     ["path", "host", "xhttp_mode", "sid", "spx"]),
+    ("vless", "tcp", "reality", "", ["pbk", "sid", "spx", "sni", "fp"],
+     ["alpn", "ech", "pcs", "vcn", "path", "host"]),
+    ("shadowsocks", "tcp", "none", "http", ["header_type", "path", "host"],
+     ["sni", "fp", "alpn", "xhttp_mode", "service"]),
+])
+def test_profile_edit_dialog_visibility_combinations(
+    qapp, protocol, network, security, header_type, expect_visible, expect_hidden,
+):
+    p = Profile(name="p", protocol=protocol, address="a.com", port=443, id="u",
+               network=network, security=security, header_type=header_type, pbk="pb")
+    dlg = ProfileEditDialog(p)
+    widgets = {
+        "path": dlg.f_path, "host": dlg.f_host, "xhttp_mode": dlg.f_xhttp_mode,
+        "xhttp_extra": dlg.f_xhttp_extra, "sni": dlg.f_sni, "fp": dlg.f_fp,
+        "alpn": dlg.f_alpn, "ech": dlg.f_ech, "pcs": dlg.f_pcs, "vcn": dlg.f_vcn,
+        "sid": dlg.f_sid, "spx": dlg.f_spx, "service": dlg.f_service, "pbk": dlg.f_pbk,
+        "header_type": dlg.f_header_type,
+    }
+    for key in expect_visible:
+        assert not widgets[key].isHidden(), f"{key} should be visible"
+    for key in expect_hidden:
+        assert widgets[key].isHidden(), f"{key} should be hidden"
 
 
 def test_profile_edit_dialog_refuses_invalid_xhttp_extra(qapp, warnings):
