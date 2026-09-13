@@ -287,6 +287,31 @@ def test_domestic_host_port_is_split_like_a_dns_server_object():
     assert entry["port"] == 5353
 
 
+def test_domestic_accepts_only_literal_ip_forms():
+    for good in ["178.22.122.100", "178.22.122.100:5353", "[2606:4700:4700::1111]:53",
+                 "udp://178.22.122.100", "udp://178.22.122.100:5353"]:
+        assert dns_mod.validate_domestic([good]) == [], good
+
+
+def test_domestic_rejects_a_hostname_because_it_is_circular():
+    # A hostname domestic resolver would itself need DNS to resolve, which
+    # is exactly the loop the direct-dns rule exists to avoid.
+    why = dns_mod.validate_domestic(["resolver.example.com"])
+    assert why
+    assert "IP address" in why[0]
+    why_scheme = dns_mod.validate_domestic(["https://dns.example.com/dns-query"])
+    assert why_scheme
+    assert "IP address" in why_scheme[0]
+
+
+def test_domestic_hostname_is_dropped_at_render_not_fatal():
+    block, rules = dns_mod.build_dns_and_rules(
+        _dns(domestic_servers=["resolver.example.com", "178.22.122.100"]),
+        ["domain:ir"], PROXY_IP)
+    addrs = [e["address"] for e in block["servers"]]
+    assert addrs == ["178.22.122.100"]
+
+
 # -- remote_via_tunnel -------------------------------------------------------
 def test_remote_via_tunnel_sets_tag_and_proxy_rule():
     block, rules = dns_mod.build_dns_and_rules(

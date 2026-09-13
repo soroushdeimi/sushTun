@@ -236,6 +236,10 @@ def _split_host_port(addr: str) -> tuple[str, int | None]:
 
 
 def _domestic_reason(entry: str) -> str:
+    """Domestic resolvers must be a literal IP, never a hostname: a
+    hostname domestic resolver would itself need resolving first, which
+    is circular, and it is exactly the resolver this app trusts to answer
+    the direct-routed domains without depending on anything else."""
     value = entry.strip()
     if not value:
         return ""
@@ -244,13 +248,17 @@ def _domestic_reason(entry: str) -> str:
     if any(c.isspace() for c in value):
         return f"{value}: a server address cannot contain spaces"
     if value.startswith(_SCHEMES):
-        return validate_server(value)
-    host, port = _split_host_port(value)
-    if port is not None and not 1 <= port <= 65535:
-        return f"{value}: invalid port"
-    if _valid_address(host):
+        why = validate_server(value)
+        if why:
+            return why
+        host = _server_host(value)
+    else:
+        host, port = _split_host_port(value)
+        if port is not None and not 1 <= port <= 65535:
+            return f"{value}: invalid port"
+    if _is_ip(host):
         return ""
-    return f"{value}: expected an IP or a hostname, optionally with :port"
+    return f"{value}: use the resolver's IP address"
 
 
 def validate_domestic(entries) -> list[str]:
