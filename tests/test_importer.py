@@ -438,3 +438,44 @@ def test_parse_json_wireguard_outbound():
     assert p.address == "1.2.3.4" and p.port == 51820
     assert p.id == "SECRET" and p.pbk == "PEER"
     assert p.wg_local_address == "10.0.0.2/32"
+
+
+# -- Profile.is_valid() filtering of junk links ------------------------------
+def test_vmess_link_missing_add_is_dropped():
+    data = {"ps": "X", "port": 443, "id": "u", "net": "tcp"}
+    link = "vmess://" + base64.b64encode(json.dumps(data).encode()).decode()
+    assert importer.parse_share_text(link) == []
+    # parse_vmess itself doesn't raise for this -- it's is_valid() that
+    # catches it, at the parse_share_text/parse_json/parse_qr layer.
+    assert not importer.parse_vmess(link).is_valid()
+
+
+def test_vmess_link_all_null_fields_is_dropped():
+    data = {"ps": None, "add": None, "port": None, "id": None, "net": None}
+    link = "vmess://" + base64.b64encode(json.dumps(data).encode()).decode()
+    assert importer.parse_share_text(link) == []
+
+
+def test_trojan_link_empty_password_is_dropped():
+    assert importer.parse_share_text("trojan://@a.example.com:443") == []
+
+
+def test_mixed_subscription_drops_junk_but_keeps_the_good_link():
+    data = {"ps": "X", "port": 443, "id": "u", "net": "tcp"}  # no "add"
+    bad_vmess = "vmess://" + base64.b64encode(json.dumps(data).encode()).decode()
+    bad_trojan = "trojan://@a.example.com:443"
+    good_trojan = "trojan://pass1@b.example.com:443?security=tls&sni=b.example.com#Good"
+    blob = base64.b64encode(f"{bad_vmess}\n{bad_trojan}\n{good_trojan}\n".encode()).decode()
+    profiles = importer.parse_subscription(blob)
+    assert len(profiles) == 1
+    assert profiles[0].address == "b.example.com"
+
+
+def test_parse_json_raises_for_a_config_with_no_credential():
+    cfg = {"outbounds": [{
+        "tag": "proxy", "protocol": "trojan",
+        "settings": {"servers": [{"address": "a.example.com", "port": 443, "password": ""}]},
+        "streamSettings": {"network": "tcp"},
+    }]}
+    with pytest.raises(ValueError):
+        importer.parse_json(json.dumps(cfg))

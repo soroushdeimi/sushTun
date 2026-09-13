@@ -61,6 +61,18 @@ class Profile:
     def endpoint(self) -> str:
         return f"{self.address}:{self.port}"
 
+    def is_valid(self) -> bool:
+        """False for a profile a broken/malformed link parsed into but that
+        can never actually connect: no address, no credential, or (for the
+        protocols that need one) no peer public key / cipher method."""
+        if not self.address or not self.id:
+            return False
+        if self.protocol == "wireguard" and not self.pbk:
+            return False
+        if self.protocol == "shadowsocks" and not self.ss_method:
+            return False
+        return True
+
 
 class ProfileStore:
     def __init__(self) -> None:

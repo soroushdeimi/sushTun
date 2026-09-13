@@ -129,6 +129,10 @@ def _profile_key(p: Profile) -> tuple:
 
 def refresh(sub: Subscription, profiles: ProfileStore, store: SubscriptionStore) -> Subscription:
     usage, parsed = fetch(sub.url)
+    # parse_subscription already drops an unparseable line; this also drops
+    # a link that parsed but can never connect (no address/credential), the
+    # same check import.parse_share_text/parse_json/parse_qr apply.
+    parsed = [p for p in parsed if p.is_valid()]
     if not parsed:
         # A panel error page, an empty body, or a sub with every server
         # temporarily removed all parse to zero profiles. Refuse rather than

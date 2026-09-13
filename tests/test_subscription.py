@@ -79,6 +79,19 @@ def test_refresh_keeps_active_uid_for_a_server_that_reappears(tmp_path, monkeypa
     assert [p.uid for p in profiles.list()] == [old.uid]
 
 
+def test_refresh_drops_an_invalid_profile_but_keeps_the_good_one(tmp_path, monkeypatch):
+    profiles, store = _setup(tmp_path, monkeypatch)
+    sub = Subscription(url="https://sub.example/x", profile_uids=[])
+    junk = Profile(protocol="trojan", address="a.example.com", port=443, id="")  # no password
+    good = Profile(protocol="trojan", address="b.example.com", port=443, id="pw1")
+    monkeypatch.setattr(subscription, "fetch", lambda url, timeout=20.0: (Usage(), [junk, good]))
+
+    result = subscription.refresh(sub, profiles, store)
+
+    kept = [profiles.get(uid) for uid in result.profile_uids]
+    assert [p.address for p in kept] == ["b.example.com"]
+
+
 def test_refresh_refuses_to_wipe_everything_on_an_empty_parse(tmp_path, monkeypatch):
     profiles, store = _setup(tmp_path, monkeypatch)
     old = profiles.save(Profile(protocol="vless", address="a.example.com", port=443, id="uid-1"))

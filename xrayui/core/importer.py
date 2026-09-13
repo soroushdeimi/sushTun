@@ -389,17 +389,24 @@ def parse_share_text(text: str) -> list[Profile]:
         line = line.strip()
         try:
             if line.startswith("vless://"):
-                out.append(parse_vless(line))
+                p = parse_vless(line)
             elif line.startswith("vmess://"):
-                out.append(parse_vmess(line))
+                p = parse_vmess(line)
             elif line.startswith("trojan://"):
-                out.append(parse_trojan(line))
+                p = parse_trojan(line)
             elif line.startswith("ss://"):
-                out.append(parse_shadowsocks(line))
+                p = parse_shadowsocks(line)
             elif line.startswith("wireguard://") or line.startswith("wg://"):
-                out.append(parse_wireguard(line))
+                p = parse_wireguard(line)
+            else:
+                continue
         except ValueError:
             continue
+        # A malformed link a scheme-specific parser didn't reject outright
+        # (a vmess link with no "add", a trojan link with no password) must
+        # not surface as a profile that will just fail every connect.
+        if p.is_valid():
+            out.append(p)
     return out
 
 
@@ -585,10 +592,14 @@ def parse_json(text: str) -> Profile:
         return parse_wg_conf(stripped)
     data = json.loads(text)
     if isinstance(data, dict) and "outbounds" in data:
-        return _profile_from_config(data)
-    if isinstance(data, dict):
-        return Profile.from_dict(data)
-    raise ValueError("unsupported JSON shape")
+        p = _profile_from_config(data)
+    elif isinstance(data, dict):
+        p = Profile.from_dict(data)
+    else:
+        raise ValueError("unsupported JSON shape")
+    if not p.is_valid():
+        raise ValueError("config has no address or credential for its protocol")
+    return p
 
 
 def parse_qr(image_path: str) -> list[Profile]:
@@ -602,16 +613,21 @@ def parse_qr(image_path: str) -> list[Profile]:
     data, _, _ = cv2.QRCodeDetector().detectAndDecode(img)
     if not data:
         raise ValueError("no QR code found")
+    p: Profile | None = None
     if data.startswith("vless://"):
-        return [parse_vless(data)]
-    if data.startswith("vmess://"):
-        return [parse_vmess(data)]
-    if data.startswith("trojan://"):
-        return [parse_trojan(data)]
-    if data.startswith("ss://"):
-        return [parse_shadowsocks(data)]
-    if data.startswith("wireguard://") or data.startswith("wg://"):
-        return [parse_wireguard(data)]
+        p = parse_vless(data)
+    elif data.startswith("vmess://"):
+        p = parse_vmess(data)
+    elif data.startswith("trojan://"):
+        p = parse_trojan(data)
+    elif data.startswith("ss://"):
+        p = parse_shadowsocks(data)
+    elif data.startswith("wireguard://") or data.startswith("wg://"):
+        p = parse_wireguard(data)
+    if p is not None:
+        if not p.is_valid():
+            raise ValueError("QR link has no address or credential for its protocol")
+        return [p]
     if data.lstrip().startswith(("{", "[")):
         return [parse_json(data)]
     return parse_share_text(data)
