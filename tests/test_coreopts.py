@@ -277,3 +277,23 @@ def test_default_fp_ignored_when_not_a_known_value():
     out = _render(_profile(fp=""), core_cfg=_core(default_fp="not-a-real-fp"))
     proxy = next(o for o in out["outbounds"] if o["tag"] == "proxy")
     assert "fingerprint" not in proxy["streamSettings"]["tlsSettings"]
+
+
+def test_default_fp_not_applied_to_hysteria2():
+    # uTLS fingerprints are a TCP+TLS thing; Hysteria2 is QUIC. Its
+    # streamSettings.security is unconditionally "tls" for unrelated
+    # reasons, so this specifically guards against that coincidence
+    # making default_fp apply where it would be meaningless.
+    p = Profile(protocol="hysteria2", address="a.example.com", port=443,
+               id="hy2-auth", sni="a.example.com")
+    out = _render(p, core_cfg=_core(default_fp="chrome"))
+    proxy = next(o for o in out["outbounds"] if o["tag"] == "proxy")
+    assert "fingerprint" not in proxy["streamSettings"]["tlsSettings"]
+
+
+def test_default_fp_not_applied_to_wireguard():
+    p = Profile(protocol="wireguard", address="a.example.com", port=51820,
+               id="SECRETKEY", pbk="PEERKEY")
+    out = _render(p, core_cfg=_core(default_fp="chrome"))
+    proxy = next(o for o in out["outbounds"] if o["tag"] == "proxy")
+    assert "streamSettings" not in proxy  # wireguard has none at all

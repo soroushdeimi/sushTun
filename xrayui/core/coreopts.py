@@ -173,6 +173,13 @@ def apply_local_proxy(cfg: dict, core_cfg: dict) -> int:
 def apply_default_fp(cfg: dict, core_cfg: dict, profile: Profile) -> None:
     if profile.fp:
         return  # the profile's own fingerprint always wins
+    # uTLS fingerprints are a TCP+TLS handshake thing. Hysteria2 is QUIC
+    # (its streamSettings.security is unconditionally "tls" for unrelated
+    # reasons -- see outbounds/hysteria2.py) and WireGuard has no TLS at
+    # all, so a fingerprint written into either would be meaningless at
+    # runtime even though xray -test has no way to catch that.
+    if (profile.protocol or "").lower() in ("hysteria2", "wireguard"):
+        return
     fp = str(core_cfg.get("default_fp") or "").strip()
     if fp not in _DEFAULT_FP_VALUES:
         return
