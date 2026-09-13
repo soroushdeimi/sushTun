@@ -409,7 +409,7 @@ def test_profile_edit_dialog_hysteria2_fields_round_trip(qapp):
     dlg.f_hy2_pcs.setText("ab" * 32)
     dlg.f_hy2_obfs_password.setText("obfspass")
     dlg.f_hy2_ports.setText("20000-30000")
-    dlg.f_hy2_hop_interval.setText("45")
+    dlg.f_hy2_hop_interval.setValue(45)
     dlg.f_hy2_up_mbps.setValue(100)
     dlg.f_hy2_down_mbps.setValue(50)
     dlg._save()
@@ -421,6 +421,61 @@ def test_profile_edit_dialog_hysteria2_fields_round_trip(qapp):
     assert saved.hy2_hop_interval == "45"
     assert saved.hy2_up_mbps == 100
     assert saved.hy2_down_mbps == 50
+
+
+def test_profile_edit_dialog_hysteria2_hop_interval_is_a_spinbox_zero_is_default(qapp):
+    p = Profile(name="hy", protocol="hysteria2", address="a.com", port=443, id="pw",
+               hy2_hop_interval="45")
+    dlg = ProfileEditDialog(p)
+    assert dlg.f_hy2_hop_interval.value() == 45
+    dlg.f_hy2_hop_interval.setValue(0)
+    dlg._save()
+    assert dlg.result_profile().hy2_hop_interval == ""
+
+
+def test_profile_edit_dialog_refuses_invalid_hysteria2_port_range(qapp, warnings):
+    p = Profile(name="hy", protocol="hysteria2", address="a.com", port=443, id="pw")
+    dlg = ProfileEditDialog(p)
+    dlg.f_hy2_ports.setText("not-a-range")
+    dlg._save()
+    assert warnings
+    assert dlg.result() == 0
+    original = dlg.result_profile()
+    assert original.hy2_ports == ""  # unchanged, Save was refused
+
+
+def test_profile_edit_dialog_normalizes_hysteria2_port_range_on_save(qapp):
+    p = Profile(name="hy", protocol="hysteria2", address="a.com", port=443, id="pw")
+    dlg = ProfileEditDialog(p)
+    dlg.f_hy2_ports.setText("20000:30000")
+    dlg._save()
+    assert dlg.result_profile().hy2_ports == "20000-30000"
+
+
+def test_profile_edit_dialog_refuses_invalid_pinned_cert(qapp, warnings):
+    p = Profile(name="hy", protocol="hysteria2", address="a.com", port=443, id="pw")
+    dlg = ProfileEditDialog(p)
+    dlg.f_hy2_pcs.setText("not-hex")
+    dlg._save()
+    assert warnings
+    assert dlg.result() == 0
+
+    p2 = Profile(name="v", protocol="vless", address="a.com", port=443, id="u",
+                security="tls")
+    dlg2 = ProfileEditDialog(p2)
+    dlg2.f_pcs.setText("also-not-hex")
+    dlg2._save()
+    assert dlg2.result() == 0
+
+
+def test_profile_edit_dialog_normalizes_pinned_cert_on_save(qapp):
+    colon_form = ":".join(["AB"] * 32)
+    p = Profile(name="v", protocol="vless", address="a.com", port=443, id="u",
+               security="tls")
+    dlg = ProfileEditDialog(p)
+    dlg.f_pcs.setText(colon_form)
+    dlg._save()
+    assert dlg.result_profile().pcs == "ab" * 32
 
 
 def test_profile_edit_dialog_refuses_invalid_xhttp_extra(qapp, warnings):

@@ -27,7 +27,8 @@ from PySide6.QtWidgets import (
 from ..core import geo as geo_mod
 from ..core import importer
 from ..core import settings as app_settings
-from ..core.profiles import Profile
+from ..core.outbounds.hysteria2 import normalize_ports
+from ..core.profiles import Profile, normalize_pcs, valid_pcs
 from .rule_editor import CollapsibleSection
 from .workers import Worker
 
@@ -187,8 +188,13 @@ class ProfileEditDialog(QDialog):
         self.f_hy2_obfs_password = QLineEdit(p.hy2_obfs_password)
         self.f_hy2_ports = QLineEdit(p.hy2_ports)
         self.f_hy2_ports.setPlaceholderText("20000-30000")
-        self.f_hy2_hop_interval = QLineEdit(p.hy2_hop_interval)
-        self.f_hy2_hop_interval.setPlaceholderText("30")
+        self.f_hy2_hop_interval = QSpinBox()
+        self.f_hy2_hop_interval.setRange(0, 3600)
+        self.f_hy2_hop_interval.setSpecialValueText("Default")
+        self.f_hy2_hop_interval.setToolTip(
+            "0 lets Xray pick its own default. Otherwise 5-3600 seconds.")
+        self.f_hy2_hop_interval.setValue(
+            int(p.hy2_hop_interval) if p.hy2_hop_interval.isdigit() else 0)
         _hy2_mbps_tip = "Leave 0 to let the congestion control pick (BBR)."
         self.f_hy2_up_mbps = QSpinBox()
         self.f_hy2_up_mbps.setRange(0, 100000)
@@ -401,6 +407,21 @@ class ProfileEditDialog(QDialog):
                                         "xhttp extra must be a JSON object, e.g. "
                                         '{"headers": {"X-Extra": "1"}}.')
                     return
+            hy2_ports = self.f_hy2_ports.text().strip()
+            if hy2_ports and normalize_ports(hy2_ports) is None:
+                QMessageBox.warning(self, "Invalid port range",
+                                    "Port-hopping range must look like 20000-30000 "
+                                    "(or a comma-separated list of ranges/ports), "
+                                    "with every port 1-65535.")
+                return
+            pcs_widget = (self.f_hy2_pcs if self.f_protocol.currentText() == "hysteria2"
+                         else self.f_pcs)
+            pcs_raw = pcs_widget.text().strip()
+            if pcs_raw and not valid_pcs(pcs_raw):
+                QMessageBox.warning(self, "Invalid pinned certificate",
+                                    "Pinned cert SHA-256 must be 64 hex characters "
+                                    "(colons and spaces are fine and will be removed).")
+                return
             p = self._profile
             p.name = self.f_name.text().strip() or "Profile"
             p.protocol = self.f_protocol.currentText()
@@ -431,11 +452,16 @@ class ProfileEditDialog(QDialog):
             # pcs has two editors -- the shared Advanced one, and a
             # dedicated main-form one for hysteria2 -- since only one is
             # ever visible, whichever matches the chosen protocol wins.
-            p.pcs = (self.f_hy2_pcs if p.protocol == "hysteria2" else self.f_pcs).text().strip()
+            # Normalized above (checked valid there too): "AB:CD:..." ->
+            # unbroken lowercase hex, what Xray's own pin comparison wants.
+            p.pcs = normalize_pcs(pcs_raw)
             p.vcn = self.f_vcn.text().strip()
             p.hy2_obfs_password = self.f_hy2_obfs_password.text().strip()
-            p.hy2_ports = self.f_hy2_ports.text().strip()
-            p.hy2_hop_interval = self.f_hy2_hop_interval.text().strip()
+            # Already validated above -- normalize_ports can't return None
+            # here for a non-empty hy2_ports, since we'd have refused Save.
+            p.hy2_ports = normalize_ports(hy2_ports) if hy2_ports else ""
+            p.hy2_hop_interval = (str(self.f_hy2_hop_interval.value())
+                                  if self.f_hy2_hop_interval.value() else "")
             p.hy2_up_mbps = self.f_hy2_up_mbps.value()
             p.hy2_down_mbps = self.f_hy2_down_mbps.value()
             p.wg_local_address = self.f_wg_local.text().strip()
