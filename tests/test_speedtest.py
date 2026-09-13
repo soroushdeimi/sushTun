@@ -183,6 +183,25 @@ def test_result_store_round_trip_and_prune(tmp_path, monkeypatch):
     assert store.get("u1") == {"delay_ms": 12.3, "tcping_ms": 7.0}
 
 
+def test_result_store_is_thread_safe_under_concurrent_writes(tmp_path, monkeypatch):
+    monkeypatch.setattr(speedtest.paths, "base_dir", lambda: tmp_path)
+    store = speedtest.ResultStore()
+
+    def worker(i: int) -> None:
+        store.set(f"u{i}", delay_ms=float(i))
+
+    threads = [threading.Thread(target=worker, args=(i,)) for i in range(20)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    data = store.load()
+    assert len(data) == 20
+    for i in range(20):
+        assert data[f"u{i}"] == {"delay_ms": float(i)}
+
+
 # -- Smoke: the generated config actually validates with the real binary ----
 def test_generated_config_validates_with_real_xray(tmp_path):
     exe = paths.xray_exe()

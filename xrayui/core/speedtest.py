@@ -7,6 +7,7 @@ tunnel is up. Never touches the live connection's process, config or log.
 from __future__ import annotations
 
 import json
+import os
 import socket
 import subprocess
 import threading
@@ -267,10 +268,17 @@ class ResultStore:
 
     Deliberately outside profiles/: ProfileStore.list() globs profiles/*.json
     and this dict-of-dicts shape would parse as a bogus profile there.
+
+    on_result fires from worker threads (real_delay_all/tcping_all run in a
+    thread pool), and the UI saves a result from each callback as it
+    arrives, so every write goes through one lock and lands on disk with an
+    atomic replace -- never a read/modify/write race or a torn file from two
+    threads writing at once.
     """
 
     def __init__(self) -> None:
         self.file = paths.base_dir() / "profile_stats.json"
+        self._lock = threading.Lock()
 
     def load(self) -> dict:
         if not self.file.exists():
@@ -283,21 +291,26 @@ class ResultStore:
 
     def save(self, data: dict) -> None:
         self.file.parent.mkdir(parents=True, exist_ok=True)
-        self.file.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+        tmp = self.file.with_name(self.file.name + ".tmp")
+        tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, self.file)
 
     def get(self, uid: str) -> dict | None:
-        return self.load().get(uid)
+        with self._lock:
+            return self.load().get(uid)
 
     def set(self, uid: str, **fields) -> None:
-        data = self.load()
-        entry = dict(data.get(uid, {}))
-        entry.update(fields)
-        data[uid] = entry
-        self.save(data)
+        with self._lock:
+            data = self.load()
+            entry = dict(data.get(uid, {}))
+            entry.update(fields)
+            data[uid] = entry
+            self.save(data)
 
     def prune(self, valid_uids) -> None:
-        valid = set(valid_uids)
-        data = self.load()
-        pruned = {uid: v for uid, v in data.items() if uid in valid}
-        if pruned != data:
-            self.save(pruned)
+        with self._lock:
+            valid = set(valid_uids)
+            data = self.load()
+            pruned = {uid: v for uid, v in data.items() if uid in valid}
+            if pruned != data:
+                self.save(pruned)
