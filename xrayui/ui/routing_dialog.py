@@ -254,11 +254,11 @@ class RoutingDialog(QDialog):
         toggles = QGroupBox("Bypass the tunnel (go direct)")
         tg = QGridLayout(toggles)
         self.cb_low = QCheckBox("Low usage — bypass Windows telemetry/update chatter")
-        self.cb_ads = QCheckBox("Block ads & trackers")
+        self.cb_ads = QCheckBox("Block ads && trackers")
         self.cb_private = QCheckBox("Local network / private IPs direct")
-        self.cb_iran = QCheckBox("Iran sites & IPs direct")
-        self.cb_russia = QCheckBox("Russia sites & IPs direct")
-        self.cb_china = QCheckBox("China sites & IPs direct")
+        self.cb_iran = QCheckBox("Iran sites && IPs direct")
+        self.cb_russia = QCheckBox("Russia sites && IPs direct")
+        self.cb_china = QCheckBox("China sites && IPs direct")
         self.cb_low.setChecked(routing.get("low_usage", False))
         self.cb_ads.setChecked(routing.get("block_ads", True))
         self.cb_private.setChecked(routing.get("direct_private", True))
@@ -671,17 +671,19 @@ class RoutingDialog(QDialog):
             mode=self.mode_combo.currentData() or "simple",
         )
 
-        if not candidate["sets"]:
-            self._routing = candidate
-            self.accept()
-            return
-
+        # Always validate, Simple included: a typo in Bypass domains or a
+        # geoip category the current geo data lacks is exactly as capable
+        # of stopping Xray from starting as a bad custom rule is.
         self._set_busy(True)
-        self.status_label.setText("Validating rule sets…")
+        self.status_label.setText("Validating…")
         low_usage = candidate["low_usage"]
         sets = candidate["sets"]
 
         def work():
+            simple_rules = routing_mod.build_rules({**candidate, "mode": "simple"})
+            err = xraycheck.check_rules(simple_rules)
+            if err:
+                return ("Simple", err)
             for s in sets:
                 rules = routing_mod.build_rules(
                     {"mode": s["id"], "sets": sets, "low_usage": low_usage})
@@ -698,8 +700,9 @@ class RoutingDialog(QDialog):
                 return
             if result:
                 name, err = result
+                label = name if name == "Simple" else f"'{name}'"
                 self.status_label.setText("")
-                QMessageBox.warning(self, "Rule set invalid", f"'{name}': {err}")
+                QMessageBox.warning(self, "Routing invalid", f"{label}: {err}")
                 return
             self.status_label.setText("")
             self._routing = candidate

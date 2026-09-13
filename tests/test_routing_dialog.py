@@ -162,13 +162,37 @@ def test_save_blocked_by_a_check_rules_error_leaves_settings_unchanged(dlg, monk
     assert dlg.result_routing() is original_routing
 
 
-def test_save_with_no_sets_needs_no_validation(dlg, monkeypatch):
+def test_save_with_no_sets_still_validates_simple_mode(dlg, monkeypatch):
     calls = []
     monkeypatch.setattr(rd.xraycheck, "check_rules",
-                        lambda rules, asset_dir=None: calls.append(1) or None)
+                        lambda rules, asset_dir=None: calls.append(rules) or None)
     dlg._save()
+    _pump(lambda: not dlg._busy)
     assert dlg.result() == QDialog.Accepted
-    assert calls == []
+    assert len(calls) == 1  # Simple mode's own rules, even with zero sets
+
+
+def test_save_blocked_by_a_bad_simple_mode_rule_leaves_settings_unchanged(dlg, monkeypatch):
+    def fake_check(rules, asset_dir=None):
+        for r in rules:
+            if "domain:gogle.com" in (r.get("domain") or []):
+                return 'code not found in geosite.dat: "GOGLE.COM"'
+        return None
+
+    monkeypatch.setattr(rd.xraycheck, "check_rules", fake_check)
+    warnings = []
+    monkeypatch.setattr(QMessageBox, "warning",
+                        staticmethod(lambda *a, **k: warnings.append(a[2])), raising=False)
+
+    dlg.domains.setPlainText("gogle.com")
+    original_routing = dlg.result_routing()
+
+    dlg._save()
+    _pump(lambda: not dlg._busy)
+
+    assert dlg.result() != QDialog.Accepted
+    assert warnings and warnings[0].startswith("Simple:")
+    assert dlg.result_routing() is original_routing
 
 
 def test_active_mode_combo_writes_routing_mode(dlg, monkeypatch):
