@@ -102,9 +102,15 @@ def load() -> dict:
     p = _path()
     if p.exists():
         try:
-            return _merge(DEFAULTS, _migrate(json.loads(p.read_text(encoding="utf-8"))))
+            raw = json.loads(p.read_text(encoding="utf-8"))
         except ValueError:
-            pass
+            raw = None
+        # A settings.json that parses but isn't an object (corruption, or
+        # something else wrote to the path) is as unusable as invalid JSON;
+        # _migrate/_merge both assume a dict and would raise AttributeError
+        # on anything else, which would stop the app from starting at all.
+        if isinstance(raw, dict):
+            return _merge(DEFAULTS, _migrate(raw))
     return copy.deepcopy(DEFAULTS)
 
 

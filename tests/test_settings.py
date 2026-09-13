@@ -34,3 +34,10 @@ def test_missing_file_returns_defaults(tmp_path, monkeypatch):
     got = app_settings.load()
     assert got == app_settings.DEFAULTS
     assert got is not app_settings.DEFAULTS
+
+
+def test_non_dict_json_falls_back_to_defaults(tmp_path, monkeypatch):
+    monkeypatch.setattr(app_settings.paths, "base_dir", lambda: tmp_path)
+    (tmp_path / "settings.json").write_text("[]", encoding="utf-8")
+    got = app_settings.load()
+    assert got == app_settings.DEFAULTS
