@@ -15,6 +15,7 @@ SCHEMA_VERSION = 1
 
 DEFAULTS: dict = {
     "schema_version": SCHEMA_VERSION,
+    "language": "en",
     "ping_target": "1.1.1.1",
     "sample_seconds": 5,
     "log_level": "warning",
@@ -170,7 +171,10 @@ def load() -> dict:
         # _migrate/_merge both assume a dict and would raise AttributeError
         # on anything else, which would stop the app from starting at all.
         if isinstance(raw, dict):
-            return _merge(DEFAULTS, _migrate(raw))
+            merged = _merge(DEFAULTS, _migrate(raw))
+            if merged.get("language") not in ("en", "fa"):
+                merged["language"] = "en"
+            return merged
     return copy.deepcopy(DEFAULTS)
 
 
