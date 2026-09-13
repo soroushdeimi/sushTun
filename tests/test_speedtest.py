@@ -133,6 +133,14 @@ def test_cancel_stops_before_remaining_batches():
     assert seen == ["u0", "u1"]  # the second batch never ran
 
 
+def test_is_skipped_only_recognizes_known_skip_reasons():
+    assert speedtest.is_skipped(speedtest.SKIP_UDP)
+    assert speedtest.is_skipped(speedtest.SKIP_UNAVAILABLE_WHILE_CONNECTED)
+    assert not speedtest.is_skipped("unreachable")
+    assert not speedtest.is_skipped("connection failed")
+    assert not speedtest.is_skipped(None)
+
+
 def test_wireguard_reported_unavailable_while_connected():
     results = {}
     speedtest.real_delay_all(
@@ -140,7 +148,8 @@ def test_wireguard_reported_unavailable_while_connected():
         url="http://x", timeout=1, iface_alias="Wi-Fi", connected=True,
         run_batch=lambda *a, **k: (_ for _ in ()).throw(AssertionError("should not run")),
     )
-    assert results[WG.uid] == (None, "unavailable while connected")
+    assert results[WG.uid] == (None, speedtest.SKIP_UNAVAILABLE_WHILE_CONNECTED)
+    assert speedtest.is_skipped(results[WG.uid][1])
 
 
 # -- _measure_one --------------------------------------------------------
@@ -190,8 +199,11 @@ def test_tcping_reports_open_and_closed_ports_and_skips_wireguard():
             profiles, lambda uid, d, e: results.__setitem__(uid, (d, e)), threading.Event()
         )
         assert results["ok"][0] is not None and results["ok"][1] is None
+        assert not speedtest.is_skipped(results["ok"][1])
         assert results["closed"] == (None, "unreachable")
-        assert results[WG.uid] == (None, "n/a (UDP)")
+        assert not speedtest.is_skipped(results["closed"][1])
+        assert results[WG.uid] == (None, speedtest.SKIP_UDP)
+        assert speedtest.is_skipped(results[WG.uid][1])
     finally:
         srv.close()
 

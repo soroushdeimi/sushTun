@@ -27,6 +27,19 @@ RunBatch = Callable[..., bool]
 _CONFIG_NAME = "speedtest.json"
 _LOG_NAME = "speedtest.log"
 
+# A skip isn't a failure: the profile was never dialed at all, so it's wrong
+# to show it (or count it in Remove failed) the same way as a real timeout.
+# The reason string still travels through the normal on_result(uid, None,
+# reason) contract; is_skipped() is the one place that recognizes which
+# reasons mean "skipped" so callers never have to string-match themselves.
+SKIP_UNAVAILABLE_WHILE_CONNECTED = "unavailable while connected"
+SKIP_UDP = "n/a (UDP)"
+SKIP_REASONS = frozenset({SKIP_UNAVAILABLE_WHILE_CONNECTED, SKIP_UDP})
+
+
+def is_skipped(error: str | None) -> bool:
+    return error in SKIP_REASONS
+
 
 def build_test_config(profiles: list[Profile], ports: list[int], iface_alias: str) -> dict:
     """A from-scratch Xray config: one HTTP inbound + outbound pair per profile.
@@ -248,7 +261,7 @@ def real_delay_all(
             # rejects sockopt there), so it can't be pinned to the physical
             # interface. While the tunnel is up, its test traffic would loop
             # through our own TUN instead of leaving directly.
-            on_result(p.uid, None, "unavailable while connected")
+            on_result(p.uid, None, SKIP_UNAVAILABLE_WHILE_CONNECTED)
             continue
         testable.append(p)
 
@@ -264,7 +277,7 @@ def tcping_all(
 ) -> None:
     def one(p: Profile) -> None:
         if (p.protocol or "").lower() == "wireguard":
-            on_result(p.uid, None, "n/a (UDP)")
+            on_result(p.uid, None, SKIP_UDP)
             return
         result = metrics.tcp_connect_delay(p.address, p.port, attempts=1)
         avg = result["avg"]
