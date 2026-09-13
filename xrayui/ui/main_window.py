@@ -7,9 +7,10 @@ import threading
 import time
 
 from PySide6.QtCore import QEvent, Qt, QThreadPool, QTimer, Signal
-from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtGui import QActionGroup, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
+    QComboBox,
     QHBoxLayout,
     QInputDialog,
     QLabel,
@@ -25,6 +26,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core import alerts, hotspot, importer, metrics, network, speedtest
+from ..core import geo as geo_mod
 from ..core import settings as app_settings
 from ..core import subscription as sub_mod
 from ..core.alerts import human_bytes
@@ -89,11 +91,13 @@ class MainWindow(QMainWindow):
         self._repairing = False
         self._workers: set = set()
         self._test_cancel: threading.Event | None = None
+        self._geo_updating = False
 
         self.stepReceived.connect(self._on_step)
         self.testResultReceived.connect(self._on_test_result)
         self._build_ui(elevated)
         self._build_tray()
+        self._refresh_routing_combo()
 
         self.tailer = LogTailer()
         self.tailer.lines.connect(self.log.append_lines)
@@ -111,6 +115,9 @@ class MainWindow(QMainWindow):
         self.route_timer = QTimer(self)
         self.route_timer.timeout.connect(self._check_route_health)
         self.route_timer.start(15_000)
+        self.geo_timer = QTimer(self)
+        self.geo_timer.timeout.connect(self._maybe_auto_update_geo)
+        self.geo_timer.start(60 * 60_000)
 
         self._reload_profiles()
         self._reload_subs()
@@ -150,8 +157,11 @@ class MainWindow(QMainWindow):
         self.btn_low.setCheckable(True)
         self.btn_low.setChecked(self.settings["routing"]["low_usage"])
         self.btn_low.toggled.connect(self._toggle_low_usage)
-        self.btn_bypass = QPushButton("Bypass…")
-        self.btn_bypass.clicked.connect(self._open_routing)
+        self.btn_routing = QPushButton("Routing…")
+        self.btn_routing.clicked.connect(self._open_routing)
+        self.routing_combo = QComboBox()
+        self.routing_combo.setToolTip("Which routing rules are active.")
+        self.routing_combo.currentIndexChanged.connect(self._on_routing_combo_changed)
         self.btn_dns = QPushButton("DNS…")
         self.btn_dns.setToolTip("Choose which resolvers the tunnel uses.")
         self.btn_dns.clicked.connect(self._open_dns)
@@ -175,12 +185,20 @@ class MainWindow(QMainWindow):
         actions2 = QHBoxLayout()
         actions2.addWidget(self.btn_low)
         actions2.addWidget(self.btn_gateway)
-        actions2.addWidget(self.btn_bypass)
+        actions2.addWidget(self.btn_routing)
+        actions2.addWidget(self.routing_combo)
         actions2.addWidget(self.btn_dns)
         actions2.addWidget(self.btn_settings)
 
         self.step_label = QLabel("")
         self.step_label.setObjectName("Muted")
+        self.btn_reconnect = QPushButton("Reconnect now")
+        self.btn_reconnect.setObjectName("Primary")
+        self.btn_reconnect.clicked.connect(self._reconnect_now)
+        self.btn_reconnect.setVisible(False)
+        step_row = QHBoxLayout()
+        step_row.addWidget(self.step_label, 1)
+        step_row.addWidget(self.btn_reconnect)
 
         tabs = QTabWidget()
         tabs.addTab(self.log, "Live log")
@@ -193,7 +211,7 @@ class MainWindow(QMainWindow):
         rl.addWidget(self.status_card)
         rl.addLayout(actions)
         rl.addLayout(actions2)
-        rl.addWidget(self.step_label)
+        rl.addLayout(step_row)
         rl.addWidget(tabs, 1)
         if not elevated:
             warn = QLabel("Not running as administrator — connecting will fail.")
@@ -276,6 +294,7 @@ class MainWindow(QMainWindow):
         self.setWindowIcon(icon)
         if not QSystemTrayIcon.isSystemTrayAvailable():
             self.tray = None
+            self.routing_menu = None
             return
         self.tray = QSystemTrayIcon(icon, self)
         self.tray.setToolTip("sushTun")
@@ -283,6 +302,8 @@ class MainWindow(QMainWindow):
         menu.addAction("Show", self._show_window)
         menu.addAction("Connect", self._connect)
         menu.addAction("Disconnect", self._disconnect)
+        menu.addSeparator()
+        self.routing_menu = menu.addMenu("Routing")
         menu.addSeparator()
         menu.addAction("Quit", self._quit)
         self.tray.setContextMenu(menu)
@@ -442,7 +463,7 @@ class MainWindow(QMainWindow):
         self._reload_profiles()
         name = profile.name if profile else ""
         if self.conn.is_connected():
-            self.step_label.setText(f"Reconnect to switch to {name}.")
+            self._needs_reconnect(f"Active server set to {name}")
         else:
             self.step_label.setText(f"Active server set to {name}.")
 
@@ -587,6 +608,9 @@ class MainWindow(QMainWindow):
         if error:
             self.step_label.setText(error)
             QMessageBox.warning(self, "Connection", error)
+        # Covers Connect, Disconnect and Reconnect now (which shares this
+        # callback): whatever just happened, there's nothing left pending.
+        self.btn_reconnect.setVisible(False)
         self._refresh_status()
 
     def _on_step(self, msg: str) -> None:
@@ -719,11 +743,43 @@ class MainWindow(QMainWindow):
         self._run_async(work, done)
 
     # Settings / routing ----------------------------------------------------
+    def _needs_reconnect(self, what: str) -> None:
+        """Common wording for every "this applies on the next connect" spot.
+        Only actually connected does a reconnect mean anything to offer."""
+        self.step_label.setText(f"{what} — reconnect to apply.")
+        if self.conn.is_connected():
+            self.btn_reconnect.setVisible(True)
+
+    def _reconnect_now(self) -> None:
+        if self._busy:
+            return
+        profile = self._active_profile()
+        if not profile:
+            return
+        self._set_busy(True)
+
+        def work():
+            self.conn.disconnect()
+            self.conn.connect(profile)
+
+        self._run_async(work, self._on_conn_done)
+
     def _open_settings(self) -> None:
+        old_mtu = self.settings.get("tun_mtu")
+        old_log = self.settings.get("log_level")
         dlg = SettingsDialog(self.settings, self)
         if dlg.exec():
-            self.settings.update(dlg.values())
+            values = dlg.values()
+            self.settings.update(values)
             app_settings.save(self.settings)
+            changed = [label for label, old, new in (
+                ("MTU", old_mtu, values["tun_mtu"]),
+                ("Log level", old_log, values["log_level"]),
+            ) if old != new]
+            if changed:
+                self._needs_reconnect(", ".join(changed) + " changed")
+            elif dlg.geo_updated():
+                self._needs_reconnect("Geo data updated")
 
     def _open_routing(self) -> None:
         dlg = RoutingDialog(self.settings["routing"], self)
@@ -731,21 +787,96 @@ class MainWindow(QMainWindow):
             self.settings["routing"] = dlg.result_routing()
             app_settings.save(self.settings)
             self.btn_low.setChecked(self.settings["routing"]["low_usage"])
-            self.step_label.setText("Routing saved — applies on next connect.")
+            self._refresh_routing_combo()
+            self._needs_reconnect("Routing saved")
 
     def _open_dns(self) -> None:
         dlg = DnsDialog(self.settings["dns"], self)
         if dlg.exec():
             self.settings["dns"] = dlg.result_dns()
             app_settings.save(self.settings)
-            self.step_label.setText("DNS saved — applies on next connect.")
+            self._needs_reconnect("DNS saved")
 
     def _toggle_low_usage(self, checked: bool) -> None:
         self.settings["routing"]["low_usage"] = checked
         app_settings.save(self.settings)
-        self.step_label.setText(
-            f"Low usage {'on' if checked else 'off'} — applies on next connect."
-        )
+        self._needs_reconnect(f"Low usage {'on' if checked else 'off'}")
+
+    # Routing mode: main-window combo, and the tray's checkable submenu -----
+    def _refresh_routing_combo(self) -> None:
+        routing_cfg = self.settings.get("routing", {})
+        mode = routing_cfg.get("mode") or "simple"
+        self.routing_combo.blockSignals(True)
+        self.routing_combo.clear()
+        self.routing_combo.addItem("Simple", "simple")
+        for s in routing_cfg.get("sets") or []:
+            self.routing_combo.addItem(s.get("name") or "Unnamed", s.get("id"))
+        idx = self.routing_combo.findData(mode)
+        self.routing_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        self.routing_combo.blockSignals(False)
+        self._rebuild_routing_tray_menu()
+
+    def _on_routing_combo_changed(self, _index: int) -> None:
+        mode = self.routing_combo.currentData()
+        if mode is not None:
+            self._set_routing_mode(mode)
+
+    def _rebuild_routing_tray_menu(self) -> None:
+        if self.routing_menu is None:
+            return
+        self.routing_menu.clear()
+        routing_cfg = self.settings.get("routing", {})
+        mode = routing_cfg.get("mode") or "simple"
+        items = [("Simple", "simple")] + [
+            (s.get("name") or "Unnamed", s.get("id")) for s in routing_cfg.get("sets") or []
+        ]
+        group = QActionGroup(self.routing_menu)
+        group.setExclusive(True)
+        self._routing_action_group = group  # keep a reference so it isn't GC'd
+        for label, value in items:
+            action = self.routing_menu.addAction(label)
+            action.setCheckable(True)
+            action.setChecked(value == mode)
+            action.triggered.connect(lambda _checked=False, v=value: self._set_routing_mode(v))
+            group.addAction(action)
+
+    def _set_routing_mode(self, mode: str) -> None:
+        if mode == (self.settings["routing"].get("mode") or "simple"):
+            return
+        self.settings["routing"]["mode"] = mode
+        app_settings.save(self.settings)
+        idx = self.routing_combo.findData(mode)
+        self.routing_combo.blockSignals(True)
+        self.routing_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        self.routing_combo.blockSignals(False)
+        self._rebuild_routing_tray_menu()
+        self._needs_reconnect("Routing changed")
+
+    # Geo data ----------------------------------------------------------
+    def _maybe_auto_update_geo(self) -> None:
+        if self._geo_updating:
+            return
+        geo_cfg = self.settings.get("geo", {})
+        hours = geo_cfg.get("auto_update_hours", 0)
+        last = geo_cfg.get("last_update", 0)
+        if not geo_mod.is_due(last, hours):
+            return
+        self._geo_updating = True
+        source = geo_cfg.get("source", "Loyalsoldier")
+
+        def done(result=None, error=None):
+            self._geo_updating = False
+            if error:
+                # Auto-update failures are routine (a dead connection, a
+                # source down) -- log only, no popup to interrupt the user.
+                self.log.append_line(f">> Geo auto-update failed: {error}")
+                return
+            self.settings["geo"]["last_update"] = time.time()
+            app_settings.save(self.settings)
+            self._needs_reconnect("Geo data updated") if self.conn.is_connected() \
+                else self.step_label.setText("Geo data updated.")
+
+        self._run_async(lambda: geo_mod.update(source), done)
 
     def _toggle_gateway(self, checked: bool) -> None:
         self.settings["gateway"]["enabled"] = checked
@@ -848,7 +979,8 @@ class MainWindow(QMainWindow):
                     QSystemTrayIcon.Information, 5000,
                 )
             return
-        for t in (self.timer, self.alert_timer, self.autorefresh_timer, self.route_timer):
+        for t in (self.timer, self.alert_timer, self.autorefresh_timer,
+                  self.route_timer, self.geo_timer):
             t.stop()
         self.tailer.stop()
         if self._test_cancel is not None:

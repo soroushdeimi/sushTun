@@ -358,3 +358,66 @@ def test_test_result_from_a_background_thread_updates_the_right_row(window):
     row = window.profiles.model.row_of_uid(profile.uid)
     idx = window.profiles.model.index(row, COL_DELAY)
     assert window.profiles.model.data(idx) == "77 ms"
+
+
+# -- Routing combo / Reconnect now / tray submenu (Phase 2c) -----------------
+def test_routing_combo_lists_sets_and_writes_mode(window):
+    window.settings["routing"]["sets"] = [{"id": "s1", "name": "MySet", "rules": []}]
+    window._refresh_routing_combo()
+    assert [window.routing_combo.itemText(i) for i in range(window.routing_combo.count())] \
+        == ["Simple", "MySet"]
+
+    window.routing_combo.setCurrentIndex(window.routing_combo.findData("s1"))
+    assert window.settings["routing"]["mode"] == "s1"
+
+
+def test_reconnect_now_hidden_when_disconnected(window):
+    # isVisible() reflects the whole ancestor chain, which is never shown
+    # in an offscreen test; isHidden() reflects our own explicit
+    # setVisible() call regardless of whether the window itself is shown.
+    assert not window.conn.is_connected()
+    window._needs_reconnect("Test change")
+    assert window.btn_reconnect.isHidden()
+
+
+def test_reconnect_now_appears_after_a_change_while_connected(window, monkeypatch):
+    monkeypatch.setattr(window.conn, "is_connected", lambda: True)
+    window._needs_reconnect("Test change")
+    assert not window.btn_reconnect.isHidden()
+    assert window.step_label.text() == "Test change — reconnect to apply."
+
+
+def test_reconnect_now_disconnects_then_connects_then_hides(window, monkeypatch):
+    profile = window.store.save(Profile(name="p", address="a.example.com", port=443, id="u"))
+    window.store.set_active(profile.uid)
+    window._reload_profiles()
+
+    calls = []
+    monkeypatch.setattr(window.conn, "disconnect", lambda: calls.append("disconnect"))
+    monkeypatch.setattr(window.conn, "connect", lambda p: calls.append(("connect", p.uid)))
+    monkeypatch.setattr(window.conn, "is_connected", lambda: True)
+
+    window.btn_reconnect.setVisible(True)
+    window._reconnect_now()
+    _pump(lambda: not window._busy)
+
+    assert calls == ["disconnect", ("connect", profile.uid)]
+    assert window.btn_reconnect.isHidden()
+
+
+def test_tray_routing_submenu_checks_current_mode_and_switching_updates_combo(window):
+    from PySide6.QtWidgets import QMenu
+    window.routing_menu = QMenu()
+    window.settings["routing"]["sets"] = [{"id": "s1", "name": "MySet", "rules": []}]
+    window._refresh_routing_combo()
+
+    actions = window.routing_menu.actions()
+    assert [a.text() for a in actions] == ["Simple", "MySet"]
+    assert actions[0].isChecked()
+    assert not actions[1].isChecked()
+
+    actions[1].trigger()
+
+    assert window.settings["routing"]["mode"] == "s1"
+    assert window.routing_combo.currentData() == "s1"
+    assert window.routing_menu.actions()[1].isChecked()
