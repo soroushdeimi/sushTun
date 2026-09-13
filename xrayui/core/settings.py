@@ -54,6 +54,11 @@ DEFAULTS: dict = {
         "expiry_days": 3,
         "auto_refresh_hours": 6,
     },
+    "speedtest": {
+        "url": "https://www.google.com/generate_204",
+        "timeout_s": 10,
+        "batch_size": 50,
+    },
 }
 
 

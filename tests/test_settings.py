@@ -41,3 +41,11 @@ def test_non_dict_json_falls_back_to_defaults(tmp_path, monkeypatch):
     (tmp_path / "settings.json").write_text("[]", encoding="utf-8")
     got = app_settings.load()
     assert got == app_settings.DEFAULTS
+
+
+def test_an_old_file_predating_the_speedtest_key_still_loads_and_gains_it(tmp_path, monkeypatch):
+    # A settings.json saved before "speedtest" existed has no such key at
+    # all -- unlike schema_version's reshape, a brand new DEFAULTS key needs
+    # no migration: _merge already fills anything the saved file lacks.
+    got = _load_from(tmp_path, monkeypatch, {"ping_target": "9.9.9.9"})
+    assert got["speedtest"] == app_settings.DEFAULTS["speedtest"]
