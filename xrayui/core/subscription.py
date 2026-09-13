@@ -129,6 +129,12 @@ def _profile_key(p: Profile) -> tuple:
 
 def refresh(sub: Subscription, profiles: ProfileStore, store: SubscriptionStore) -> Subscription:
     usage, parsed = fetch(sub.url)
+    if not parsed:
+        # A panel error page, an empty body, or a sub with every server
+        # temporarily removed all parse to zero profiles. Refuse rather than
+        # wiping every existing server (and the active one with them) for
+        # what is usually a transient fetch problem.
+        raise ValueError("subscription returned no servers")
 
     # Match new servers back to old ones by identity, not position, so a
     # server that reappears keeps its uid (and stays the active profile,

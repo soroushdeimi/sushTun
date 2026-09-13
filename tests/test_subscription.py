@@ -79,6 +79,27 @@ def test_refresh_keeps_active_uid_for_a_server_that_reappears(tmp_path, monkeypa
     assert [p.uid for p in profiles.list()] == [old.uid]
 
 
+def test_refresh_refuses_to_wipe_everything_on_an_empty_parse(tmp_path, monkeypatch):
+    profiles, store = _setup(tmp_path, monkeypatch)
+    old = profiles.save(Profile(protocol="vless", address="a.example.com", port=443, id="uid-1"))
+    profiles.set_active(old.uid)
+    sub = Subscription(url="https://sub.example/x", profile_uids=[old.uid])
+
+    # A panel error page or an empty body: nothing parses out.
+    monkeypatch.setattr(subscription, "fetch", lambda url, timeout=20.0: (Usage(), []))
+
+    try:
+        subscription.refresh(sub, profiles, store)
+        raised = False
+    except ValueError:
+        raised = True
+
+    assert raised
+    assert profiles.active_uid() == old.uid
+    assert profiles.get(old.uid) is not None
+    assert sub.profile_uids == [old.uid]
+
+
 def test_refresh_drops_a_server_that_disappeared(tmp_path, monkeypatch):
     profiles, store = _setup(tmp_path, monkeypatch)
     kept = profiles.save(Profile(protocol="vless", address="a.example.com", port=443, id="uid-1"))
