@@ -43,7 +43,8 @@ def _vless_query(p: Profile) -> dict[str, str]:
 
 def share_vless(p: Profile) -> str:
     query = urlencode(_vless_query(p), quote_via=quote)
-    return f"vless://{quote(p.id)}@{_authority(p.address, p.port)}?{query}#{quote(p.name)}"
+    userinfo = quote(p.id, safe="")
+    return f"vless://{userinfo}@{_authority(p.address, p.port)}?{query}#{quote(p.name)}"
 
 
 def _wireguard_query(p: Profile) -> dict[str, str]:
@@ -63,7 +64,11 @@ def _wireguard_query(p: Profile) -> dict[str, str]:
 
 def share_wireguard(p: Profile) -> str:
     query = urlencode(_wireguard_query(p), quote_via=quote)
-    return f"wireguard://{quote(p.id)}@{_authority(p.address, p.port)}?{query}#{quote(p.name)}"
+    # safe="": a WireGuard private key is base64 and often contains "/",
+    # which quote()'s default safe="/" would leave unescaped and end the
+    # netloc (everything up to the next "/") before the "@" is even reached.
+    userinfo = quote(p.id, safe="")
+    return f"wireguard://{userinfo}@{_authority(p.address, p.port)}?{query}#{quote(p.name)}"
 
 
 def share_link(p: Profile) -> str:

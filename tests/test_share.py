@@ -54,3 +54,14 @@ def test_wireguard_link_round_trips_ipv6_endpoint_and_default_mtu():
         port=2408, id="S", pbk="P",
     )
     assert _same(parse_wireguard(share.share_link(p)), p)
+
+
+def test_wireguard_link_round_trips_base64_keys_with_slash_plus_and_equals():
+    # Real WireGuard base64 keys routinely contain '/', '+' and '='. A '/'
+    # in the userinfo (before '@') ends urlsplit's netloc early if it isn't
+    # percent-encoded, which broke the private key specifically.
+    p = Profile(
+        name="WG b64", protocol="wireguard", address="1.2.3.4", port=51820,
+        id="aB/c+d1EF/GHI=", pbk="pQ+R/ST8uVW=", wg_preshared="xY/z9+AB=",
+    )
+    assert _same(parse_wireguard(share.share_link(p)), p)
