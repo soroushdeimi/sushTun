@@ -104,6 +104,16 @@ DEFAULTS: dict = {
         "lan_pass": "",
         "default_fp": "",
     },
+    "startup": {
+        "start_on_login": False,
+        "start_minimized": False,
+        "auto_connect": False,
+    },
+    "updates": {
+        "check": True,
+        "last_check": 0,  # epoch seconds; 0 = never
+        "notified_version": "",  # the last version a tray message was shown for
+    },
 }
 
 
