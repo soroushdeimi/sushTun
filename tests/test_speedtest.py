@@ -58,7 +58,9 @@ def test_build_test_config_is_pure():
 def test_halving_isolates_a_single_bad_profile(tmp_path, monkeypatch):
     monkeypatch.setattr(speedtest.paths, "state_dir", lambda: tmp_path)
     (tmp_path / "speedtest.log").write_text(
-        "xray: config error near outbound[3]\n", encoding="utf-8"
+        'Failed to start: main: failed to load config files: [/tmp/speedtest.json]'
+        ' > infra/conf: failed to parse config: ... > empty "password"\n',
+        encoding="utf-8",
     )
 
     good = [Profile(protocol="vless", address=f"h{i}.example.com", port=443, uid=f"u{i}")
@@ -86,7 +88,7 @@ def test_halving_isolates_a_single_bad_profile(tmp_path, monkeypatch):
     for p in good:
         assert results[p.uid] == (42.0, None)
     assert results[bad.uid][0] is None
-    assert results[bad.uid][1] == "invalid config: xray: config error near outbound[3]"
+    assert results[bad.uid][1] == 'invalid config: empty "password"'
 
 
 def test_whole_batch_succeeds_without_halving():

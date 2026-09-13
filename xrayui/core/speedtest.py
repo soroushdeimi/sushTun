@@ -97,6 +97,14 @@ def _last_log_line() -> str:
     return lines[-1] if lines else "no log output"
 
 
+def _short_config_error() -> str:
+    # Xray's own error is one long " > "-joined chain of wrapped context
+    # ("failed to load config files: [...] > infra/conf: ... > empty
+    # \"password\""); only the last segment is the actual reason. The full
+    # line is still in speedtest.log for anyone who needs the whole chain.
+    return _last_log_line().rsplit(" > ", 1)[-1].strip()
+
+
 def _measure_one(port: int, url: str, timeout: float) -> tuple[float | None, str | None]:
     proxy_url = f"http://127.0.0.1:{port}"
     opener = urllib.request.build_opener(
@@ -208,7 +216,7 @@ def _test_group(
     if ok:
         return
     if len(profiles) == 1:
-        on_result(profiles[0].uid, None, f"invalid config: {_last_log_line()}")
+        on_result(profiles[0].uid, None, f"invalid config: {_short_config_error()}")
         return
     mid = len(profiles) // 2
     _test_group(profiles[:mid], on_result, cancel,
