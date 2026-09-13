@@ -152,3 +152,24 @@ def test_asset_dir_prefers_geo_dir_only_when_both_files_are_present(tmp_path, mo
 
     (geo_dir / "geosite.dat").write_bytes(b"updated-geosite")
     assert paths.asset_dir() == geo_dir
+
+
+# -- is_due ------------------------------------------------------------
+def test_is_due_off_when_hours_is_zero():
+    assert geo.is_due(0, 0, now=1_000_000) is False
+    assert geo.is_due(1_000_000, 0, now=2_000_000) is False  # even if very stale
+
+
+def test_is_due_never_updated_is_due_once_auto_update_is_on():
+    assert geo.is_due(0, 6, now=1_000_000) is True
+
+
+def test_is_due_not_yet_due():
+    last = 1_000_000
+    assert geo.is_due(last, 6, now=last + 5 * 3600) is False
+
+
+def test_is_due_exactly_due():
+    last = 1_000_000
+    assert geo.is_due(last, 6, now=last + 6 * 3600) is True
+    assert geo.is_due(last, 6, now=last + 7 * 3600) is True

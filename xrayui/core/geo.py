@@ -11,6 +11,7 @@ from __future__ import annotations
 import http.client
 import os
 import shutil
+import time
 import urllib.request
 from collections.abc import Callable
 
@@ -122,3 +123,12 @@ def _swap(base, new_dir) -> None:
             os.replace(old_dir, current)
         raise GeoUpdateError(f"could not swap in new geo data: {exc}") from exc
     shutil.rmtree(old_dir, ignore_errors=True)
+
+
+def is_due(last_update: float, hours: float, now: float | None = None) -> bool:
+    """Whether an auto-update should run: hours=0 means off, and a never-
+    updated install (last_update=0) is always due once auto-update is on."""
+    if not hours:
+        return False
+    now = time.time() if now is None else now
+    return (now - last_update) >= hours * 3600

@@ -76,6 +76,7 @@ DEFAULTS: dict = {
         # Matches the source scripts/fetch_deps.py bundles.
         "source": "Loyalsoldier",
         "auto_update_hours": 0,  # 0 = off
+        "last_update": 0,  # epoch seconds; 0 = never
     },
 }
 
