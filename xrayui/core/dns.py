@@ -89,29 +89,50 @@ def _valid_address(entry: str) -> bool:
     return _valid_hostname(entry)
 
 
-def validate_server(entry: str) -> str:
-    """Return why `entry` is unusable, or "" when it is a valid server."""
+# Fixed reason templates ({value} still unfilled) -- the single source of
+# truth for both validate_server's plain-English string below and the UI's
+# translated version (ui/dns_dialog.py calls *_reason() for the template
+# and i18n.tr(template, value=...) instead of consuming the formatted
+# string, since core/ itself must stay English-only).
+REASON_SPACES = "{value}: a server address cannot contain spaces"
+REASON_NO_HOST = "{value}: no server after the scheme"
+REASON_PORT_SCHEME = "{value}: a port needs a scheme — try udp://{value} or tcp://{value}"
+REASON_UNRECOGNIZED = ("{value}: expected an IP, a hostname, or a scheme such as "
+                       "https:// tcp:// udp:// quic://")
+REASON_INVALID_PORT = "{value}: invalid port"
+REASON_USE_RESOLVER_IP = "{value}: use the resolver's IP address"
+_REASON_REFUSED = {k: "{value}: " + v for k, v in _REFUSED.items()}
+
+
+def server_reason(entry: str) -> tuple[str, str] | None:
+    """(value, unformatted reason template) explaining why `entry` is
+    unusable, or None when it is a valid server."""
     value = entry.strip()
     if not value:
-        return ""
-    if value in _REFUSED:
-        return f"{value}: {_REFUSED[value]}"
+        return None
+    if value in _REASON_REFUSED:
+        return value, _REASON_REFUSED[value]
     if any(c.isspace() for c in value):
-        return f"{value}: a server address cannot contain spaces"
+        return value, REASON_SPACES
     if value.startswith(_SCHEMES):
         # Everything after the scheme is host[:port][/path]; require a host.
         rest = value.split("://", 1)[1]
         if not rest.split("/", 1)[0]:
-            return f"{value}: no server after the scheme"
-        return ""
+            return value, REASON_NO_HOST
+        return None
     if _valid_address(value):
-        return ""
+        return None
     # The common mistake: Xray parses a scheme-less entry as a URL, so a bare
     # host:port fails. Say what to type instead of just "invalid".
     if ":" in value:
-        return f"{value}: a port needs a scheme — try udp://{value} or tcp://{value}"
-    return (f"{value}: expected an IP, a hostname, or a scheme such as "
-            "https:// tcp:// udp:// quic://")
+        return value, REASON_PORT_SCHEME
+    return value, REASON_UNRECOGNIZED
+
+
+def validate_server(entry: str) -> str:
+    """Return why `entry` is unusable, or "" when it is a valid server."""
+    result = server_reason(entry)
+    return "" if result is None else result[1].format(value=result[0])
 
 
 def clean_servers(servers) -> list[str]:
@@ -132,16 +153,22 @@ def clean_servers(servers) -> list[str]:
     return out
 
 
-def invalid_servers(servers) -> list[str]:
-    """Human-readable reasons for every entry clean_servers would drop."""
+def invalid_server_reasons(servers) -> list[tuple[str, str]]:
+    """(value, unformatted reason template) pairs for every entry
+    clean_servers would drop -- see server_reason()."""
     reasons = []
     for raw in servers or []:
         if not isinstance(raw, str):
             continue
-        why = validate_server(raw)
+        why = server_reason(raw)
         if why:
             reasons.append(why)
     return reasons
+
+
+def invalid_servers(servers) -> list[str]:
+    """Human-readable reasons for every entry clean_servers would drop."""
+    return [tmpl.format(value=value) for value, tmpl in invalid_server_reasons(servers)]
 
 
 def clean_hosts(hosts) -> dict[str, str | list[str]]:
@@ -235,42 +262,56 @@ def _split_host_port(addr: str) -> tuple[str, int | None]:
     return addr, None
 
 
-def _domestic_reason(entry: str) -> str:
-    """Domestic resolvers must be a literal IP, never a hostname: a
-    hostname domestic resolver would itself need resolving first, which
-    is circular, and it is exactly the resolver this app trusts to answer
+def domestic_reason(entry: str) -> tuple[str, str] | None:
+    """(value, unformatted reason template) explaining why `entry` is
+    unusable as a domestic resolver, or None when it is valid.
+
+    Domestic resolvers must be a literal IP, never a hostname: a hostname
+    domestic resolver would itself need resolving first, which is
+    circular, and it is exactly the resolver this app trusts to answer
     the direct-routed domains without depending on anything else."""
     value = entry.strip()
     if not value:
-        return ""
-    if value in _REFUSED:
-        return f"{value}: {_REFUSED[value]}"
+        return None
+    if value in _REASON_REFUSED:
+        return value, _REASON_REFUSED[value]
     if any(c.isspace() for c in value):
-        return f"{value}: a server address cannot contain spaces"
+        return value, REASON_SPACES
     if value.startswith(_SCHEMES):
-        why = validate_server(value)
+        why = server_reason(value)
         if why:
             return why
         host = _server_host(value)
     else:
         host, port = _split_host_port(value)
         if port is not None and not 1 <= port <= 65535:
-            return f"{value}: invalid port"
+            return value, REASON_INVALID_PORT
     if _is_ip(host):
-        return ""
-    return f"{value}: use the resolver's IP address"
+        return None
+    return value, REASON_USE_RESOLVER_IP
 
 
-def validate_domestic(entries) -> list[str]:
-    """Human-readable reasons for every entry clean_domestic would drop."""
+def _domestic_reason(entry: str) -> str:
+    result = domestic_reason(entry)
+    return "" if result is None else result[1].format(value=result[0])
+
+
+def validate_domestic_reasons(entries) -> list[tuple[str, str]]:
+    """(value, unformatted reason template) pairs for every entry
+    clean_domestic would drop -- see domestic_reason()."""
     reasons = []
     for raw in entries or []:
         if not isinstance(raw, str):
             continue
-        why = _domestic_reason(raw)
+        why = domestic_reason(raw)
         if why:
             reasons.append(why)
     return reasons
+
+
+def validate_domestic(entries) -> list[str]:
+    """Human-readable reasons for every entry clean_domestic would drop."""
+    return [tmpl.format(value=value) for value, tmpl in validate_domestic_reasons(entries)]
 
 
 def clean_domestic(entries) -> list[str]:
@@ -357,11 +398,8 @@ def _sanitize_raw_dns(data: dict) -> dict:
     return out
 
 
-def raw_override_issues(raw: str) -> list[str]:
-    """Reasons to refuse SAVING a raw DNS override: only the dangerous
-    localhost/fakedns case. Invalid JSON or a non-object is not refused --
-    it is simply ignored at render time (see build_dns_and_rules), never
-    raised, so there is nothing unsafe about saving it as typed."""
+def raw_override_issue_reasons(raw: str) -> list[tuple[str, str]]:
+    """(value, unformatted reason template) pairs -- see raw_override_issues."""
     text = (raw or "").strip()
     if not text:
         return []
@@ -374,9 +412,17 @@ def raw_override_issues(raw: str) -> list[str]:
     reasons = []
     for s in data.get("servers") or []:
         addr = _server_address_str(s).strip()
-        if addr in _REFUSED:
-            reasons.append(f"{addr}: {_REFUSED[addr]}")
+        if addr in _REASON_REFUSED:
+            reasons.append((addr, _REASON_REFUSED[addr]))
     return reasons
+
+
+def raw_override_issues(raw: str) -> list[str]:
+    """Reasons to refuse SAVING a raw DNS override: only the dangerous
+    localhost/fakedns case. Invalid JSON or a non-object is not refused --
+    it is simply ignored at render time (see build_dns_and_rules), never
+    raised, so there is nothing unsafe about saving it as typed."""
+    return [tmpl.format(value=value) for value, tmpl in raw_override_issue_reasons(raw)]
 
 
 def build_dns_and_rules(

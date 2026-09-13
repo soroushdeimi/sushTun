@@ -164,6 +164,30 @@ def test_invalid_servers_explains_each_rejection():
     assert any("localhost" in r for r in reasons)
 
 
+# -- *_reason(s) detail functions (i18n: value + an unformatted template) ----
+def test_invalid_server_reasons_matches_invalid_servers_formatted():
+    servers = ["1.1.1.1", "localhost", "fakedns", "nope nope", "8.8.8.8:5353"]
+    details = dns_mod.invalid_server_reasons(servers)
+    formatted = [tmpl.format(value=value) for value, tmpl in details]
+    assert formatted == dns_mod.invalid_servers(servers)
+    assert all(value in tmpl.format(value=value) for value, tmpl in details)
+
+
+def test_validate_domestic_reasons_matches_validate_domestic_formatted():
+    entries = ["localhost", "fakedns", "not a server", "resolver.example.com"]
+    details = dns_mod.validate_domestic_reasons(entries)
+    formatted = [tmpl.format(value=value) for value, tmpl in details]
+    assert formatted == dns_mod.validate_domestic(entries)
+
+
+def test_raw_override_issue_reasons_matches_raw_override_issues_formatted():
+    raw = json.dumps({"servers": ["localhost", {"address": "fakedns"}, "1.1.1.1"]})
+    details = dns_mod.raw_override_issue_reasons(raw)
+    formatted = [tmpl.format(value=value) for value, tmpl in details]
+    assert formatted == dns_mod.raw_override_issues(raw)
+    assert len(details) == 2
+
+
 # -- hosts text round trip -------------------------------------------------
 def test_hosts_from_lines_accepts_equals_and_whitespace_forms():
     hosts = dns_mod.hosts_from_lines([
