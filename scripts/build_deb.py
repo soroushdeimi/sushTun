@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from xrayui import __version__, paths  # noqa: E402  (needs ROOT on sys.path)
+from xrayui.core import autostart  # noqa: E402
 
 PKG = "sushtun"
 PREFIX = f"/opt/{PKG}"
@@ -76,6 +77,13 @@ fi
 POSTRM = f"""\
 #!/bin/sh
 set -e
+# The passwordless-autostart polkit rule (written at runtime by
+# core/autostart.py when the user enables "start at login") must never
+# outlive the app -- on both a plain remove and a purge, but not on an
+# upgrade, where the new version's files replace these in place.
+if [ "$1" = remove ] || [ "$1" = purge ]; then
+    rm -f {autostart.POLKIT_RULE}
+fi
 if [ "$1" = purge ]; then
     rm -rf {paths.INSTALLED_DATA_DIR}
 fi

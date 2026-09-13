@@ -398,3 +398,18 @@ def test_deb_tree_installs_launcher_icon_policy_and_marker(tmp_path):
     control = (root / "DEBIAN/control").read_text(encoding="utf-8")
     assert "Version: 9.9.9" in control and "Architecture: amd64" in control
     assert (root / "DEBIAN/postinst").stat().st_mode & 0o777 == 0o755
+
+
+@LINUX_ONLY
+def test_deb_postrm_removes_the_autostart_polkit_rule_on_remove_and_purge():
+    from xrayui.core import autostart
+    deb = _build_deb()
+    postrm = deb.POSTRM
+    assert str(autostart.POLKIT_RULE) in postrm
+    # Scoped to remove-or-purge, not unconditional (an upgrade must not
+    # lose the rule).
+    assert f'rm -f {autostart.POLKIT_RULE}' in postrm
+    remove_block = postrm.split('if [ "$1" = remove ]')[1].split("fi", 1)[0]
+    assert str(autostart.POLKIT_RULE) in remove_block
+    # The data-dir purge is untouched, still purge-only.
+    assert f"rm -rf {paths.INSTALLED_DATA_DIR}" in postrm
