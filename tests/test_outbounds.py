@@ -186,3 +186,97 @@ def test_xray_test_accepts_new_tls_keys(tmp_path, monkeypatch, protocol):
                pcs="ab" * 32, vcn="example.com", **kwargs)
     text = render.build_text(p, "lo", TEMPLATE, include_tun=False)
     assert xraycheck.check_config(text) is None
+
+
+# -- Hysteria2 ----------------------------------------------------------------
+def _hy2(**over) -> Profile:
+    base = dict(name="hy", protocol="hysteria2", address="a.example.com", port=443,
+               id="hy2-auth", sni="a.example.com")
+    base.update(over)
+    return Profile(**base)
+
+
+def test_hysteria2_outbound_shape():
+    out = outbounds.build(_hy2(), "proxy")
+    assert out["protocol"] == "hysteria"
+    assert out["settings"] == {"address": "a.example.com", "port": 443, "version": 2}
+    stream = out["streamSettings"]
+    assert stream["network"] == "hysteria"
+    assert stream["security"] == "tls"
+    assert stream["hysteriaSettings"] == {"version": 2, "auth": "hy2-auth"}
+    assert stream["tlsSettings"] == {"serverName": "a.example.com"}
+    assert stream["finalmask"] == {"quicParams": {"congestion": "bbr"}}
+
+
+def test_hysteria2_security_is_always_tls_regardless_of_profile_security():
+    out = outbounds.build(_hy2(security="none"), "proxy")
+    assert out["streamSettings"]["security"] == "tls"
+
+
+def test_hysteria2_salamander_obfuscation():
+    out = outbounds.build(_hy2(hy2_obfs_password="obfspass"), "proxy")
+    assert out["streamSettings"]["finalmask"]["udp"] == [
+        {"type": "salamander", "settings": {"password": "obfspass"}}
+    ]
+
+
+def test_hysteria2_port_hopping():
+    out = outbounds.build(_hy2(hy2_ports="20000-30000", hy2_hop_interval="45"), "proxy")
+    assert out["streamSettings"]["finalmask"]["quicParams"]["udpHop"] == {
+        "ports": "20000-30000", "interval": "45"
+    }
+
+
+def test_hysteria2_port_hopping_defaults_interval_to_30():
+    out = outbounds.build(_hy2(hy2_ports="20000-30000"), "proxy")
+    assert out["streamSettings"]["finalmask"]["quicParams"]["udpHop"]["interval"] == "30"
+
+
+def test_hysteria2_brutal_up_down():
+    out = outbounds.build(_hy2(hy2_up_mbps=100, hy2_down_mbps=50), "proxy")
+    quic = out["streamSettings"]["finalmask"]["quicParams"]
+    assert quic["congestion"] == "brutal"
+    assert quic["brutalUp"] == "100mbps"
+    assert quic["brutalDown"] == "50mbps"
+
+
+def test_hysteria2_no_up_down_uses_bbr():
+    out = outbounds.build(_hy2(), "proxy")
+    assert out["streamSettings"]["finalmask"]["quicParams"]["congestion"] == "bbr"
+
+
+def test_hysteria2_allow_insecure_is_never_rendered():
+    out = outbounds.build(_hy2(allow_insecure=True), "proxy")
+    assert "allowInsecure" not in out["streamSettings"]["tlsSettings"]
+
+
+def test_hysteria2_new_tls_keys():
+    out = outbounds.build(_hy2(alpn="h3", pcs="ab" * 32, vcn="a.example.com"), "proxy")
+    tls = out["streamSettings"]["tlsSettings"]
+    assert tls["alpn"] == ["h3"]
+    assert tls["pinnedPeerCertSha256"] == "ab" * 32
+    assert tls["verifyPeerCertByName"] == "a.example.com"
+
+
+@pytest.mark.parametrize("variant,kwargs", [
+    ("plain", {}),
+    ("salamander", {"hy2_obfs_password": "obfspass"}),
+    ("port_hopping", {"hy2_ports": "20000-30000", "hy2_hop_interval": "30"}),
+    ("brutal_up_down", {"hy2_up_mbps": 100, "hy2_down_mbps": 50}),
+    ("bbr_no_up_down", {}),
+])
+def test_hysteria2_xray_test_accepts_every_variant(tmp_path, monkeypatch, variant, kwargs):
+    _skip_if_no_binary()
+    monkeypatch.setattr(xraycheck.paths, "state_dir", lambda: tmp_path)
+    p = _hy2(**kwargs)
+    text = render.build_text(p, "lo", TEMPLATE, include_tun=False)
+    assert xraycheck.check_config(text) is None, variant
+
+
+def test_hysteria2_build_test_config_validates(tmp_path, monkeypatch):
+    from xrayui.core import speedtest
+    _skip_if_no_binary()
+    monkeypatch.setattr(xraycheck.paths, "state_dir", lambda: tmp_path)
+    cfg = speedtest.build_test_config([_hy2()], [11500], "lo")
+    cfg.pop("routing", None)
+    assert xraycheck.check_config(json.dumps(cfg)) is None
