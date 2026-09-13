@@ -799,7 +799,7 @@ class MainWindow(QMainWindow):
             self._needs_reconnect("Routing saved")
 
     def _open_dns(self) -> None:
-        dlg = DnsDialog(self.settings["dns"], self)
+        dlg = DnsDialog(self.settings["dns"], self.settings["routing"], self)
         if dlg.exec():
             self.settings["dns"] = dlg.result_dns()
             app_settings.save(self.settings)

@@ -61,8 +61,22 @@ def warnings(monkeypatch):
 
 
 # -- DNS dialog ------------------------------------------------------------
+def _save_and_wait(dlg) -> None:
+    dlg._save()
+    _pump(lambda: not dlg._busy)
+
+
+@pytest.fixture
+def dns_check_state(tmp_path, monkeypatch):
+    """Save renders a real config and shells out to `xray run -test`; point
+    its throwaway config file at tmp_path instead of the real state dir,
+    which may be owned by a previous elevated run and not writable here."""
+    monkeypatch.setattr(paths, "state_dir", lambda: tmp_path / "state")
+    return tmp_path
+
+
 def test_dns_dialog_empty_round_trip_keeps_the_inherit_contract(qapp, defaults):
-    out = DnsDialog(defaults["dns"]).result_dns()
+    out = DnsDialog(defaults["dns"], defaults["routing"]).result_dns()
     assert out["servers"] == []
     assert out["hosts"] == []
     assert out["query_strategy"] == ""
@@ -70,12 +84,12 @@ def test_dns_dialog_empty_round_trip_keeps_the_inherit_contract(qapp, defaults):
     assert dns_mod.build_dns(out) == {}
 
 
-def test_dns_dialog_preset_fills_and_round_trips(qapp, defaults, warnings):
-    dlg = DnsDialog(defaults["dns"])
+def test_dns_dialog_preset_fills_and_round_trips(qapp, defaults, warnings, dns_check_state):
+    dlg = DnsDialog(defaults["dns"], defaults["routing"])
     dlg._fill(dns_mod.PRESETS["Quad9"])
     dlg.strategy.setCurrentIndex(dlg.strategy.findData("UseIPv4"))
     dlg.hosts.setPlainText("a.com = 1.2.3.4")
-    dlg._save()
+    _save_and_wait(dlg)
 
     assert not warnings
     out = dlg.result_dns()
@@ -87,14 +101,15 @@ def test_dns_dialog_preset_fills_and_round_trips(qapp, defaults, warnings):
     assert built["hosts"] == {"a.com": "1.2.3.4"}
 
 
-def test_dns_dialog_reloads_what_it_saved(qapp, defaults):
-    first = DnsDialog(defaults["dns"])
+def test_dns_dialog_reloads_what_it_saved(qapp, defaults, warnings, dns_check_state):
+    first = DnsDialog(defaults["dns"], defaults["routing"])
     first._fill(["1.1.1.1"])
     first.hosts.setPlainText("a.com = 1.2.3.4")
-    first._save()
+    _save_and_wait(first)
+    assert not warnings
     saved = first.result_dns()
 
-    second = DnsDialog(saved)
+    second = DnsDialog(saved, defaults["routing"])
     assert second.servers.toPlainText().splitlines() == ["1.1.1.1"]
     assert second.hosts.toPlainText().splitlines() == ["a.com = 1.2.3.4"]
 
@@ -106,7 +121,7 @@ def test_dns_dialog_reloads_what_it_saved(qapp, defaults):
     ("https://", "no server after the scheme"),
 ])
 def test_dns_dialog_refuses_to_save_an_invalid_server(qapp, defaults, warnings, entry, fragment):
-    dlg = DnsDialog(defaults["dns"])
+    dlg = DnsDialog(defaults["dns"], defaults["routing"])
     dlg.servers.setPlainText(entry)
     dlg._save()
     assert warnings, f"no warning for {entry}"
@@ -114,12 +129,70 @@ def test_dns_dialog_refuses_to_save_an_invalid_server(qapp, defaults, warnings, 
     assert dlg.result() == 0, f"dialog accepted {entry}"
 
 
-def test_dns_dialog_accepts_a_valid_server(qapp, defaults, warnings):
-    dlg = DnsDialog(defaults["dns"])
+def test_dns_dialog_accepts_a_valid_server(qapp, defaults, warnings, dns_check_state):
+    dlg = DnsDialog(defaults["dns"], defaults["routing"])
     dlg.servers.setPlainText("https://1.1.1.1/dns-query")
-    dlg._save()
+    _save_and_wait(dlg)
     assert not warnings
     assert dlg.result() == 1
+
+
+def test_dns_dialog_domestic_preset_fills_the_field(qapp, defaults):
+    dlg = DnsDialog(defaults["dns"], defaults["routing"])
+    dlg._fill_domestic(dns_mod.DOMESTIC_PRESETS["Shecan"])
+    assert dlg.domestic.text() == "178.22.122.100, 185.51.200.2"
+    dlg._fill_domestic([])
+    assert dlg.domestic.text() == ""
+
+
+def test_dns_dialog_note_follows_the_remote_via_tunnel_checkbox(qapp, defaults):
+    dlg = DnsDialog(defaults["dns"], defaults["routing"])
+    assert "your normal connection, not the tunnel" in dlg.note.text()
+    dlg.remote_via_tunnel.setChecked(True)
+    assert "go through the tunnel" in dlg.note.text()
+    dlg.remote_via_tunnel.setChecked(False)
+    assert "your normal connection, not the tunnel" in dlg.note.text()
+
+
+def test_dns_dialog_advanced_and_domestic_fields_round_trip(qapp, defaults, warnings,
+                                                             dns_check_state):
+    dlg = DnsDialog(defaults["dns"], defaults["routing"])
+    dlg._fill_domestic(dns_mod.DOMESTIC_PRESETS["Shecan"])
+    dlg.remote_via_tunnel.setChecked(True)
+    dlg.parallel_query.setChecked(True)
+    dlg.serve_stale.setChecked(True)
+    dlg.servers.setPlainText("1.1.1.1")
+    _save_and_wait(dlg)
+
+    assert not warnings
+    out = dlg.result_dns()
+    assert out["domestic_servers"] == ["178.22.122.100", "185.51.200.2"]
+    assert out["remote_via_tunnel"] is True
+    assert out["parallel_query"] is True
+    assert out["serve_stale"] is True
+
+    reloaded = DnsDialog(out, defaults["routing"])
+    assert reloaded.domestic.text() == "178.22.122.100, 185.51.200.2"
+    assert reloaded.remote_via_tunnel.isChecked()
+    assert reloaded.parallel_query.isChecked()
+    assert reloaded.serve_stale.isChecked()
+
+
+def test_dns_dialog_a_check_failure_leaves_settings_unchanged(qapp, defaults, warnings,
+                                                               dns_check_state):
+    original = copy.deepcopy(defaults["dns"])
+    # A routing config xray -test will reject: passes every save-time check
+    # in the DNS dialog itself (it only validates DNS fields), so this only
+    # fails once the real render+validate round trip actually runs xray.
+    bad_routing = copy.deepcopy(defaults["routing"])
+    bad_routing["bypass_domains"] = ["geosite:not-a-real-category-xyz"]
+    dlg = DnsDialog(defaults["dns"], bad_routing)
+    dlg.servers.setPlainText("1.1.1.1")
+    _save_and_wait(dlg)
+
+    assert warnings
+    assert dlg.result() == 0
+    assert dlg.result_dns() == original
 
 
 # -- Settings dialog -------------------------------------------------------
