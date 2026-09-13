@@ -21,24 +21,13 @@ _CONFIG_PREFIX = "xraycheck-"
 _CONFIG_SUFFIX = ".json"
 
 
-def check_rules(rules: list[dict], asset_dir=None) -> str | None:
-    """None if `rules` validates, else a short reason.
-
-    Runs `xray run -test` against a minimal config: proxy/direct/block
-    outbounds (freedom/freedom/blackhole) plus the given routing rules.
+def _run_test(config_text: str, asset_dir=None) -> str | None:
+    """None if `config_text` validates with `xray run -test`, else a short
+    reason. Shared by check_rules (a minimal wrapper config) and
+    check_config (an already-complete config, e.g. from render.build_text).
     """
-    cfg = {
-        "log": {"loglevel": "warning"},
-        "inbounds": [],
-        "outbounds": [
-            {"tag": "proxy", "protocol": "freedom"},
-            {"tag": "direct", "protocol": "freedom"},
-            {"tag": "block", "protocol": "blackhole"},
-        ],
-        "routing": {"domainStrategy": "IPIfNonMatch", "rules": rules},
-    }
     paths.state_dir().mkdir(parents=True, exist_ok=True)
-    # A unique file per call: a geo update and a routing dialog Save can
+    # A unique file per call: a geo update and a routing/DNS dialog Save can
     # both validate at once, and a shared fixed filename would let them
     # stomp on each other's config mid-run.
     fd, tmp_name = tempfile.mkstemp(
@@ -47,7 +36,7 @@ def check_rules(rules: list[dict], asset_dir=None) -> str | None:
     config_path = Path(tmp_name)  # mkstemp(dir=...) already returns the full path
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(json.dumps(cfg, ensure_ascii=False))
+            f.write(config_text)
 
         env = proc.child_env({"XRAY_LOCATION_ASSET": str(asset_dir or paths.asset_dir())})
         try:
@@ -70,3 +59,31 @@ def check_rules(rules: list[dict], asset_dir=None) -> str | None:
     # error is one long " > "-joined chain of wrapped context; only the
     # last segment is the actual reason.
     return last.rsplit(" > ", 1)[-1].strip()
+
+
+def check_rules(rules: list[dict], asset_dir=None) -> str | None:
+    """None if `rules` validates, else a short reason.
+
+    Runs `xray run -test` against a minimal config: proxy/direct/block
+    outbounds (freedom/freedom/blackhole) plus the given routing rules.
+    """
+    cfg = {
+        "log": {"loglevel": "warning"},
+        "inbounds": [],
+        "outbounds": [
+            {"tag": "proxy", "protocol": "freedom"},
+            {"tag": "direct", "protocol": "freedom"},
+            {"tag": "block", "protocol": "blackhole"},
+        ],
+        "routing": {"domainStrategy": "IPIfNonMatch", "rules": rules},
+    }
+    return _run_test(json.dumps(cfg, ensure_ascii=False), asset_dir=asset_dir)
+
+
+def check_config(config_text: str, asset_dir=None) -> str | None:
+    """None if `config_text` (a complete Xray config, e.g. from
+    render.build_text) validates, else a short reason. Used by the DNS
+    dialog's Save to validate the real rendered config -- a bare set of
+    routing rules can't catch a bad dns block on its own.
+    """
+    return _run_test(config_text, asset_dir=asset_dir)
