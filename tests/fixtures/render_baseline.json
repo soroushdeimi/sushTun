@@ -1,0 +1,1131 @@
+{
+  "vless_grpc_tls": {
+    "dns": {
+      "queryStrategy": "UseIPv4",
+      "servers": [
+        "https://1.1.1.1/dns-query",
+        "https://8.8.8.8/dns-query"
+      ]
+    },
+    "inbounds": [
+      {
+        "listen": "0.0.0.0",
+        "protocol": "tun",
+        "settings": {
+          "dns": [
+            "127.0.0.1"
+          ],
+          "mtu": 1420,
+          "name": "xray0"
+        },
+        "sniffing": {
+          "destOverride": [
+            "http",
+            "tls",
+            "quic"
+          ],
+          "enabled": true
+        },
+        "tag": "tun-in"
+      },
+      {
+        "listen": "127.0.0.1",
+        "port": 53,
+        "protocol": "dokodemo-door",
+        "settings": {
+          "address": "1.1.1.1",
+          "network": "tcp,udp",
+          "port": 53
+        },
+        "tag": "dns-in"
+      },
+      {
+        "listen": "127.0.0.1",
+        "port": 10808,
+        "protocol": "socks",
+        "settings": {
+          "udp": true
+        },
+        "sniffing": {
+          "destOverride": [
+            "http",
+            "tls",
+            "quic"
+          ],
+          "enabled": true
+        },
+        "tag": "socks-in"
+      }
+    ],
+    "log": {
+      "loglevel": "warning"
+    },
+    "outbounds": [
+      {
+        "protocol": "vless",
+        "settings": {
+          "vnext": [
+            {
+              "address": "c.example.com",
+              "port": 443,
+              "users": [
+                {
+                  "encryption": "none",
+                  "id": "uid-4"
+                }
+              ]
+            }
+          ]
+        },
+        "streamSettings": {
+          "grpcSettings": {
+            "serviceName": "grpc-svc"
+          },
+          "network": "grpc",
+          "security": "tls",
+          "sockopt": {
+            "interface": "Wi-Fi"
+          },
+          "tlsSettings": {
+            "serverName": "c.example.com"
+          }
+        },
+        "tag": "proxy"
+      },
+      {
+        "protocol": "dns",
+        "settings": {
+          "network": "tcp",
+          "nonIPQuery": "reject"
+        },
+        "streamSettings": {
+          "sockopt": {
+            "interface": "Wi-Fi"
+          }
+        },
+        "tag": "dns-out"
+      },
+      {
+        "protocol": "freedom",
+        "streamSettings": {
+          "sockopt": {
+            "interface": "Wi-Fi"
+          }
+        },
+        "tag": "direct"
+      },
+      {
+        "protocol": "blackhole",
+        "tag": "block"
+      }
+    ],
+    "routing": {
+      "domainStrategy": "IPOnDemand",
+      "rules": [
+        {
+          "inboundTag": [
+            "dns-in"
+          ],
+          "outboundTag": "dns-out",
+          "type": "field"
+        },
+        {
+          "inboundTag": [
+            "tun-in"
+          ],
+          "outboundTag": "dns-out",
+          "port": 53,
+          "type": "field"
+        }
+      ]
+    }
+  },
+  "vless_h2_tls": {
+    "dns": {
+      "queryStrategy": "UseIPv4",
+      "servers": [
+        "https://1.1.1.1/dns-query",
+        "https://8.8.8.8/dns-query"
+      ]
+    },
+    "inbounds": [
+      {
+        "listen": "0.0.0.0",
+        "protocol": "tun",
+        "settings": {
+          "dns": [
+            "127.0.0.1"
+          ],
+          "mtu": 1420,
+          "name": "xray0"
+        },
+        "sniffing": {
+          "destOverride": [
+            "http",
+            "tls",
+            "quic"
+          ],
+          "enabled": true
+        },
+        "tag": "tun-in"
+      },
+      {
+        "listen": "127.0.0.1",
+        "port": 53,
+        "protocol": "dokodemo-door",
+        "settings": {
+          "address": "1.1.1.1",
+          "network": "tcp,udp",
+          "port": 53
+        },
+        "tag": "dns-in"
+      },
+      {
+        "listen": "127.0.0.1",
+        "port": 10808,
+        "protocol": "socks",
+        "settings": {
+          "udp": true
+        },
+        "sniffing": {
+          "destOverride": [
+            "http",
+            "tls",
+            "quic"
+          ],
+          "enabled": true
+        },
+        "tag": "socks-in"
+      }
+    ],
+    "log": {
+      "loglevel": "warning"
+    },
+    "outbounds": [
+      {
+        "protocol": "vless",
+        "settings": {
+          "vnext": [
+            {
+              "address": "d.example.com",
+              "port": 443,
+              "users": [
+                {
+                  "encryption": "none",
+                  "id": "uid-5"
+                }
+              ]
+            }
+          ]
+        },
+        "streamSettings": {
+          "httpSettings": {
+            "host": [
+              "d1.example.com",
+              "d2.example.com"
+            ],
+            "path": "/h2-path"
+          },
+          "network": "h2",
+          "security": "tls",
+          "sockopt": {
+            "interface": "Wi-Fi"
+          },
+          "tlsSettings": {
+            "serverName": "d.example.com"
+          }
+        },
+        "tag": "proxy"
+      },
+      {
+        "protocol": "dns",
+        "settings": {
+          "network": "tcp",
+          "nonIPQuery": "reject"
+        },
+        "streamSettings": {
+          "sockopt": {
+            "interface": "Wi-Fi"
+          }
+        },
+        "tag": "dns-out"
+      },
+      {
+        "protocol": "freedom",
+        "streamSettings": {
+          "sockopt": {
+            "interface": "Wi-Fi"
+          }
+        },
+        "tag": "direct"
+      },
+      {
+        "protocol": "blackhole",
+        "tag": "block"
+      }
+    ],
+    "routing": {
+      "domainStrategy": "IPOnDemand",
+      "rules": [
+        {
+          "inboundTag": [
+            "dns-in"
+          ],
+          "outboundTag": "dns-out",
+          "type": "field"
+        },
+        {
+          "inboundTag": [
+            "tun-in"
+          ],
+          "outboundTag": "dns-out",
+          "port": 53,
+          "type": "field"
+        }
+      ]
+    }
+  },
+  "vless_tcp_none": {
+    "dns": {
+      "queryStrategy": "UseIPv4",
+      "servers": [
+        "https://1.1.1.1/dns-query",
+        "https://8.8.8.8/dns-query"
+      ]
+    },
+    "inbounds": [
+      {
+        "listen": "0.0.0.0",
+        "protocol": "tun",
+        "settings": {
+          "dns": [
+            "127.0.0.1"
+          ],
+          "mtu": 1420,
+          "name": "xray0"
+        },
+        "sniffing": {
+          "destOverride": [
+            "http",
+            "tls",
+            "quic"
+          ],
+          "enabled": true
+        },
+        "tag": "tun-in"
+      },
+      {
+        "listen": "127.0.0.1",
+        "port": 53,
+        "protocol": "dokodemo-door",
+        "settings": {
+          "address": "1.1.1.1",
+          "network": "tcp,udp",
+          "port": 53
+        },
+        "tag": "dns-in"
+      },
+      {
+        "listen": "127.0.0.1",
+        "port": 10808,
+        "protocol": "socks",
+        "settings": {
+          "udp": true
+        },
+        "sniffing": {
+          "destOverride": [
+            "http",
+            "tls",
+            "quic"
+          ],
+          "enabled": true
+        },
+        "tag": "socks-in"
+      }
+    ],
+    "log": {
+      "loglevel": "warning"
+    },
+    "outbounds": [
+      {
+        "protocol": "vless",
+        "settings": {
+          "vnext": [
+            {
+              "address": "1.2.3.4",
+              "port": 443,
+              "users": [
+                {
+                  "encryption": "none",
+                  "id": "uid-1"
+                }
+              ]
+            }
+          ]
+        },
+        "streamSettings": {
+          "network": "tcp",
+          "security": "none",
+          "sockopt": {
+            "interface": "Wi-Fi"
+          }
+        },
+        "tag": "proxy"
+      },
+      {
+        "protocol": "dns",
+        "settings": {
+          "network": "tcp",
+          "nonIPQuery": "reject"
+        },
+        "streamSettings": {
+          "sockopt": {
+            "interface": "Wi-Fi"
+          }
+        },
+        "tag": "dns-out"
+      },
+      {
+        "protocol": "freedom",
+        "streamSettings": {
+          "sockopt": {
+            "interface": "Wi-Fi"
+          }
+        },
+        "tag": "direct"
+      },
+      {
+        "protocol": "blackhole",
+        "tag": "block"
+      }
+    ],
+    "routing": {
+      "domainStrategy": "IPOnDemand",
+      "rules": [
+        {
+          "inboundTag": [
+            "dns-in"
+          ],
+          "outboundTag": "dns-out",
+          "type": "field"
+        },
+        {
+          "inboundTag": [
+            "tun-in"
+          ],
+          "outboundTag": "dns-out",
+          "port": 53,
+          "type": "field"
+        }
+      ]
+    }
+  },
+  "vless_tcp_tls": {
+    "dns": {
+      "queryStrategy": "UseIPv4",
+      "servers": [
+        "https://1.1.1.1/dns-query",
+        "https://8.8.8.8/dns-query"
+      ]
+    },
+    "inbounds": [
+      {
+        "listen": "0.0.0.0",
+        "protocol": "tun",
+        "settings": {
+          "dns": [
+            "127.0.0.1"
+          ],
+          "mtu": 1420,
+          "name": "xray0"
+        },
+        "sniffing": {
+          "destOverride": [
+            "http",
+            "tls",
+            "quic"
+          ],
+          "enabled": true
+        },
+        "tag": "tun-in"
+      },
+      {
+        "listen": "127.0.0.1",
+        "port": 53,
+        "protocol": "dokodemo-door",
+        "settings": {
+          "address": "1.1.1.1",
+          "network": "tcp,udp",
+          "port": 53
+        },
+        "tag": "dns-in"
+      },
+      {
+        "listen": "127.0.0.1",
+        "port": 10808,
+        "protocol": "socks",
+        "settings": {
+          "udp": true
+        },
+        "sniffing": {
+          "destOverride": [
+            "http",
+            "tls",
+            "quic"
+          ],
+          "enabled": true
+        },
+        "tag": "socks-in"
+      }
+    ],
+    "log": {
+      "loglevel": "warning"
+    },
+    "outbounds": [
+      {
+        "protocol": "vless",
+        "settings": {
+          "vnext": [
+            {
+              "address": "a.example.com",
+              "port": 443,
+              "users": [
+                {
+                  "encryption": "none",
+                  "flow": "xtls-rprx-vision",
+                  "id": "uid-2"
+                }
+              ]
+            }
+          ]
+        },
+        "streamSettings": {
+          "network": "tcp",
+          "security": "tls",
+          "sockopt": {
+            "interface": "Wi-Fi"
+          },
+          "tlsSettings": {
+            "alpn": [
+              "h2",
+              "http/1.1"
+            ],
+            "fingerprint": "chrome",
+            "serverName": "a.example.com"
+          }
+        },
+        "tag": "proxy"
+      },
+      {
+        "protocol": "dns",
+        "settings": {
+          "network": "tcp",
+          "nonIPQuery": "reject"
+        },
+        "streamSettings": {
+          "sockopt": {
+            "interface": "Wi-Fi"
+          }
+        },
+        "tag": "dns-out"
+      },
+      {
+        "protocol": "freedom",
+        "streamSettings": {
+          "sockopt": {
+            "interface": "Wi-Fi"
+          }
+        },
+        "tag": "direct"
+      },
+      {
+        "protocol": "blackhole",
+        "tag": "block"
+      }
+    ],
+    "routing": {
+      "domainStrategy": "IPOnDemand",
+      "rules": [
+        {
+          "inboundTag": [
+            "dns-in"
+          ],
+          "outboundTag": "dns-out",
+          "type": "field"
+        },
+        {
+          "inboundTag": [
+            "tun-in"
+          ],
+          "outboundTag": "dns-out",
+          "port": 53,
+          "type": "field"
+        }
+      ]
+    }
+  },
+  "vless_ws_reality": {
+    "dns": {
+      "queryStrategy": "UseIPv4",
+      "servers": [
+        "https://1.1.1.1/dns-query",
+        "https://8.8.8.8/dns-query"
+      ]
+    },
+    "inbounds": [
+      {
+        "listen": "0.0.0.0",
+        "protocol": "tun",
+        "settings": {
+          "dns": [
+            "127.0.0.1"
+          ],
+          "mtu": 1420,
+          "name": "xray0"
+        },
+        "sniffing": {
+          "destOverride": [
+            "http",
+            "tls",
+            "quic"
+          ],
+          "enabled": true
+        },
+        "tag": "tun-in"
+      },
+      {
+        "listen": "127.0.0.1",
+        "port": 53,
+        "protocol": "dokodemo-door",
+        "settings": {
+          "address": "1.1.1.1",
+          "network": "tcp,udp",
+          "port": 53
+        },
+        "tag": "dns-in"
+      },
+      {
+        "listen": "127.0.0.1",
+        "port": 10808,
+        "protocol": "socks",
+        "settings": {
+          "udp": true
+        },
+        "sniffing": {
+          "destOverride": [
+            "http",
+            "tls",
+            "quic"
+          ],
+          "enabled": true
+        },
+        "tag": "socks-in"
+      }
+    ],
+    "log": {
+      "loglevel": "warning"
+    },
+    "outbounds": [
+      {
+        "protocol": "vless",
+        "settings": {
+          "vnext": [
+            {
+              "address": "203.0.113.5",
+              "port": 443,
+              "users": [
+                {
+                  "encryption": "none",
+                  "id": "uid-6"
+                }
+              ]
+            }
+          ]
+        },
+        "streamSettings": {
+          "network": "ws",
+          "realitySettings": {
+            "fingerprint": "chrome",
+            "publicKey": "PUBKEY",
+            "serverName": "www.microsoft.com",
+            "shortId": "ab12",
+            "spiderX": "/spider"
+          },
+          "security": "reality",
+          "sockopt": {
+            "interface": "Wi-Fi"
+          },
+          "wsSettings": {
+            "headers": {
+              "Host": "www.microsoft.com"
+            },
+            "path": "/rws"
+          }
+        },
+        "tag": "proxy"
+      },
+      {
+        "protocol": "dns",
+        "settings": {
+          "network": "tcp",
+          "nonIPQuery": "reject"
+        },
+        "streamSettings": {
+          "sockopt": {
+            "interface": "Wi-Fi"
+          }
+        },
+        "tag": "dns-out"
+      },
+      {
+        "protocol": "freedom",
+        "streamSettings": {
+          "sockopt": {
+            "interface": "Wi-Fi"
+          }
+        },
+        "tag": "direct"
+      },
+      {
+        "protocol": "blackhole",
+        "tag": "block"
+      }
+    ],
+    "routing": {
+      "domainStrategy": "IPOnDemand",
+      "rules": [
+        {
+          "inboundTag": [
+            "dns-in"
+          ],
+          "outboundTag": "dns-out",
+          "type": "field"
+        },
+        {
+          "inboundTag": [
+            "tun-in"
+          ],
+          "outboundTag": "dns-out",
+          "port": 53,
+          "type": "field"
+        }
+      ]
+    }
+  },
+  "vless_ws_tls": {
+    "dns": {
+      "queryStrategy": "UseIPv4",
+      "servers": [
+        "https://1.1.1.1/dns-query",
+        "https://8.8.8.8/dns-query"
+      ]
+    },
+    "inbounds": [
+      {
+        "listen": "0.0.0.0",
+        "protocol": "tun",
+        "settings": {
+          "dns": [
+            "127.0.0.1"
+          ],
+          "mtu": 1420,
+          "name": "xray0"
+        },
+        "sniffing": {
+          "destOverride": [
+            "http",
+            "tls",
+            "quic"
+          ],
+          "enabled": true
+        },
+        "tag": "tun-in"
+      },
+      {
+        "listen": "127.0.0.1",
+        "port": 53,
+        "protocol": "dokodemo-door",
+        "settings": {
+          "address": "1.1.1.1",
+          "network": "tcp,udp",
+          "port": 53
+        },
+        "tag": "dns-in"
+      },
+      {
+        "listen": "127.0.0.1",
+        "port": 10808,
+        "protocol": "socks",
+        "settings": {
+          "udp": true
+        },
+        "sniffing": {
+          "destOverride": [
+            "http",
+            "tls",
+            "quic"
+          ],
+          "enabled": true
+        },
+        "tag": "socks-in"
+      }
+    ],
+    "log": {
+      "loglevel": "warning"
+    },
+    "outbounds": [
+      {
+        "protocol": "vless",
+        "settings": {
+          "vnext": [
+            {
+              "address": "b.example.com",
+              "port": 8443,
+              "users": [
+                {
+                  "encryption": "none",
+                  "id": "uid-3"
+                }
+              ]
+            }
+          ]
+        },
+        "streamSettings": {
+          "network": "ws",
+          "security": "tls",
+          "sockopt": {
+            "interface": "Wi-Fi"
+          },
+          "tlsSettings": {
+            "fingerprint": "firefox",
+            "serverName": "b.example.com"
+          },
+          "wsSettings": {
+            "headers": {
+              "Host": "b.example.com"
+            },
+            "path": "/ws-path"
+          }
+        },
+        "tag": "proxy"
+      },
+      {
+        "protocol": "dns",
+        "settings": {
+          "network": "tcp",
+          "nonIPQuery": "reject"
+        },
+        "streamSettings": {
+          "sockopt": {
+            "interface": "Wi-Fi"
+          }
+        },
+        "tag": "dns-out"
+      },
+      {
+        "protocol": "freedom",
+        "streamSettings": {
+          "sockopt": {
+            "interface": "Wi-Fi"
+          }
+        },
+        "tag": "direct"
+      },
+      {
+        "protocol": "blackhole",
+        "tag": "block"
+      }
+    ],
+    "routing": {
+      "domainStrategy": "IPOnDemand",
+      "rules": [
+        {
+          "inboundTag": [
+            "dns-in"
+          ],
+          "outboundTag": "dns-out",
+          "type": "field"
+        },
+        {
+          "inboundTag": [
+            "tun-in"
+          ],
+          "outboundTag": "dns-out",
+          "port": 53,
+          "type": "field"
+        }
+      ]
+    }
+  },
+  "wireguard_ipv4": {
+    "dns": {
+      "queryStrategy": "UseIPv4",
+      "servers": [
+        "https://1.1.1.1/dns-query",
+        "https://8.8.8.8/dns-query"
+      ]
+    },
+    "inbounds": [
+      {
+        "listen": "0.0.0.0",
+        "protocol": "tun",
+        "settings": {
+          "dns": [
+            "127.0.0.1"
+          ],
+          "mtu": 1420,
+          "name": "xray0"
+        },
+        "sniffing": {
+          "destOverride": [
+            "http",
+            "tls",
+            "quic"
+          ],
+          "enabled": true
+        },
+        "tag": "tun-in"
+      },
+      {
+        "listen": "127.0.0.1",
+        "port": 53,
+        "protocol": "dokodemo-door",
+        "settings": {
+          "address": "1.1.1.1",
+          "network": "tcp,udp",
+          "port": 53
+        },
+        "tag": "dns-in"
+      },
+      {
+        "listen": "127.0.0.1",
+        "port": 10808,
+        "protocol": "socks",
+        "settings": {
+          "udp": true
+        },
+        "sniffing": {
+          "destOverride": [
+            "http",
+            "tls",
+            "quic"
+          ],
+          "enabled": true
+        },
+        "tag": "socks-in"
+      }
+    ],
+    "log": {
+      "loglevel": "warning"
+    },
+    "outbounds": [
+      {
+        "protocol": "wireguard",
+        "settings": {
+          "address": [
+            "10.0.0.2/32",
+            "fd00::2/128"
+          ],
+          "domainStrategy": "ForceIP",
+          "mtu": 1280,
+          "noKernelTun": true,
+          "peers": [
+            {
+              "allowedIPs": [
+                "0.0.0.0/0",
+                "::/0"
+              ],
+              "endpoint": "1.2.3.4:51820",
+              "keepAlive": 25,
+              "preSharedKey": "PSK",
+              "publicKey": "PEERKEY"
+            }
+          ],
+          "reserved": [
+            1,
+            2,
+            3
+          ],
+          "secretKey": "SECRETKEY"
+        },
+        "tag": "proxy"
+      },
+      {
+        "protocol": "dns",
+        "settings": {
+          "network": "tcp",
+          "nonIPQuery": "reject"
+        },
+        "streamSettings": {
+          "sockopt": {
+            "interface": "Wi-Fi"
+          }
+        },
+        "tag": "dns-out"
+      },
+      {
+        "protocol": "freedom",
+        "streamSettings": {
+          "sockopt": {
+            "interface": "Wi-Fi"
+          }
+        },
+        "tag": "direct"
+      },
+      {
+        "protocol": "blackhole",
+        "tag": "block"
+      }
+    ],
+    "routing": {
+      "domainStrategy": "IPOnDemand",
+      "rules": [
+        {
+          "inboundTag": [
+            "dns-in"
+          ],
+          "outboundTag": "dns-out",
+          "type": "field"
+        },
+        {
+          "inboundTag": [
+            "tun-in"
+          ],
+          "outboundTag": "dns-out",
+          "port": 53,
+          "type": "field"
+        }
+      ]
+    }
+  },
+  "wireguard_ipv6_endpoint": {
+    "dns": {
+      "queryStrategy": "UseIPv4",
+      "servers": [
+        "https://1.1.1.1/dns-query",
+        "https://8.8.8.8/dns-query"
+      ]
+    },
+    "inbounds": [
+      {
+        "listen": "0.0.0.0",
+        "protocol": "tun",
+        "settings": {
+          "dns": [
+            "127.0.0.1"
+          ],
+          "mtu": 1420,
+          "name": "xray0"
+        },
+        "sniffing": {
+          "destOverride": [
+            "http",
+            "tls",
+            "quic"
+          ],
+          "enabled": true
+        },
+        "tag": "tun-in"
+      },
+      {
+        "listen": "127.0.0.1",
+        "port": 53,
+        "protocol": "dokodemo-door",
+        "settings": {
+          "address": "1.1.1.1",
+          "network": "tcp,udp",
+          "port": 53
+        },
+        "tag": "dns-in"
+      },
+      {
+        "listen": "127.0.0.1",
+        "port": 10808,
+        "protocol": "socks",
+        "settings": {
+          "udp": true
+        },
+        "sniffing": {
+          "destOverride": [
+            "http",
+            "tls",
+            "quic"
+          ],
+          "enabled": true
+        },
+        "tag": "socks-in"
+      }
+    ],
+    "log": {
+      "loglevel": "warning"
+    },
+    "outbounds": [
+      {
+        "protocol": "wireguard",
+        "settings": {
+          "domainStrategy": "ForceIP",
+          "mtu": 1420,
+          "noKernelTun": true,
+          "peers": [
+            {
+              "allowedIPs": [
+                "0.0.0.0/0",
+                "::/0"
+              ],
+              "endpoint": "[2606:4700:d0::a29f:c001]:2408",
+              "publicKey": "P"
+            }
+          ],
+          "secretKey": "S"
+        },
+        "tag": "proxy"
+      },
+      {
+        "protocol": "dns",
+        "settings": {
+          "network": "tcp",
+          "nonIPQuery": "reject"
+        },
+        "streamSettings": {
+          "sockopt": {
+            "interface": "Wi-Fi"
+          }
+        },
+        "tag": "dns-out"
+      },
+      {
+        "protocol": "freedom",
+        "streamSettings": {
+          "sockopt": {
+            "interface": "Wi-Fi"
+          }
+        },
+        "tag": "direct"
+      },
+      {
+        "protocol": "blackhole",
+        "tag": "block"
+      }
+    ],
+    "routing": {
+      "domainStrategy": "IPOnDemand",
+      "rules": [
+        {
+          "inboundTag": [
+            "dns-in"
+          ],
+          "outboundTag": "dns-out",
+          "type": "field"
+        },
+        {
+          "inboundTag": [
+            "tun-in"
+          ],
+          "outboundTag": "dns-out",
+          "port": 53,
+          "type": "field"
+        }
+      ]
+    }
+  }
+}
