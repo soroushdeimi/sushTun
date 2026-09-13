@@ -41,6 +41,11 @@ class Profile:
     ech: str = ""
     pcs: str = ""
     vcn: str = ""
+    hy2_obfs_password: str = ""
+    hy2_ports: str = ""
+    hy2_hop_interval: str = ""
+    hy2_up_mbps: int = 0
+    hy2_down_mbps: int = 0
     wg_local_address: str = ""
     wg_preshared: str = ""
     wg_reserved: str = ""
