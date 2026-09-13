@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import html
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QItemSelection, QItemSelectionModel, Qt, Signal
 from PySide6.QtGui import QFont, QTextCursor
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -25,7 +25,16 @@ from PySide6.QtWidgets import (
 
 from ..core import share as share_mod
 from ..core.profiles import Profile
-from .server_table import ProfileFilterProxy, ProfileTableModel, QrDialog
+from .server_table import (
+    COL_ACTIVE,
+    COL_DELAY,
+    COL_NAME,
+    COL_TYPE,
+    OPTIONAL_COLUMNS,
+    ProfileFilterProxy,
+    ProfileTableModel,
+    QrDialog,
+)
 from .theme import ERR, MUTED, OK, WARN
 
 
@@ -131,7 +140,7 @@ class ProfilePanel(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        header = QLabel("Profiles")
+        header = QLabel("Servers")
         header.setObjectName("H1")
         layout.addWidget(header)
 
@@ -149,9 +158,22 @@ class ProfilePanel(QWidget):
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.table.verticalHeader().setVisible(False)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
-        self.table.horizontalHeader().setStretchLastSection(False)
+        self.table.setTextElideMode(Qt.ElideRight)
+
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(COL_NAME, QHeaderView.Stretch)
+        for col in (COL_ACTIVE, COL_DELAY, *[c for c, _ in OPTIONAL_COLUMNS]):
+            header.setSectionResizeMode(col, QHeaderView.ResizeToContents)
+        header.setStretchLastSection(False)
+        self.table.setColumnHidden(COL_TYPE, True)  # Transport already implies it
+        header.setContextMenuPolicy(Qt.CustomContextMenu)
+        header.customContextMenuRequested.connect(self._show_header_menu)
+
         self.table.setSortingEnabled(True)
+        # setSortingEnabled(True) sorts by section 0 immediately; undo that
+        # so the table keeps the store's order until a header is clicked.
+        header.setSortIndicator(-1, Qt.AscendingOrder)
+
         self.table.setContextMenuPolicy(Qt.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self._show_menu)
         self.table.doubleClicked.connect(lambda _i: self._emit_current(self.editRequested))
@@ -191,8 +213,20 @@ class ProfilePanel(QWidget):
 
     # -- population ----------------------------------------------------
     def set_profiles(self, profiles: list[Profile], active_uid: str | None) -> None:
+        # A full reload (import/edit/delete/subscription refresh) must not
+        # collapse a multi-selection down to one row: keep whatever's still
+        # selectable, or fall back to the active row on a first load.
+        previous = self.selected_uids()
         self.model.set_profiles(profiles, active_uid)
-        self._reselect(active_uid)
+        keep = [u for u in previous if self.model.row_of_uid(u) is not None]
+        if not keep and active_uid and self.model.row_of_uid(active_uid) is not None:
+            keep = [active_uid]
+        self._reselect(keep)
+
+    def set_active(self, uid: str) -> None:
+        # Just the ● marker moves, no reset -- selecting a row to activate
+        # it must not disturb a multi-selection made for Test/Delete.
+        self.model.set_active_uid(uid)
 
     def set_results(self, results: dict) -> None:
         self.model.set_results(results)
@@ -200,8 +234,10 @@ class ProfilePanel(QWidget):
     def set_sub_names(self, names: dict) -> None:
         self.model.set_sub_names(names)
 
-    def update_result(self, uid: str, delay_ms: float | None, error: str | None) -> None:
-        self.model.update_result(uid, delay_ms, error)
+    def update_result(
+        self, uid: str, delay_ms: float | None, error: str | None, skipped: bool = False,
+    ) -> None:
+        self.model.update_result(uid, delay_ms, error, skipped)
 
     def set_testing(self, active: bool) -> None:
         self._testing = active
@@ -209,20 +245,36 @@ class ProfilePanel(QWidget):
         self.btn_fastest.setEnabled(not active)
         self.btn_more.setEnabled(not active)
 
-    def _reselect(self, active_uid: str | None) -> None:
-        if not active_uid:
+    def _reselect(self, uids: list[str]) -> None:
+        if not uids:
             return
-        row = self.model.row_of_uid(active_uid)
-        if row is None:
-            return
-        proxy_idx = self.proxy.mapFromSource(self.model.index(row, 0))
-        if not proxy_idx.isValid():
+        selection = QItemSelection()
+        last_col = self.model.columnCount() - 1
+        first_proxy_idx = None
+        for uid in uids:
+            row = self.model.row_of_uid(uid)  # a *source* row; map both ends from it
+            if row is None:
+                continue
+            start = self.proxy.mapFromSource(self.model.index(row, 0))
+            end = self.proxy.mapFromSource(self.model.index(row, last_col))
+            if not start.isValid():
+                continue
+            selection.select(start, end)
+            first_proxy_idx = first_proxy_idx or start
+        if first_proxy_idx is None:
             return
         # Programmatic reselect after a reload must not re-fire `activated`
-        # (that would re-persist the same active uid on every refresh).
-        self.table.selectionModel().blockSignals(True)
-        self.table.selectRow(proxy_idx.row())
-        self.table.selectionModel().blockSignals(False)
+        # (that would re-persist the same active uid on every refresh, and
+        # a multi-row reselect would collapse straight back to one anyway).
+        sel_model = self.table.selectionModel()
+        sel_model.blockSignals(True)
+        sel_model.select(selection, QItemSelectionModel.ClearAndSelect | QItemSelectionModel.Rows)
+        # QTableView.setCurrentIndex() applies its own ClearAndSelect command
+        # and would collapse the multi-row selection just made above; set
+        # the current index on the selection model directly instead, with
+        # NoUpdate so it doesn't touch the selection at all.
+        sel_model.setCurrentIndex(first_proxy_idx, QItemSelectionModel.NoUpdate)
+        sel_model.blockSignals(False)
 
     # -- selection / lookups ---------------------------------------------
     def current_uid(self) -> str | None:
@@ -258,9 +310,14 @@ class ProfilePanel(QWidget):
             signal.emit(uid)
 
     def _on_selection_changed(self, *_args) -> None:
-        uid = self.current_uid()
-        if uid:
-            self.activated.emit(uid)
+        # Only a single selected row means "activate this one": a Ctrl-click
+        # extending the selection to two rows must not immediately persist
+        # whichever of them happens to be `current`, or Test/Delete could
+        # never see more than one uid (the very next reload would reselect
+        # just the newly-"activated" row).
+        uids = self.selected_uids()
+        if len(uids) == 1:
+            self.activated.emit(uids[0])
 
     # -- toolbar / menu actions -------------------------------------------
     def _start_test(self, real: bool) -> None:
@@ -311,6 +368,19 @@ class ProfilePanel(QWidget):
         menu.addSeparator()
         menu.addAction("Delete", lambda: self._delete_selected(uids))
         menu.exec(self.table.viewport().mapToGlobal(pos))
+
+    def _build_header_menu(self) -> QMenu:
+        menu = QMenu(self)
+        for col, label in OPTIONAL_COLUMNS:
+            action = menu.addAction(label)
+            action.setCheckable(True)
+            action.setChecked(not self.table.isColumnHidden(col))
+            action.toggled.connect(lambda checked, c=col: self.table.setColumnHidden(c, not checked))
+        return menu
+
+    def _show_header_menu(self, pos) -> None:
+        menu = self._build_header_menu()
+        menu.exec(self.table.horizontalHeader().viewport().mapToGlobal(pos))
 
 
 class LogView(QTextEdit):

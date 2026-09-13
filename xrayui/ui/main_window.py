@@ -366,7 +366,10 @@ class MainWindow(QMainWindow):
 
     def _set_active(self, uid: str) -> None:
         self.store.set_active(uid)
-        self._reload_profiles()
+        # Just move the ● marker: a full _reload_profiles() resets the
+        # model, which would collapse a multi-selection back down to one
+        # row every time a click also happens to activate a profile.
+        self.profiles.set_active(uid)
         self._refresh_status()
 
     def _paste_import(self) -> None:
@@ -429,8 +432,9 @@ class MainWindow(QMainWindow):
             self._test_cancel.set()
 
     def _on_test_result(self, uid: str, delay, error) -> None:
-        self.results.set(uid, delay_ms=delay, error=error)
-        self.profiles.update_result(uid, delay, error)
+        skipped = speedtest.is_skipped(error)
+        self.results.set(uid, delay_ms=delay, error=error, skipped=skipped)
+        self.profiles.update_result(uid, delay, error, skipped)
 
     def _use_fastest(self, uid: str) -> None:
         profile = self.store.get(uid)
@@ -444,8 +448,15 @@ class MainWindow(QMainWindow):
 
     def _remove_failed(self) -> None:
         active = self.store.active_uid()
-        failed = [p for p in self.store.list()
-                  if p.uid != active and (self.results.get(p.uid) or {}).get("error")]
+        failed = []
+        for p in self.store.list():
+            if p.uid == active:
+                continue
+            r = self.results.get(p.uid) or {}
+            # A skip (e.g. WireGuard's "n/a (UDP)") was never actually
+            # dialed, so it isn't a failure -- only a real error counts.
+            if r.get("error") and not r.get("skipped"):
+                failed.append(p)
         if not failed:
             self.step_label.setText("No failed servers to remove.")
             return

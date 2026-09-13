@@ -304,7 +304,7 @@ def test_test_button_toggles_to_cancel_while_a_test_runs(window, monkeypatch):
     _pump(lambda: window._test_cancel is None)
 
     assert window.profiles.btn_test.text() == "Test"
-    assert window.results.get(profile.uid) == {"delay_ms": 10.0, "error": None}
+    assert window.results.get(profile.uid) == {"delay_ms": 10.0, "error": None, "skipped": False}
 
 
 def test_test_result_from_a_background_thread_updates_the_right_row(window):
@@ -318,7 +318,7 @@ def test_test_result_from_a_background_thread_updates_the_right_row(window):
 
     _pump(lambda: window.results.get(profile.uid) is not None)
 
-    assert window.results.get(profile.uid) == {"delay_ms": 77.0, "error": None}
+    assert window.results.get(profile.uid) == {"delay_ms": 77.0, "error": None, "skipped": False}
     row = window.profiles.model.row_of_uid(profile.uid)
     idx = window.profiles.model.index(row, COL_DELAY)
     assert window.profiles.model.data(idx) == "77 ms"

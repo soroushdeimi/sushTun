@@ -15,8 +15,10 @@ from PySide6.QtWidgets import QApplication, QDialog, QHBoxLayout, QLabel, QPushB
 from ..core.profiles import Profile
 from .theme import ERR, MUTED, OK, WARN
 
-COLUMNS = ["", "Name", "Type", "Transport", "Subscription", "Delay"]
-COL_ACTIVE, COL_NAME, COL_TYPE, COL_TRANSPORT, COL_SUB, COL_DELAY = range(len(COLUMNS))
+COLUMNS = ["", "Name", "Delay", "Transport", "Subscription", "Type"]
+COL_ACTIVE, COL_NAME, COL_DELAY, COL_TRANSPORT, COL_SUB, COL_TYPE = range(len(COLUMNS))
+# Optional columns a viewer can hide from the header's right-click menu.
+OPTIONAL_COLUMNS = ((COL_TRANSPORT, "Transport"), (COL_SUB, "Subscription"), (COL_TYPE, "Type"))
 
 # Thresholds match v2rayN's rough real-delay bands.
 _OK_MS = 300
@@ -27,7 +29,7 @@ _ROOT = QModelIndex()  # a fresh QModelIndex() per call is a ruff B008 default-a
 
 def _transport_text(p: Profile) -> str:
     if (p.protocol or "").lower() == "wireguard":
-        return "—"
+        return "wg"
     return f"{p.network}/{p.security}"
 
 
@@ -56,8 +58,23 @@ class ProfileTableModel(QAbstractTableModel):
         self._sub_names = dict(names)
         self.endResetModel()
 
-    def update_result(self, uid: str, delay_ms: float | None, error: str | None) -> None:
-        self._results[uid] = {"delay_ms": delay_ms, "error": error}
+    def set_active_uid(self, uid: str | None) -> None:
+        # Only the ● column of the old and new active rows changes -- no
+        # reset, so a multi-selection made for Test/Delete survives.
+        old = self._active_uid
+        self._active_uid = uid
+        for u in (old, uid):
+            if not u:
+                continue
+            row = self.row_of_uid(u)
+            if row is not None:
+                idx = self.index(row, COL_ACTIVE)
+                self.dataChanged.emit(idx, idx)
+
+    def update_result(
+        self, uid: str, delay_ms: float | None, error: str | None, skipped: bool = False,
+    ) -> None:
+        self._results[uid] = {"delay_ms": delay_ms, "error": error, "skipped": skipped}
         row = self.row_of_uid(uid)
         if row is not None:
             self.dataChanged.emit(self.index(row, 0), self.index(row, len(COLUMNS) - 1))
@@ -77,6 +94,8 @@ class ProfileTableModel(QAbstractTableModel):
         return r.get("delay_ms") if r else None
 
     def fastest_uid(self) -> str | None:
+        # Skipped and failed profiles both have delay_ms=None, so they're
+        # already excluded here without checking "skipped" separately.
         best_uid, best = None, inf
         for p in self._profiles:
             v = self._delay_value(p.uid)
@@ -124,6 +143,8 @@ class ProfileTableModel(QAbstractTableModel):
                 delay = self._delay_value(p.uid)
                 if delay is not None:
                     return f"{round(delay)} ms"
+                if result.get("skipped"):
+                    return "n/a"
                 return "Failed" if result.get("error") else "—"
             return None
 
@@ -131,6 +152,8 @@ class ProfileTableModel(QAbstractTableModel):
             return result.get("error") or None
 
         if role == Qt.ForegroundRole and col == COL_DELAY:
+            if result.get("skipped"):
+                return QColor(MUTED)
             delay = self._delay_value(p.uid)
             if delay is None:
                 return QColor(ERR if result.get("error") else MUTED)
