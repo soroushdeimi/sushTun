@@ -33,7 +33,7 @@ from .workers import Worker
 
 _NETWORKS = ["tcp", "ws", "grpc", "h2", "kcp", "quic", "xhttp", "httpupgrade"]
 _SECURITIES = ["none", "tls", "reality"]
-_PROTOCOLS = ["vless", "vmess", "trojan", "shadowsocks", "wireguard"]
+_PROTOCOLS = ["vless", "vmess", "trojan", "shadowsocks", "hysteria2", "wireguard"]
 _VMESS_SECURITIES = ["auto", "aes-128-gcm", "chacha20-poly1305", "none", "zero"]
 _SS_METHODS = [
     "aes-128-gcm", "aes-256-gcm", "chacha20-ietf-poly1305", "xchacha20-ietf-poly1305",
@@ -183,6 +183,21 @@ class ProfileEditDialog(QDialog):
         self.f_wg_keepalive = QSpinBox()
         self.f_wg_keepalive.setRange(0, 600)
         self.f_wg_keepalive.setValue(int(p.wg_keepalive) if p.wg_keepalive else 0)
+        self.f_hy2_pcs = QLineEdit(p.pcs)
+        self.f_hy2_obfs_password = QLineEdit(p.hy2_obfs_password)
+        self.f_hy2_ports = QLineEdit(p.hy2_ports)
+        self.f_hy2_ports.setPlaceholderText("20000-30000")
+        self.f_hy2_hop_interval = QLineEdit(p.hy2_hop_interval)
+        self.f_hy2_hop_interval.setPlaceholderText("30")
+        _hy2_mbps_tip = "Leave 0 to let the congestion control pick (BBR)."
+        self.f_hy2_up_mbps = QSpinBox()
+        self.f_hy2_up_mbps.setRange(0, 100000)
+        self.f_hy2_up_mbps.setValue(int(p.hy2_up_mbps) if p.hy2_up_mbps else 0)
+        self.f_hy2_up_mbps.setToolTip(_hy2_mbps_tip)
+        self.f_hy2_down_mbps = QSpinBox()
+        self.f_hy2_down_mbps.setRange(0, 100000)
+        self.f_hy2_down_mbps.setValue(int(p.hy2_down_mbps) if p.hy2_down_mbps else 0)
+        self.f_hy2_down_mbps.setToolTip(_hy2_mbps_tip)
 
         self._add_row(form, "Name", self.f_name)
         self._add_row(form, "Protocol", self.f_protocol)
@@ -204,6 +219,8 @@ class ProfileEditDialog(QDialog):
         lab_path = self._add_row(form, "Path", self.f_path)
         lab_host = self._add_row(form, "Host", self.f_host)
         lab_service = self._add_row(form, "gRPC service", self.f_service)
+        lab_hy2_pcs = self._add_row(form, "Pinned cert SHA-256", self.f_hy2_pcs)
+        lab_hy2_obfs = self._add_row(form, "Obfuscation password", self.f_hy2_obfs_password)
 
         self._wg_labs = [
             self._add_row(form, "Local address", self.f_wg_local),
@@ -234,6 +251,10 @@ class ProfileEditDialog(QDialog):
         lab_ech = self._add_row(adv_form, "ECH config list", self.f_ech)
         lab_pcs = self._add_row(adv_form, "Pinned cert SHA-256", self.f_pcs)
         lab_vcn = self._add_row(adv_form, "Verify cert name", self.f_vcn)
+        lab_hy2_ports = self._add_row(adv_form, "Port-hopping range", self.f_hy2_ports)
+        lab_hy2_interval = self._add_row(adv_form, "Hop interval (s)", self.f_hy2_hop_interval)
+        lab_hy2_up = self._add_row(adv_form, "Up Mbps", self.f_hy2_up_mbps)
+        lab_hy2_down = self._add_row(adv_form, "Down Mbps", self.f_hy2_down_mbps)
 
         # allow_insecure has no editor control any more: the bundled Xray
         # binary hard-refuses "allowInsecure" now (see
@@ -267,14 +288,20 @@ class ProfileEditDialog(QDialog):
         def ss() -> bool:
             return self.f_protocol.currentText() == "shadowsocks"
 
+        def hysteria2() -> bool:
+            return self.f_protocol.currentText() == "hysteria2"
+
         def stream() -> bool:
-            return not wg()
+            return not wg() and not hysteria2()
 
         def is_reality() -> bool:
             return stream() and self.f_security.currentText() == "reality"
 
         def is_tls_or_reality() -> bool:
             return stream() and self.f_security.currentText() in ("tls", "reality")
+
+        def sni_visible() -> bool:
+            return is_tls_or_reality() or hysteria2()
 
         def is_tls() -> bool:
             return stream() and self.f_security.currentText() == "tls"
@@ -304,7 +331,7 @@ class ProfileEditDialog(QDialog):
             (lab_flow, self.f_flow, vless),
             (lab_network, self.f_network, stream),
             (lab_security, self.f_security, stream),
-            (lab_sni, self.f_sni, is_tls_or_reality),
+            (lab_sni, self.f_sni, sni_visible),
             (lab_fp, self.f_fp, is_tls_or_reality),
             (lab_alpn, self.f_alpn, is_tls),
             (lab_sid, self.f_sid, is_reality),
@@ -318,6 +345,12 @@ class ProfileEditDialog(QDialog):
             (lab_ech, self.f_ech, is_tls),
             (lab_pcs, self.f_pcs, is_tls),
             (lab_vcn, self.f_vcn, is_tls),
+            (lab_hy2_pcs, self.f_hy2_pcs, hysteria2),
+            (lab_hy2_obfs, self.f_hy2_obfs_password, hysteria2),
+            (lab_hy2_ports, self.f_hy2_ports, hysteria2),
+            (lab_hy2_interval, self.f_hy2_hop_interval, hysteria2),
+            (lab_hy2_up, self.f_hy2_up_mbps, hysteria2),
+            (lab_hy2_down, self.f_hy2_down_mbps, hysteria2),
         ]
 
         for combo in (self.f_protocol, self.f_network, self.f_security):
@@ -330,7 +363,7 @@ class ProfileEditDialog(QDialog):
         protocol = self.f_protocol.currentText()
         wg = protocol == "wireguard"
         self._lab_id.setText("Private key" if wg else "Password" if protocol in
-                             ("trojan", "shadowsocks") else "UUID")
+                             ("trojan", "shadowsocks", "hysteria2") else "UUID")
         self._lab_pbk.setText("Peer public key" if wg else "Reality public key")
         pbk_visible = self._pbk_visible()
         self._lab_pbk.setVisible(pbk_visible)
@@ -395,8 +428,16 @@ class ProfileEditDialog(QDialog):
             # allow_insecure has no editor control -- never touched here, so
             # a profile that had it set keeps it set (see _form_tab).
             p.ech = self.f_ech.text().strip()
-            p.pcs = self.f_pcs.text().strip()
+            # pcs has two editors -- the shared Advanced one, and a
+            # dedicated main-form one for hysteria2 -- since only one is
+            # ever visible, whichever matches the chosen protocol wins.
+            p.pcs = (self.f_hy2_pcs if p.protocol == "hysteria2" else self.f_pcs).text().strip()
             p.vcn = self.f_vcn.text().strip()
+            p.hy2_obfs_password = self.f_hy2_obfs_password.text().strip()
+            p.hy2_ports = self.f_hy2_ports.text().strip()
+            p.hy2_hop_interval = self.f_hy2_hop_interval.text().strip()
+            p.hy2_up_mbps = self.f_hy2_up_mbps.value()
+            p.hy2_down_mbps = self.f_hy2_down_mbps.value()
             p.wg_local_address = self.f_wg_local.text().strip()
             p.wg_preshared = self.f_wg_psk.text().strip()
             p.wg_reserved = self.f_wg_reserved.text().strip()

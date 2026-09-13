@@ -288,6 +288,7 @@ def test_profile_edit_dialog_round_trips_alpn_and_spiderx(qapp):
     ("vmess", "UUID", True, False, False, True, False),
     ("trojan", "Password", False, False, False, True, False),
     ("shadowsocks", "Password", False, True, False, True, False),
+    ("hysteria2", "Password", False, False, False, False, False),
     ("wireguard", "Private key", False, False, False, False, True),
 ])
 def test_profile_edit_dialog_field_visibility_per_protocol(
@@ -382,6 +383,44 @@ def test_profile_edit_dialog_visibility_combinations(
         assert not widgets[key].isHidden(), f"{key} should be visible"
     for key in expect_hidden:
         assert widgets[key].isHidden(), f"{key} should be hidden"
+
+
+def test_profile_edit_dialog_hysteria2_field_visibility(qapp):
+    p = Profile(name="hy", protocol="hysteria2", address="a.com", port=443, id="pw")
+    dlg = ProfileEditDialog(p)
+    assert dlg._lab_id.text() == "Password"
+    for widget in (dlg.f_sni, dlg.f_hy2_pcs, dlg.f_hy2_obfs_password,
+                  dlg.f_hy2_ports, dlg.f_hy2_hop_interval,
+                  dlg.f_hy2_up_mbps, dlg.f_hy2_down_mbps):
+        assert not widget.isHidden(), widget
+    for widget in (dlg.f_fp, dlg.f_alpn, dlg.f_network, dlg.f_security, dlg.f_pbk,
+                  dlg.f_sid, dlg.f_spx, dlg.f_path, dlg.f_host, dlg.f_service,
+                  dlg.f_encryption, dlg.f_flow, dlg.f_vmess_security, dlg.f_ss_method,
+                  dlg.f_pcs, dlg.f_ech, dlg.f_vcn, dlg.f_header_type,
+                  dlg.f_xhttp_mode, dlg.f_xhttp_extra):
+        assert widget.isHidden(), widget
+    assert not dlg._advanced.isHidden()
+
+
+def test_profile_edit_dialog_hysteria2_fields_round_trip(qapp):
+    p = Profile(name="hy", protocol="hysteria2", address="a.com", port=443, id="pw")
+    dlg = ProfileEditDialog(p)
+    dlg.f_sni.setText("a.com")
+    dlg.f_hy2_pcs.setText("ab" * 32)
+    dlg.f_hy2_obfs_password.setText("obfspass")
+    dlg.f_hy2_ports.setText("20000-30000")
+    dlg.f_hy2_hop_interval.setText("45")
+    dlg.f_hy2_up_mbps.setValue(100)
+    dlg.f_hy2_down_mbps.setValue(50)
+    dlg._save()
+    saved = dlg.result_profile()
+    assert saved.sni == "a.com"
+    assert saved.pcs == "ab" * 32
+    assert saved.hy2_obfs_password == "obfspass"
+    assert saved.hy2_ports == "20000-30000"
+    assert saved.hy2_hop_interval == "45"
+    assert saved.hy2_up_mbps == 100
+    assert saved.hy2_down_mbps == 50
 
 
 def test_profile_edit_dialog_refuses_invalid_xhttp_extra(qapp, warnings):
