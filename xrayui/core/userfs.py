@@ -13,75 +13,105 @@ own permission checks do the enforcing instead: if the symlink points
 somewhere that user couldn't write anyway, the write fails there too,
 exactly as if the user had run it themselves. Since the file ends up
 created by the user in the first place, no chown is ever needed.
+
+This used to drop privilege with a raw os.fork() + setuid() inside this
+process -- but this is a Qt app with background threads running the
+moment it starts (LogTailer, QThreadPool), and CPython warns that
+fork() from a multi-threaded process can leave the child wedged if
+another thread held a lock (malloc's arena lock, import machinery, ...)
+at the instant of the fork; the child still runs plenty of Python
+(pathlib, exception handling) before exiting. The original code also
+had no timeout on the parent's waitpid, so a wedged child would hang
+forever the QThreadPool worker (or the UI thread, for Back up...)
+calling it. subprocess.run() instead goes through CPython's own C-level
+fork+exec helper, which is written to be safe from a multi-threaded
+process, and it takes a hard timeout.
 """
 from __future__ import annotations
 
 import os
+import shutil
+import subprocess
+import sys
 from pathlib import Path
+
+from . import proc
+
+IS_LINUX = sys.platform.startswith("linux")
+
+# Never the inherited PATH -- an elevated process's PATH could itself be
+# attacker-influenced (a hijacked sudo/pkexec environment); every tool this
+# module runs is resolved from this fixed, standard location instead.
+_TOOL_PATH = "/usr/bin:/bin"
 
 
 class UserFsError(RuntimeError):
     pass
 
 
-def _run_as(uid: int, gid: int, fn) -> None:
-    # A forked child either fully becomes the user or dies without
-    # touching anything -- a failed setuid/setgid can never leave this
-    # (still-root) process holding an open fd or a half-done write.
-    pid = os.fork()
-    if pid == 0:
-        try:
-            # Only root can actually drop privilege; a non-root caller
-            # (an unprivileged test, or a non-elevated code path) is
-            # already running as the target user, so there is nothing to
-            # drop and setgroups()/setgid()/setuid() would just raise.
-            if os.geteuid() == 0:
-                os.setgroups([])
-                os.setgid(gid)
-                os.setuid(uid)
-                if os.getuid() != uid or os.getgid() != gid:
-                    os._exit(1)
-            fn()
-        except Exception:
-            os._exit(1)
-        os._exit(0)
-        return
-    _, status = os.waitpid(pid, 0)
-    if not (os.WIFEXITED(status) and os.WEXITSTATUS(status) == 0):
-        raise UserFsError(f"operation failed running as uid {uid}")
+def _require_linux() -> None:
+    if not IS_LINUX:
+        raise UserFsError("core.userfs is Linux-only")
 
 
-def _mkdirs(path: Path) -> None:
-    # A directory symlink in the path (e.g. ~/.config/autostart -> /etc) is
-    # still followed here, same as any normal mkdir -p would -- but every
-    # operation below runs as the target uid/gid, so following it can only
-    # ever reach what that user could already write to themselves. That,
-    # not blanket symlink rejection, is what makes root safe to call this.
-    if path.exists():
-        return
-    _mkdirs(path.parent)
-    os.mkdir(str(path), 0o755)  # raises if a symlink or file already sits here
+def _tool(name: str) -> str:
+    path = shutil.which(name, path=_TOOL_PATH)
+    if path is None:
+        raise UserFsError(f"required tool not found: {name}")
+    return path
+
+
+def _run_as_user(argv: list[str], uid: int, gid: int, *,
+                 input: bytes | None = None, timeout: float = 10) -> None:
+    kwargs: dict = {}
+    if os.geteuid() == 0:
+        # A non-root caller can't setgroups()/setgid()/setuid() at all, and
+        # is already running as the target user -- nothing to drop.
+        kwargs["user"] = uid
+        kwargs["group"] = gid
+        kwargs["extra_groups"] = []
+    try:
+        # argv[0] always comes from _tool()'s absolute-path resolution --
+        # never a shell, never anything derived from unsanitized input.
+        result = subprocess.run(
+            argv,
+            input=input,
+            capture_output=True,
+            timeout=timeout,
+            env=proc.child_env({"PATH": _TOOL_PATH, "LC_ALL": "C"}),
+            umask=0o022,
+            **kwargs,
+        )
+    except subprocess.TimeoutExpired as e:
+        raise UserFsError("timed out") from e
+    if result.returncode != 0:
+        lines = result.stderr.decode("utf-8", "replace").strip().splitlines()
+        raise UserFsError(lines[-1] if lines else f"exit code {result.returncode}")
 
 
 def write_as_user(path: Path, data: bytes, uid: int, gid: int, mode: int = 0o644) -> None:
-    """Write `data` to `path` as uid/gid. Refuses to follow a symlink at
-    `path` itself; parent directories are created (never followed through
-    an existing symlink, since os.mkdir on one raises FileExistsError)."""
-    def do() -> None:
-        _mkdirs(path.parent)
-        fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, mode)
-        try:
-            os.write(fd, data)
-        finally:
-            os.close(fd)
-    _run_as(uid, gid, do)
+    """Write `data` to `path` as uid/gid, truncating an existing regular
+    file and refusing a symlink at `path` itself. Parent directories are
+    created as that user too, so a symlinked parent can only ever be
+    followed to wherever the user could already write themselves."""
+    _require_linux()
+    _run_as_user([_tool("mkdir"), "-p", "--", str(path.parent)], uid, gid)
+    # oflag=nofollow: refuses to open `path` if it's a symlink. GNU dd
+    # truncates the destination by default (conv=notrunc is what disables
+    # that), so this is equivalent to O_WRONLY|O_CREAT|O_TRUNC|O_NOFOLLOW.
+    _run_as_user([_tool("dd"), f"of={path}", "oflag=nofollow", "status=none"],
+                 uid, gid, input=data)
+    # umask alone can't guarantee a requested mode (it can only take bits
+    # away), so this pins it exactly -- as the user, so it's safe to do.
+    _run_as_user([_tool("chmod"), f"{mode:03o}", "--", str(path)], uid, gid)
 
 
 def unlink_as_user(path: Path, uid: int, gid: int, missing_ok: bool = True) -> None:
-    def do() -> None:
+    _require_linux()
+    if not missing_ok:
         try:
-            os.unlink(str(path))
-        except FileNotFoundError:
-            if not missing_ok:
-                raise
-    _run_as(uid, gid, do)
+            _run_as_user([_tool("test"), "-e", str(path)], uid, gid)
+        except UserFsError as e:
+            raise UserFsError(f"{path} does not exist") from e
+    # rm removes a symlink itself; it never follows one to its target.
+    _run_as_user([_tool("rm"), "-f", "--", str(path)], uid, gid)
