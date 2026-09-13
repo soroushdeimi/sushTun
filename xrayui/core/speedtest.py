@@ -117,6 +117,11 @@ def _measure_one(port: int, url: str, timeout: float) -> tuple[float | None, str
     elapsed_ms = (time.perf_counter() - start) * 1000
     if status == 204 or 200 <= status < 300:
         return elapsed_ms, None
+    if status == 503:
+        # Xray's HTTP inbound answers 503 itself when its outbound couldn't
+        # connect -- the target was never reached, so this isn't the
+        # target's answer at all.
+        return None, "connection failed"
     return None, f"HTTP {status}"
 
 

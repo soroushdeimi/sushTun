@@ -141,6 +141,35 @@ def test_wireguard_reported_unavailable_while_connected():
     assert results[WG.uid] == (None, "unavailable while connected")
 
 
+# -- _measure_one --------------------------------------------------------
+def test_measure_one_maps_http_503_to_connection_failed():
+    import http.server
+
+    class _Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802 -- BaseHTTPRequestHandler's own naming
+            self.send_response(503)
+            self.end_headers()
+
+        def log_message(self, *args):
+            pass
+
+    # Simulates Xray's HTTP inbound answering 503 itself because its
+    # outbound couldn't connect -- the "server" here never even looks at
+    # the requested URL.
+    srv = http.server.HTTPServer(("127.0.0.1", 0), _Handler)
+    port = srv.server_address[1]
+    thread = threading.Thread(target=srv.serve_forever, daemon=True)
+    thread.start()
+    try:
+        delay, error = speedtest._measure_one(port, "http://example.invalid/", 2.0)
+        assert delay is None
+        assert error == "connection failed"
+    finally:
+        srv.shutdown()
+        srv.server_close()
+        thread.join(timeout=2)
+
+
 # -- tcping --------------------------------------------------------------
 def test_tcping_reports_open_and_closed_ports_and_skips_wireguard():
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
