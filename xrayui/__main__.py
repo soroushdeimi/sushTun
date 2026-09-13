@@ -19,7 +19,7 @@ def main() -> int:
         return 0  # elevated instance takes over
     paths.ensure_dirs()
     from xrayui.ui.app import run
-    return run(argv, elevated=elevate.is_admin())
+    return run(argv, elevated=elevate.is_admin(), autostart="--autostart" in argv)
 
 
 def _restore_stale_main() -> int:

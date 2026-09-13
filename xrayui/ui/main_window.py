@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core import alerts, hotspot, importer, metrics, network, speedtest
+from ..core import autostart as autostart_mod
 from ..core import geo as geo_mod
 from ..core import settings as app_settings
 from ..core import subscription as sub_mod
@@ -63,8 +64,9 @@ class MainWindow(QMainWindow):
     # of touching the table model off it.
     testResultReceived = Signal(str, object, object)
 
-    def __init__(self, elevated: bool = True) -> None:
+    def __init__(self, elevated: bool = True, autostart: bool = False) -> None:
         super().__init__()
+        self._launched_via_autostart = autostart
         self.titlebar = None  # changeEvent fires from here on, before the UI is built
         self.setWindowTitle("sushTun")
         self.resize(1040, 700)
@@ -133,6 +135,50 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             self._on_step(f"Could not restore leftover network settings: {exc}")
         self._refresh_status()
+        self._reregister_autostart_if_enabled()
+        self._auto_connect_on_startup()
+
+    def _reregister_autostart_if_enabled(self) -> None:
+        # A portable exe can move between launches; Windows' scheduled task
+        # points at a fixed path, so it needs refreshing on every start.
+        # Linux's polkit rule + .desktop file don't reference the exe's own
+        # location the same way, so there's nothing to refresh there.
+        if sys.platform != "win32":
+            return
+        if not self.settings.get("startup", {}).get("start_on_login"):
+            return
+        try:
+            autostart_mod.enable()
+        except Exception as exc:
+            self._on_step(f"Could not refresh the login task: {exc}")
+
+    def _auto_connect_on_startup(self) -> None:
+        if not self.settings.get("startup", {}).get("auto_connect"):
+            return
+        profile = self._active_profile()
+        if not profile:
+            self._on_step("Auto-connect skipped: no server selected.")
+            return
+        self._on_step(f"Auto-connect: waiting for network to reach {profile.name}…")
+        self._set_busy(True)
+
+        def work():
+            deadline = time.monotonic() + 60
+            while time.monotonic() < deadline:
+                if network.detect_interface() is not None:
+                    return self.conn.connect(profile)
+                time.sleep(1)
+            raise RuntimeError("no network interface found within 60s")
+
+        def done(result=None, error=None):
+            self._set_busy(False)
+            if error:
+                self._on_step(f"Auto-connect failed: {error}")
+                return
+            self.btn_reconnect.setVisible(False)
+            self._refresh_status()
+
+        self._run_async(work, done)
 
     # UI construction -------------------------------------------------------
     def _build_ui(self, elevated: bool) -> None:
