@@ -852,6 +852,60 @@ def test_tray_routing_submenu_checks_current_mode_and_switching_updates_combo(wi
     assert window.routing_menu.actions()[1].isChecked()
 
 
+# -- Tray servers submenu (Phase 7a) -----------------------------------------
+def test_tray_servers_submenu_lists_active_server_checked_with_delay(window):
+    from PySide6.QtWidgets import QMenu
+    window.servers_menu = QMenu()
+    a = window.store.save(Profile(name="A", address="a.example.com", port=443, id="u1"))
+    window.store.save(Profile(name="B", address="b.example.com", port=443, id="u2"))
+    window.store.set_active(a.uid)
+    window._reload_profiles()
+    window.results.set(a.uid, delay_ms=84.0, error=None, skipped=False)
+    window._rebuild_servers_tray_menu()
+
+    actions = window.servers_menu.actions()
+    labels = [act.text() for act in actions]
+    assert labels == ["A · 84 ms", "B"]
+    assert actions[0].isChecked()
+    assert not actions[1].isChecked()
+
+
+def test_tray_servers_submenu_caps_at_twenty_and_follows_table_order(window):
+    from PySide6.QtWidgets import QMenu
+    window.servers_menu = QMenu()
+    for i in range(25):
+        window.store.save(Profile(name=f"s{i:02d}", address="a.example.com",
+                                  port=443, id=f"u{i}"))
+    window._reload_profiles()
+
+    assert len(window.servers_menu.actions()) == 20
+    labels = [a.text() for a in window.servers_menu.actions()]
+    expected = [window.store.get(uid).name for uid in window.profiles.visible_uids()[:20]]
+    assert labels == expected
+
+
+def test_tray_servers_submenu_switching_activates_and_reconnects(window, monkeypatch):
+    from PySide6.QtWidgets import QMenu
+    window.servers_menu = QMenu()
+    a = window.store.save(Profile(name="A", address="a.example.com", port=443, id="u1"))
+    b = window.store.save(Profile(name="B", address="b.example.com", port=443, id="u2"))
+    window.store.set_active(a.uid)
+    window._reload_profiles()
+
+    reconnects = []
+    monkeypatch.setattr(window.conn, "is_connected", lambda: True)
+    monkeypatch.setattr(window, "_needs_reconnect", lambda what: reconnects.append(what))
+
+    b_action = next(act for act in window.servers_menu.actions() if act.text() == "B")
+    b_action.trigger()
+
+    assert window.store.active_uid() == b.uid
+    assert reconnects == ["Active server changed"]
+    assert window.servers_menu.actions()[
+        [a.text() for a in window.servers_menu.actions()].index("B")
+    ].isChecked()
+
+
 # -- Subscriptions (Phase 6) --------------------------------------------------
 def test_subscription_edit_dialog_round_trips_all_fields(qapp, warnings):
     sub = Subscription(url="https://sub.example/x", name="My sub")
@@ -1031,3 +1085,103 @@ def test_auto_refresh_subs_uses_is_due_and_skips_disabled(window, monkeypatch):
     window._auto_refresh_subs()
 
     assert refreshed == [due.uid]
+
+
+# -- --autostart launch behavior (Phase 7a) ----------------------------------
+def test_starts_hidden_true_for_the_autostart_flag_or_start_minimized(defaults):
+    from xrayui.ui.app import starts_hidden
+    assert starts_hidden(True, defaults) is True
+    settings = copy.deepcopy(defaults)
+    settings["startup"]["start_minimized"] = True
+    assert starts_hidden(False, settings) is True
+    assert starts_hidden(False, defaults) is False
+
+
+def test_auto_connect_on_startup_skips_quietly_with_no_profile(window, monkeypatch):
+    window.settings["startup"]["auto_connect"] = True
+    assert window.store.active_uid() is None
+    calls = []
+    monkeypatch.setattr(window.conn, "connect", lambda p: calls.append(p.uid))
+    window._auto_connect_on_startup()
+    assert calls == []
+
+
+def test_auto_connect_on_startup_does_nothing_when_the_setting_is_off(window, monkeypatch):
+    profile = window.store.save(Profile(name="p", address="a.example.com", port=443, id="u"))
+    window.store.set_active(profile.uid)
+    window._reload_profiles()
+    assert not window.settings["startup"]["auto_connect"]
+
+    calls = []
+    monkeypatch.setattr(window.conn, "connect", lambda p: calls.append(p.uid))
+    window._auto_connect_on_startup()
+    assert calls == []
+
+
+def test_auto_connect_on_startup_connects_once_the_network_is_up(window, monkeypatch):
+    profile = window.store.save(Profile(name="p", address="a.example.com", port=443, id="u"))
+    window.store.set_active(profile.uid)
+    window._reload_profiles()
+    window.settings["startup"]["auto_connect"] = True
+
+    monkeypatch.setattr(network_mod, "detect_interface", lambda: SimpleNamespace(alias="eth0"))
+    calls = []
+    monkeypatch.setattr(window.conn, "connect", lambda p: calls.append(p.uid))
+
+    window._auto_connect_on_startup()
+    _pump(lambda: not window._busy)
+
+    assert calls == [profile.uid]
+
+
+def test_auto_connect_on_startup_retries_until_the_network_appears(window, monkeypatch):
+    profile = window.store.save(Profile(name="p", address="a.example.com", port=443, id="u"))
+    window.store.set_active(profile.uid)
+    window._reload_profiles()
+    window.settings["startup"]["auto_connect"] = True
+
+    attempts = []
+
+    def fake_detect():
+        attempts.append(1)
+        return None if len(attempts) < 3 else SimpleNamespace(alias="eth0")
+
+    monkeypatch.setattr(network_mod, "detect_interface", fake_detect)
+    import xrayui.ui.main_window as mw_mod
+    monkeypatch.setattr(mw_mod.time, "sleep", lambda s: None)
+    calls = []
+    monkeypatch.setattr(window.conn, "connect", lambda p: calls.append(p.uid))
+
+    window._auto_connect_on_startup()
+    _pump(lambda: not window._busy)
+
+    assert len(attempts) == 3
+    assert calls == [profile.uid]
+
+
+def test_auto_connect_on_startup_gives_up_quietly_with_no_network(window, monkeypatch):
+    profile = window.store.save(Profile(name="p", address="a.example.com", port=443, id="u"))
+    window.store.set_active(profile.uid)
+    window._reload_profiles()
+    window.settings["startup"]["auto_connect"] = True
+
+    monkeypatch.setattr(network_mod, "detect_interface", lambda: None)
+    import xrayui.ui.main_window as mw_mod
+    monkeypatch.setattr(mw_mod.time, "sleep", lambda s: None)
+    clock = [0.0]
+
+    def fake_monotonic():
+        clock[0] += 30
+        return clock[0]
+
+    monkeypatch.setattr(mw_mod.time, "monotonic", fake_monotonic)
+    calls = []
+    monkeypatch.setattr(window.conn, "connect", lambda p: calls.append(p.uid))
+    steps = []
+    monkeypatch.setattr(window, "_on_step", lambda msg: steps.append(msg))
+
+    window._auto_connect_on_startup()
+    _pump(lambda: not window._busy)
+
+    assert calls == []
+    assert any("failed" in s.lower() for s in steps)
