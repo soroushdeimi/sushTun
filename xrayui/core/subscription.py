@@ -9,7 +9,7 @@ from dataclasses import asdict, dataclass, field
 
 from .. import paths
 from . import importer
-from .profiles import ProfileStore
+from .profiles import Profile, ProfileStore
 
 _UA = "v2rayNG/1.8.5"
 
@@ -123,15 +123,38 @@ class SubscriptionStore:
         self._write([s for s in subs if s.uid != uid])
 
 
+def _profile_key(p: Profile) -> tuple:
+    return ((p.protocol or "").lower(), p.address, p.port, p.id)
+
+
 def refresh(sub: Subscription, profiles: ProfileStore, store: SubscriptionStore) -> Subscription:
     usage, parsed = fetch(sub.url)
-    for old in sub.profile_uids:
-        profiles.delete(old)
+
+    # Match new servers back to old ones by identity, not position, so a
+    # server that reappears keeps its uid (and stays the active profile,
+    # since active.txt just points at a uid).
+    old_by_key: dict[tuple, str] = {}
+    for uid in sub.profile_uids:
+        old = profiles.get(uid)
+        if old:
+            old_by_key[_profile_key(old)] = old.uid
+
     new_uids: list[str] = []
+    reused_uids: set[str] = set()
     for p in parsed:
         p.sub_uid = sub.uid
+        old_uid = old_by_key.get(_profile_key(p))
+        if old_uid and old_uid not in reused_uids:
+            p.uid = old_uid
+            reused_uids.add(old_uid)
         profiles.save(p)
         new_uids.append(p.uid)
+
+    # Only drop servers that actually disappeared from the subscription.
+    for uid in sub.profile_uids:
+        if uid not in reused_uids:
+            profiles.delete(uid)
+
     sub.profile_uids = new_uids
     sub.usage = usage
     sub.updated = time.time()
