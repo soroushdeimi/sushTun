@@ -6,19 +6,26 @@ import html
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont, QTextCursor
 from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QApplication,
     QFrame,
     QGridLayout,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
-    QListWidget,
-    QListWidgetItem,
+    QLineEdit,
+    QMenu,
     QPushButton,
+    QTableView,
     QTextEdit,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
+from ..core import share as share_mod
 from ..core.profiles import Profile
+from .server_table import ProfileFilterProxy, ProfileTableModel, QrDialog
 from .theme import ERR, MUTED, OK, WARN
 
 
@@ -103,11 +110,21 @@ class StatusCard(QFrame):
 
 
 class ProfilePanel(QWidget):
+    # Kept exactly as before so MainWindow's wiring stays small.
     importRequested = Signal()
     editRequested = Signal(str)
     duplicateRequested = Signal(str)
     deleteRequested = Signal(str)
     activated = Signal(str)
+
+    # New, additive: multi-select delete and the speed-test toolbar/menu.
+    deleteManyRequested = Signal(list)
+    testRealDelayRequested = Signal(list)
+    tcpPingRequested = Signal(list)
+    cancelTestRequested = Signal()
+    useFastestRequested = Signal(str)
+    removeFailedRequested = Signal()
+    removeDuplicatesRequested = Signal()
 
     def __init__(self) -> None:
         super().__init__()
@@ -118,50 +135,182 @@ class ProfilePanel(QWidget):
         header.setObjectName("H1")
         layout.addWidget(header)
 
-        self.list = QListWidget()
-        self.list.itemSelectionChanged.connect(self._on_select)
-        self.list.itemDoubleClicked.connect(lambda _i: self._emit(self.editRequested))
-        layout.addWidget(self.list, 1)
+        self.filter_edit = QLineEdit()
+        self.filter_edit.setPlaceholderText("Filter by name or address…")
+        layout.addWidget(self.filter_edit)
 
-        btns = QHBoxLayout()
+        self.model = ProfileTableModel()
+        self.proxy = ProfileFilterProxy()
+        self.proxy.setSourceModel(self.model)
+        self.filter_edit.textChanged.connect(self.proxy.set_needle)
+
+        self.table = QTableView()
+        self.table.setModel(self.proxy)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.table.verticalHeader().setVisible(False)
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        self.table.horizontalHeader().setStretchLastSection(False)
+        self.table.setSortingEnabled(True)
+        self.table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.table.customContextMenuRequested.connect(self._show_menu)
+        self.table.doubleClicked.connect(lambda _i: self._emit_current(self.editRequested))
+        self.table.selectionModel().selectionChanged.connect(self._on_selection_changed)
+        layout.addWidget(self.table, 1)
+
+        self._testing = False
+        toolbar = QHBoxLayout()
         self.btn_import = QPushButton("Import")
-        self.btn_edit = QPushButton("Edit")
-        self.btn_dup = QPushButton("Duplicate")
-        self.btn_del = QPushButton("Delete")
         self.btn_import.setObjectName("Primary")
         self.btn_import.clicked.connect(self.importRequested)
-        self.btn_edit.clicked.connect(lambda: self._emit(self.editRequested))
-        self.btn_dup.clicked.connect(lambda: self._emit(self.duplicateRequested))
-        self.btn_del.clicked.connect(lambda: self._emit(self.deleteRequested))
-        for b in (self.btn_import, self.btn_edit, self.btn_dup, self.btn_del):
-            btns.addWidget(b)
-        layout.addLayout(btns)
 
+        self.btn_test = QToolButton()
+        self.btn_test.setText("Test")
+        self.btn_test.setPopupMode(QToolButton.MenuButtonPopup)
+        self.btn_test.clicked.connect(lambda: self._start_test(real=True))
+        test_menu = QMenu(self.btn_test)
+        test_menu.addAction("Real delay", lambda: self._start_test(real=True))
+        test_menu.addAction("TCP ping", lambda: self._start_test(real=False))
+        self.btn_test.setMenu(test_menu)
+
+        self.btn_fastest = QPushButton("Use fastest")
+        self.btn_fastest.clicked.connect(self._use_fastest)
+
+        self.btn_more = QToolButton()
+        self.btn_more.setText("⋯")
+        self.btn_more.setPopupMode(QToolButton.InstantPopup)
+        more_menu = QMenu(self.btn_more)
+        more_menu.addAction("Remove failed", self.removeFailedRequested)
+        more_menu.addAction("Remove duplicates", self.removeDuplicatesRequested)
+        self.btn_more.setMenu(more_menu)
+
+        for w in (self.btn_import, self.btn_test, self.btn_fastest, self.btn_more):
+            toolbar.addWidget(w)
+        toolbar.addStretch(1)
+        layout.addLayout(toolbar)
+
+    # -- population ----------------------------------------------------
     def set_profiles(self, profiles: list[Profile], active_uid: str | None) -> None:
-        self.list.blockSignals(True)
-        self.list.clear()
-        for p in profiles:
-            mark = "● " if p.uid == active_uid else "   "
-            item = QListWidgetItem(f"{mark}{p.name}\n     {p.protocol} · {p.endpoint}")
-            item.setData(Qt.UserRole, p.uid)
-            self.list.addItem(item)
-            if p.uid == active_uid:
-                item.setSelected(True)
-        self.list.blockSignals(False)
+        self.model.set_profiles(profiles, active_uid)
+        self._reselect(active_uid)
 
+    def set_results(self, results: dict) -> None:
+        self.model.set_results(results)
+
+    def set_sub_names(self, names: dict) -> None:
+        self.model.set_sub_names(names)
+
+    def update_result(self, uid: str, delay_ms: float | None, error: str | None) -> None:
+        self.model.update_result(uid, delay_ms, error)
+
+    def set_testing(self, active: bool) -> None:
+        self._testing = active
+        self.btn_test.setText("Cancel" if active else "Test")
+        self.btn_fastest.setEnabled(not active)
+        self.btn_more.setEnabled(not active)
+
+    def _reselect(self, active_uid: str | None) -> None:
+        if not active_uid:
+            return
+        row = self.model.row_of_uid(active_uid)
+        if row is None:
+            return
+        proxy_idx = self.proxy.mapFromSource(self.model.index(row, 0))
+        if not proxy_idx.isValid():
+            return
+        # Programmatic reselect after a reload must not re-fire `activated`
+        # (that would re-persist the same active uid on every refresh).
+        self.table.selectionModel().blockSignals(True)
+        self.table.selectRow(proxy_idx.row())
+        self.table.selectionModel().blockSignals(False)
+
+    # -- selection / lookups ---------------------------------------------
     def current_uid(self) -> str | None:
-        item = self.list.currentItem()
-        return item.data(Qt.UserRole) if item else None
+        idx = self.table.currentIndex()
+        if not idx.isValid():
+            return None
+        p = self.model.profile_at(self.proxy.mapToSource(idx).row())
+        return p.uid if p else None
 
-    def _emit(self, signal) -> None:
+    def selected_uids(self) -> list[str]:
+        uids = []
+        for idx in self.table.selectionModel().selectedRows():
+            p = self.model.profile_at(self.proxy.mapToSource(idx).row())
+            if p:
+                uids.append(p.uid)
+        return uids
+
+    def _visible_uids(self) -> list[str]:
+        uids = []
+        for row in range(self.proxy.rowCount()):
+            p = self.model.profile_at(self.proxy.mapToSource(self.proxy.index(row, 0)).row())
+            if p:
+                uids.append(p.uid)
+        return uids
+
+    def _profile(self, uid: str) -> Profile | None:
+        row = self.model.row_of_uid(uid)
+        return self.model.profile_at(row) if row is not None else None
+
+    def _emit_current(self, signal) -> None:
         uid = self.current_uid()
         if uid:
             signal.emit(uid)
 
-    def _on_select(self) -> None:
+    def _on_selection_changed(self, *_args) -> None:
         uid = self.current_uid()
         if uid:
             self.activated.emit(uid)
+
+    # -- toolbar / menu actions -------------------------------------------
+    def _start_test(self, real: bool) -> None:
+        if self._testing:
+            self.cancelTestRequested.emit()
+            return
+        uids = self._visible_uids()
+        if not uids:
+            return
+        (self.testRealDelayRequested if real else self.tcpPingRequested).emit(uids)
+
+    def _use_fastest(self) -> None:
+        uid = self.model.fastest_uid()
+        if uid:
+            self.useFastestRequested.emit(uid)
+
+    def _delete_selected(self, uids: list[str]) -> None:
+        if len(uids) == 1:
+            self.deleteRequested.emit(uids[0])
+        else:
+            self.deleteManyRequested.emit(uids)
+
+    def _copy_link(self, uid: str) -> None:
+        p = self._profile(uid)
+        if p:
+            QApplication.clipboard().setText(share_mod.share_link(p))
+
+    def _show_qr(self, uid: str) -> None:
+        p = self._profile(uid)
+        if p:
+            QrDialog(p.name, share_mod.share_link(p), self).exec()
+
+    def _show_menu(self, pos) -> None:
+        uids = self.selected_uids()
+        if not uids:
+            return
+        menu = QMenu(self)
+        if len(uids) == 1:
+            uid = uids[0]
+            menu.addAction("Set active", lambda: self.activated.emit(uid))
+            menu.addAction("Edit", lambda: self.editRequested.emit(uid))
+            menu.addAction("Clone", lambda: self.duplicateRequested.emit(uid))
+        menu.addAction("Test real delay", lambda: self.testRealDelayRequested.emit(uids))
+        menu.addAction("TCP ping", lambda: self.tcpPingRequested.emit(uids))
+        if len(uids) == 1:
+            menu.addAction("Copy share link", lambda: self._copy_link(uids[0]))
+            menu.addAction("Show QR", lambda: self._show_qr(uids[0]))
+        menu.addSeparator()
+        menu.addAction("Delete", lambda: self._delete_selected(uids))
+        menu.exec(self.table.viewport().mapToGlobal(pos))
 
 
 class LogView(QTextEdit):
