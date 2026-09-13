@@ -43,6 +43,7 @@ from .widgets import AlertBanner, LogView, ProfilePanel, StatusCard
 
 # How far in from the border a press starts a resize on the frameless window.
 _RESIZE_MARGIN = 6
+_MAX_TRAY_SERVERS = 20
 _EDGE_CURSORS = {
     Qt.LeftEdge: Qt.SizeHorCursor,
     Qt.RightEdge: Qt.SizeHorCursor,
@@ -309,6 +310,7 @@ class MainWindow(QMainWindow):
         if not QSystemTrayIcon.isSystemTrayAvailable():
             self.tray = None
             self.routing_menu = None
+            self.servers_menu = None
             return
         self.tray = QSystemTrayIcon(icon, self)
         self.tray.setToolTip("sushTun")
@@ -317,6 +319,7 @@ class MainWindow(QMainWindow):
         menu.addAction("Connect", self._connect)
         menu.addAction("Disconnect", self._disconnect)
         menu.addSeparator()
+        self.servers_menu = menu.addMenu("Servers")
         self.routing_menu = menu.addMenu("Routing")
         menu.addSeparator()
         menu.addAction("Quit", self._quit)
@@ -346,6 +349,7 @@ class MainWindow(QMainWindow):
         self.profiles.set_results(self.results.load())
         self.profiles.set_sub_names({s.uid: s.name for s in self.subs.list()})
         self.profiles.set_profiles(profiles, self.store.active_uid())
+        self._rebuild_servers_tray_menu()
 
     def _active_profile(self) -> Profile | None:
         # The store's active uid (the ● marker) is what Connect/Reconnect
@@ -409,7 +413,13 @@ class MainWindow(QMainWindow):
         # model, which would collapse a multi-selection back down to one
         # row every time a click also happens to activate a profile.
         self.profiles.set_active(uid)
+        self._rebuild_servers_tray_menu()
         self._refresh_status()
+
+    def _activate_from_tray(self, uid: str) -> None:
+        self._set_active(uid)
+        if self.conn.is_connected():
+            self._needs_reconnect("Active server changed")
 
     def _paste_import(self) -> None:
         text = QApplication.clipboard().text()
@@ -474,6 +484,7 @@ class MainWindow(QMainWindow):
         skipped = speedtest.is_skipped(error)
         self.results.set(uid, delay_ms=delay, error=error, skipped=skipped)
         self.profiles.update_result(uid, delay, error, skipped)
+        self._rebuild_servers_tray_menu()
 
     def _use_fastest(self, uid: str) -> None:
         profile = self.store.get(uid)
@@ -890,6 +901,28 @@ class MainWindow(QMainWindow):
         mode = self.routing_combo.currentData()
         if mode is not None:
             self._set_routing_mode(mode)
+
+    def _rebuild_servers_tray_menu(self) -> None:
+        if self.servers_menu is None:
+            return
+        self.servers_menu.clear()
+        active_uid = self.store.active_uid()
+        results = self.results.load()
+        group = QActionGroup(self.servers_menu)
+        group.setExclusive(True)
+        self._servers_action_group = group  # keep a reference so it isn't GC'd
+        for uid in self.profiles.visible_uids()[:_MAX_TRAY_SERVERS]:
+            profile = self.store.get(uid)
+            if not profile:
+                continue
+            delay = (results.get(uid) or {}).get("delay_ms")
+            label = f"{profile.name} · {delay:.0f} ms" if isinstance(delay, (int, float)) \
+                else profile.name
+            action = self.servers_menu.addAction(label)
+            action.setCheckable(True)
+            action.setChecked(uid == active_uid)
+            action.triggered.connect(lambda _checked=False, u=uid: self._activate_from_tray(u))
+            group.addAction(action)
 
     def _rebuild_routing_tray_menu(self) -> None:
         if self.routing_menu is None:

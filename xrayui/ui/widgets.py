@@ -296,7 +296,8 @@ class ProfilePanel(QWidget):
                 uids.append(p.uid)
         return uids
 
-    def _visible_uids(self) -> list[str]:
+    def visible_uids(self) -> list[str]:
+        """Uids in the table's current visible order (post header-sort)."""
         uids = []
         for row in range(self.proxy.rowCount()):
             p = self.model.profile_at(self.proxy.mapToSource(self.proxy.index(row, 0)).row())
@@ -328,7 +329,7 @@ class ProfilePanel(QWidget):
         if self._testing:
             self.cancelTestRequested.emit()
             return
-        uids = self._visible_uids()
+        uids = self.visible_uids()
         if not uids:
             return
         (self.testRealDelayRequested if real else self.tcpPingRequested).emit(uids)
