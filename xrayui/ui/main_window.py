@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import copy
 import sys
+import threading
 import time
 
 from PySide6.QtCore import QEvent, Qt, QThreadPool, QTimer, Signal
@@ -23,7 +24,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..core import alerts, hotspot, metrics
+from ..core import alerts, hotspot, importer, metrics, network, speedtest
 from ..core import settings as app_settings
 from ..core import subscription as sub_mod
 from ..core.alerts import human_bytes
@@ -55,6 +56,10 @@ _EDGE_CURSORS = {
 
 class MainWindow(QMainWindow):
     stepReceived = Signal(str)
+    # speedtest.real_delay_all/tcping_all call on_result from worker threads;
+    # emitting through a Qt Signal queues delivery onto the UI thread instead
+    # of touching the table model off it.
+    testResultReceived = Signal(str, object, object)
 
     def __init__(self, elevated: bool = True) -> None:
         super().__init__()
@@ -74,6 +79,7 @@ class MainWindow(QMainWindow):
 
         self.store = ProfileStore()
         self.subs = sub_mod.SubscriptionStore()
+        self.results = speedtest.ResultStore()
         self.settings = app_settings.load()
         self.throttle = alerts.Throttle()
         self.pool = QThreadPool.globalInstance()
@@ -82,8 +88,10 @@ class MainWindow(QMainWindow):
         self._sampling = False
         self._repairing = False
         self._workers: set = set()
+        self._test_cancel: threading.Event | None = None
 
         self.stepReceived.connect(self._on_step)
+        self.testResultReceived.connect(self._on_test_result)
         self._build_ui(elevated)
         self._build_tray()
 
@@ -228,12 +236,23 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence.Close, self, activated=self.close)
         QShortcut(QKeySequence("Ctrl+M"), self, activated=self.showMinimized)
         QShortcut(QKeySequence("Ctrl+Q"), self, activated=self._quit)
+        # A focused text field (e.g. the filter box) claims Ctrl+V for its own
+        # paste via ShortcutOverride before this ever fires, so normal typing
+        # is unaffected; this only fires when nothing text-editable has focus.
+        QShortcut(QKeySequence.Paste, self, activated=self._paste_import)
 
         self.profiles.importRequested.connect(self._import)
         self.profiles.editRequested.connect(self._edit)
         self.profiles.duplicateRequested.connect(self._duplicate)
         self.profiles.deleteRequested.connect(self._delete)
+        self.profiles.deleteManyRequested.connect(self._delete_many)
         self.profiles.activated.connect(self._set_active)
+        self.profiles.testRealDelayRequested.connect(lambda uids: self._start_test(uids, True))
+        self.profiles.tcpPingRequested.connect(lambda uids: self._start_test(uids, False))
+        self.profiles.cancelTestRequested.connect(self._cancel_test)
+        self.profiles.useFastestRequested.connect(self._use_fastest)
+        self.profiles.removeFailedRequested.connect(self._remove_failed)
+        self.profiles.removeDuplicatesRequested.connect(self._remove_duplicates)
         self.subs_panel.addRequested.connect(self._add_sub)
         self.subs_panel.refreshRequested.connect(self._refresh_sub)
         self.subs_panel.deleteRequested.connect(self._delete_sub)
@@ -287,7 +306,11 @@ class MainWindow(QMainWindow):
 
     # Profiles --------------------------------------------------------------
     def _reload_profiles(self) -> None:
-        self.profiles.set_profiles(self.store.list(), self.store.active_uid())
+        profiles = self.store.list()
+        self.results.prune([p.uid for p in profiles])
+        self.profiles.set_results(self.results.load())
+        self.profiles.set_sub_names({s.uid: s.name for s in self.subs.list()})
+        self.profiles.set_profiles(profiles, self.store.active_uid())
 
     def _active_profile(self) -> Profile | None:
         uid = self.profiles.current_uid() or self.store.active_uid()
@@ -334,10 +357,131 @@ class MainWindow(QMainWindow):
             self.store.delete(uid)
             self._reload_profiles()
 
+    def _delete_many(self, uids: list) -> None:
+        if QMessageBox.question(self, "Delete", f"Delete {len(uids)} server(s)?") == \
+                QMessageBox.Yes:
+            for uid in uids:
+                self.store.delete(uid)
+            self._reload_profiles()
+
     def _set_active(self, uid: str) -> None:
         self.store.set_active(uid)
         self._reload_profiles()
         self._refresh_status()
+
+    def _paste_import(self) -> None:
+        text = QApplication.clipboard().text()
+        if not text.strip():
+            return
+        profiles = importer.parse_share_text(text)
+        if not profiles:
+            self.step_label.setText("Clipboard has no importable server link.")
+            return
+        for p in profiles:
+            self.store.save(p)
+        if not self.store.active_uid():
+            self.store.set_active(profiles[0].uid)
+        self._reload_profiles()
+        self.step_label.setText(f"Imported {len(profiles)} server(s).")
+
+    # Speed test --------------------------------------------------------------
+    def _start_test(self, uids: list, real: bool) -> None:
+        if self._test_cancel is not None:
+            return  # only one test run at a time
+        profiles = [p for uid in uids if (p := self.store.get(uid))]
+        if not profiles:
+            return
+        cancel = threading.Event()
+        self._test_cancel = cancel
+        self.profiles.set_testing(True)
+        cfg = self.settings.get("speedtest", {})
+
+        def work():
+            if real:
+                iface = network.detect_interface()
+                if iface is None:
+                    raise ValueError("no active internet interface")
+                speedtest.real_delay_all(
+                    profiles, self._emit_test_result, cancel,
+                    url=cfg.get("url", "https://www.google.com/generate_204"),
+                    timeout=cfg.get("timeout_s", 10),
+                    batch_size=cfg.get("batch_size", 50),
+                    iface_alias=iface.alias,
+                    connected=self.conn.is_connected(),
+                )
+            else:
+                speedtest.tcping_all(profiles, self._emit_test_result, cancel)
+
+        def done(result=None, error=None):
+            self._test_cancel = None
+            self.profiles.set_testing(False)
+            self.step_label.setText(f"Test failed: {error}" if error else "Test finished.")
+
+        self._run_async(work, done)
+
+    def _emit_test_result(self, uid: str, delay, error) -> None:
+        # Called from speedtest's own worker threads; emitting queues
+        # delivery onto the UI thread instead of touching widgets here.
+        self.testResultReceived.emit(uid, delay, error)
+
+    def _cancel_test(self) -> None:
+        if self._test_cancel is not None:
+            self._test_cancel.set()
+
+    def _on_test_result(self, uid: str, delay, error) -> None:
+        self.results.set(uid, delay_ms=delay, error=error)
+        self.profiles.update_result(uid, delay, error)
+
+    def _use_fastest(self, uid: str) -> None:
+        profile = self.store.get(uid)
+        self.store.set_active(uid)
+        self._reload_profiles()
+        name = profile.name if profile else ""
+        if self.conn.is_connected():
+            self.step_label.setText(f"Reconnect to switch to {name}.")
+        else:
+            self.step_label.setText(f"Active server set to {name}.")
+
+    def _remove_failed(self) -> None:
+        active = self.store.active_uid()
+        failed = [p for p in self.store.list()
+                  if p.uid != active and (self.results.get(p.uid) or {}).get("error")]
+        if not failed:
+            self.step_label.setText("No failed servers to remove.")
+            return
+        if QMessageBox.question(
+            self, "Remove failed", f"Remove {len(failed)} failed server(s)?"
+        ) == QMessageBox.Yes:
+            for p in failed:
+                self.store.delete(p.uid)
+            self._reload_profiles()
+
+    def _remove_duplicates(self) -> None:
+        active = self.store.active_uid()
+        seen: dict[tuple, Profile] = {}
+        to_delete: list[str] = []
+        for p in self.store.list():
+            key = ((p.protocol or "").lower(), p.address, p.port, p.id)
+            keeper = seen.get(key)
+            if keeper is None:
+                seen[key] = p
+                continue
+            if p.uid == active:
+                # Never delete the active profile: keep it, drop the one
+                # that was kept in its place instead.
+                to_delete.append(keeper.uid)
+                seen[key] = p
+            else:
+                to_delete.append(p.uid)
+        if not to_delete:
+            self.step_label.setText("No duplicate servers to remove.")
+            return
+        if QMessageBox.question(
+            self, "Remove duplicates", f"Remove {len(to_delete)} duplicate server(s)?"
+        ) == QMessageBox.Yes:
+            for uid in to_delete:
+                self.store.delete(uid)
+            self._reload_profiles()
 
     # Subscriptions ---------------------------------------------------------
     def _reload_subs(self) -> None:
@@ -696,5 +840,7 @@ class MainWindow(QMainWindow):
         for t in (self.timer, self.alert_timer, self.autorefresh_timer, self.route_timer):
             t.stop()
         self.tailer.stop()
+        if self._test_cancel is not None:
+            self._test_cancel.set()  # don't leave a speed-test xray process behind
         self.pool.waitForDone(2000)
         super().closeEvent(event)

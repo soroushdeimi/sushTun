@@ -10,6 +10,9 @@ from __future__ import annotations
 import copy
 import os
 import sys
+import threading
+import time
+from types import SimpleNamespace
 
 import pytest
 
@@ -28,10 +31,13 @@ from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
 
 from xrayui import paths  # noqa: E402
 from xrayui.core import dns as dns_mod  # noqa: E402
+from xrayui.core import network as network_mod  # noqa: E402
 from xrayui.core import settings as app_settings  # noqa: E402
+from xrayui.core import speedtest as speedtest_mod  # noqa: E402
 from xrayui.core.profiles import Profile  # noqa: E402
 from xrayui.ui.dialogs import ProfileEditDialog, SettingsDialog  # noqa: E402
 from xrayui.ui.dns_dialog import DnsDialog  # noqa: E402
+from xrayui.ui.server_table import COL_DELAY  # noqa: E402
 
 
 @pytest.fixture(scope="module")
@@ -231,3 +237,88 @@ def test_quit_closes_even_with_a_tray(window, monkeypatch):
     assert not window.timer.isActive()
     assert not window.tray.messages
     window.tray = None
+
+
+# -- Server table integration ------------------------------------------------
+def test_paste_import_adds_a_profile_from_clipboard(window):
+    link = ("vless://11111111-1111-1111-1111-111111111111@1.2.3.4:443"
+            "?encryption=none&type=tcp&security=none#Pasted")
+    QApplication.clipboard().setText(link)
+    window._paste_import()
+    assert "Pasted" in [p.name for p in window.store.list()]
+    assert "Imported 1 server" in window.step_label.text()
+
+
+def test_paste_import_is_quiet_about_unusable_clipboard_content(window):
+    QApplication.clipboard().setText("just some notes, not a server link")
+    window.step_label.setText("")
+    window._paste_import()
+    assert window.store.list() == []
+    assert window.step_label.text() != ""  # a quiet message, not a popup
+
+
+def test_remove_duplicates_keeps_the_active_profile(window, monkeypatch):
+    monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.Yes))
+    window.store.save(Profile(name="A", address="x", port=1, id="u"))
+    dup = window.store.save(Profile(name="A dup", address="x", port=1, id="u"))
+    window.store.set_active(dup.uid)
+    window._reload_profiles()
+
+    window._remove_duplicates()
+
+    remaining = window.store.list()
+    assert len(remaining) == 1
+    assert remaining[0].uid == dup.uid
+    assert window.store.active_uid() == dup.uid
+
+
+def _pump(condition, timeout=5.0) -> None:
+    deadline = time.time() + timeout
+    while not condition() and time.time() < deadline:
+        QApplication.processEvents()
+        time.sleep(0.01)
+
+
+def test_test_button_toggles_to_cancel_while_a_test_runs(window, monkeypatch):
+    profile = window.store.save(Profile(name="p", address="a.example.com", port=443, id="u"))
+    window.store.set_active(profile.uid)
+    window._reload_profiles()
+
+    started = threading.Event()
+    release = threading.Event()
+
+    def fake_real_delay_all(profiles, on_result, cancel, **kwargs):
+        started.set()
+        release.wait(timeout=5)
+        for p in profiles:
+            on_result(p.uid, 10.0, None)
+
+    monkeypatch.setattr(speedtest_mod, "real_delay_all", fake_real_delay_all)
+    monkeypatch.setattr(network_mod, "detect_interface", lambda: SimpleNamespace(alias="eth0"))
+
+    window._start_test([profile.uid], True)
+    assert window.profiles.btn_test.text() == "Cancel"
+
+    assert started.wait(timeout=5)
+    release.set()
+    _pump(lambda: window._test_cancel is None)
+
+    assert window.profiles.btn_test.text() == "Test"
+    assert window.results.get(profile.uid) == {"delay_ms": 10.0, "error": None}
+
+
+def test_test_result_from_a_background_thread_updates_the_right_row(window):
+    profile = window.store.save(Profile(name="p", address="a.example.com", port=443, id="u"))
+    window.store.set_active(profile.uid)
+    window._reload_profiles()
+
+    threading.Thread(
+        target=lambda: window.testResultReceived.emit(profile.uid, 77.0, None)
+    ).start()
+
+    _pump(lambda: window.results.get(profile.uid) is not None)
+
+    assert window.results.get(profile.uid) == {"delay_ms": 77.0, "error": None}
+    row = window.profiles.model.row_of_uid(profile.uid)
+    idx = window.profiles.model.index(row, COL_DELAY)
+    assert window.profiles.model.data(idx) == "77 ms"
