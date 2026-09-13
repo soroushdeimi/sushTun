@@ -85,6 +85,25 @@ DEFAULTS: dict = {
         "auto_update_hours": 0,  # 0 = off
         "last_update": 0,  # epoch seconds; 0 = never
     },
+    # Advanced Xray core options (Phase 5). All opt-in -- see core/coreopts.py.
+    # With every value at its default, coreopts' apply_* functions are all
+    # no-ops, so an untouched install renders exactly what it always has.
+    "core": {
+        "fragment": {
+            "enabled": False, "packets": "tlshello",
+            "length": "100-200", "interval": "10-20", "max_split": 0,
+        },
+        "mux": {
+            "enabled": False, "concurrency": 8,
+            "xudp_concurrency": 16, "xudp_proxy_udp443": "reject",
+        },
+        "sniffing": {"enabled": True, "route_only": False},
+        "socks_port": 10808,
+        "allow_lan": False,
+        "lan_user": "",
+        "lan_pass": "",
+        "default_fp": "",
+    },
 }
 
 

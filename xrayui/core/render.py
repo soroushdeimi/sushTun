@@ -10,8 +10,8 @@ import json
 from pathlib import Path
 
 from .. import paths
+from . import coreopts, outbounds
 from . import dns as dns_mod
-from . import outbounds
 from . import routing as routing_mod
 from . import settings as app_settings
 from .metrics import STATS_API_PORT
@@ -96,12 +96,15 @@ def build_text(
     dns_cfg: dict | None = None,
     tun_mtu: int | None = None,
     server_ip: str | None = None,
+    core_cfg: dict | None = None,
 ) -> str:
     tmpl_path = template_path or paths.config_template()
     cfg = json.loads(tmpl_path.read_text(encoding="utf-8"))
     outbounds.apply_profile(cfg, profile)
     if not include_tun:
         _drop_tun_inbound(cfg)
+    if core_cfg:
+        coreopts.apply_all(cfg, core_cfg, profile)
 
     dns_block: dict = {}
     if dns_cfg:
@@ -140,6 +143,7 @@ def build(
     dns_cfg: dict | None = None,
     tun_mtu: int | None = None,
     server_ip: str | None = None,
+    core_cfg: dict | None = None,
 ) -> Path:
     out = paths.runtime_config()
     # Forward by keyword: a positional forward silently mis-binds the next time
@@ -157,6 +161,7 @@ def build(
             dns_cfg=dns_cfg,
             tun_mtu=tun_mtu,
             server_ip=server_ip,
+            core_cfg=core_cfg,
         ),
         encoding="utf-8",
     )
