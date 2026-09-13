@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Fixed: DNS lookups other than plain addresses hung for seconds
+Xray answered only address (A/AAAA) queries itself and passed every other kind
+(HTTPS/SVCB, SRV, TXT, PTR) on to the tunnel's own address, where nothing answers.
+Each one hung until the resolver gave up, filling the log with
+`proxy/dns: failed to dial outbound connection ... i/o timeout` and making browsers
+and SRV-based apps (XMPP, some VoIP clients) slow to start a connection. Those
+queries are now refused at once, so apps fall back immediately.
+
 ### New: share the tunnel over a Wi-Fi hotspot on Linux
 "Share via hotspot" was shown on Linux but did nothing: it said "applies on next
 connect", and then nothing happened. It is now implemented through NetworkManager.

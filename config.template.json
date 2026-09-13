@@ -80,7 +80,7 @@
       "protocol": "dns",
       "settings": {
         "network": "tcp",
-        "nonIPQuery": "skip"
+        "nonIPQuery": "reject"
       },
       "streamSettings": {
         "sockopt": {
