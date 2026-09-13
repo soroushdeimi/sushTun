@@ -257,6 +257,25 @@ def has_custom_routing(r: dict) -> bool:
     return bool(build_rules(r))
 
 
+def direct_domains(rules: list[dict]) -> list[str]:
+    """The ordered, de-duplicated "domain" entries of every direct rule in
+    build_rules()'s output -- works in both simple and custom modes, since
+    it reads the already-built Xray rules rather than the raw settings.
+    Used to scope the domestic DNS server to only the sites that actually
+    go direct.
+    """
+    seen: set[str] = set()
+    out: list[str] = []
+    for rule in rules:
+        if rule.get("outboundTag") != "direct":
+            continue
+        for d in rule.get("domain") or []:
+            if d not in seen:
+                seen.add(d)
+                out.append(d)
+    return out
+
+
 def all_possible_rules(r: dict) -> list[dict]:
     """Every rule any mode -- simple, or any saved set -- could produce.
 

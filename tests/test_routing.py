@@ -219,6 +219,37 @@ def test_render_apply_routing_rejects_an_unknown_domain_strategy():
     assert cfg["routing"]["domainStrategy"] == "IPIfNonMatch"
 
 
+# -- direct_domains (Phase 3: domestic DNS scoping) ------------------------
+def test_direct_domains_collects_only_direct_rule_domains_in_simple_mode():
+    rules = routing.build_rules(_routing(direct_iran=True))
+    domains = routing.direct_domains(rules)
+    assert "geosite:category-ir" in domains
+    assert "domain:ir" in domains
+    # block/proxy-tagged domains never leak in.
+    ads = routing.build_rules(_routing(block_ads=True))
+    assert "geosite:category-ads-all" not in routing.direct_domains(ads)
+
+
+def test_direct_domains_dedupes_and_preserves_order():
+    rules = [
+        {"type": "field", "domain": ["a", "b"], "outboundTag": "direct"},
+        {"type": "field", "domain": ["b", "c"], "outboundTag": "direct"},
+        {"type": "field", "domain": ["z"], "outboundTag": "proxy"},
+    ]
+    assert routing.direct_domains(rules) == ["a", "b", "c"]
+
+
+def test_direct_domains_works_in_custom_mode_too():
+    custom = _with_set([_rule(domain=["example.com"], outbound="direct")])
+    rules = routing.build_rules(custom)
+    assert routing.direct_domains(rules) == ["domain:example.com"]
+
+
+def test_direct_domains_empty_when_nothing_goes_direct():
+    r = _routing(direct_private=False, direct_iran=False, block_ads=False)
+    assert routing.direct_domains(routing.build_rules(r)) == []
+
+
 def test_user_rules_stay_after_the_dns_rules_in_custom_mode():
     rules = routing.build_rules(_with_set([_rule(domain=["example.com"])]))
     cfg = json.loads(render.build_text(
