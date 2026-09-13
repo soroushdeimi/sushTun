@@ -272,11 +272,16 @@ def real_delay_all(
                     url=url, timeout=timeout, iface_alias=iface_alias, run_batch=run_batch)
 
 
+_TCP_PING_UNAVAILABLE = frozenset({"wireguard", "hysteria2"})
+
+
 def tcping_all(
     profiles: list[Profile], on_result: OnResult, cancel: threading.Event, workers: int = 16,
 ) -> None:
     def one(p: Profile) -> None:
-        if (p.protocol or "").lower() == "wireguard":
+        if (p.protocol or "").lower() in _TCP_PING_UNAVAILABLE:
+            # Both are UDP-only protocols; a TCP connect attempt would only
+            # ever time out, which is not the same thing as "unreachable".
             on_result(p.uid, None, SKIP_UDP)
             return
         result = metrics.tcp_connect_delay(p.address, p.port, attempts=1)

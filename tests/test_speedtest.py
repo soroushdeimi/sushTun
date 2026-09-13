@@ -188,11 +188,14 @@ def test_tcping_reports_open_and_closed_ports_and_skips_wireguard():
     srv.listen(1)
     open_port = srv.getsockname()[1]
     closed_port = speedtest._free_port()
+    hy2 = Profile(protocol="hysteria2", address="d.example.com", port=443,
+                  id="hy2-auth", uid="uhy2")
     try:
         profiles = [
             Profile(protocol="vless", address="127.0.0.1", port=open_port, uid="ok"),
             Profile(protocol="vless", address="127.0.0.1", port=closed_port, uid="closed"),
             WG,
+            hy2,
         ]
         results = {}
         speedtest.tcping_all(
@@ -204,6 +207,10 @@ def test_tcping_reports_open_and_closed_ports_and_skips_wireguard():
         assert not speedtest.is_skipped(results["closed"][1])
         assert results[WG.uid] == (None, speedtest.SKIP_UDP)
         assert speedtest.is_skipped(results[WG.uid][1])
+        # Hysteria2 is UDP-only too -- a TCP connect attempt would only ever
+        # time out, which isn't the same thing as "unreachable".
+        assert results[hy2.uid] == (None, speedtest.SKIP_UDP)
+        assert speedtest.is_skipped(results[hy2.uid][1])
     finally:
         srv.close()
 
