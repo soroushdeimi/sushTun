@@ -14,7 +14,7 @@ from collections.abc import Callable
 
 from . import routing, subscription
 
-_UA = subscription._UA  # same v2rayNG UA subscription.py already uses
+_UA = subscription.DEFAULT_USER_AGENT  # same v2rayNG UA subscription.py already uses
 
 _OUTBOUNDS = ("proxy", "direct", "block")
 

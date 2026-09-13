@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 import urllib.request
 import uuid
@@ -11,7 +12,7 @@ from .. import paths
 from . import importer
 from .profiles import SUBSCRIPTIONS_FILENAME, Profile, ProfileStore
 
-_UA = "v2rayNG/1.8.5"
+DEFAULT_USER_AGENT = "v2rayNG/1.8.5"
 
 
 @dataclass
@@ -46,6 +47,12 @@ class Subscription:
     updated: float = 0.0
     profile_uids: list[str] = field(default_factory=list)
     uid: str = field(default_factory=lambda: uuid.uuid4().hex)
+    # New fields below: all have a default that reproduces today's behavior
+    # exactly, so an old subscriptions.json loads unchanged.
+    enabled: bool = True
+    auto_update_hours: int = 0  # 0 = use the global alerts.auto_refresh_hours
+    name_filter: str = ""  # regex; "" = keep every parsed server
+    user_agent: str = ""  # "" = DEFAULT_USER_AGENT
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -61,6 +68,10 @@ class Subscription:
             updated=data.get("updated", 0.0),
             profile_uids=list(data.get("profile_uids", [])),
             uid=data.get("uid", uuid.uuid4().hex),
+            enabled=data.get("enabled", True),
+            auto_update_hours=data.get("auto_update_hours", 0),
+            name_filter=data.get("name_filter", ""),
+            user_agent=data.get("user_agent", ""),
         )
 
 
@@ -81,8 +92,8 @@ def parse_userinfo(header: str) -> Usage:
     )
 
 
-def fetch(url: str, timeout: float = 20.0):
-    req = urllib.request.Request(url, headers={"User-Agent": _UA})
+def fetch(url: str, timeout: float = 20.0, user_agent: str = ""):
+    req = urllib.request.Request(url, headers={"User-Agent": user_agent or DEFAULT_USER_AGENT})
     with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 (user-provided sub URL)
         info = resp.headers.get("Subscription-Userinfo", "")
         body = resp.read().decode("utf-8", errors="replace")
@@ -127,12 +138,36 @@ def _profile_key(p: Profile) -> tuple:
     return ((p.protocol or "").lower(), p.address, p.port, p.id)
 
 
+def _name_filter_pattern(name_filter: str) -> re.Pattern | None:
+    """A compiled case-insensitive matcher, or None for "no filter" and for
+    an invalid regex alike -- a typo in the filter must fetch everything
+    rather than silently wipe every server on the next refresh."""
+    if not name_filter:
+        return None
+    try:
+        return re.compile(name_filter, re.IGNORECASE)
+    except re.error:
+        return None
+
+
 def refresh(sub: Subscription, profiles: ProfileStore, store: SubscriptionStore) -> Subscription:
-    usage, parsed = fetch(sub.url)
+    usage, parsed = fetch(sub.url, user_agent=sub.user_agent)
     # parse_subscription already drops an unparseable line; this also drops
     # a link that parsed but can never connect (no address/credential), the
     # same check import.parse_share_text/parse_json/parse_qr apply.
     parsed = [p for p in parsed if p.is_valid()]
+
+    pattern = _name_filter_pattern(sub.name_filter)
+    if pattern is not None:
+        filtered = [p for p in parsed if pattern.search(p.name or "")]
+        if not filtered:
+            # Distinct message from the empty-parse case below, but the
+            # same "refuse rather than wipe" handling: a filter that (for
+            # now) matches nothing is far more likely a typo or a
+            # temporarily empty subscription than "delete every server".
+            raise ValueError("name filter matched no servers")
+        parsed = filtered
+
     if not parsed:
         # A panel error page, an empty body, or a sub with every server
         # temporarily removed all parse to zero profiles. Refuse rather than
@@ -170,3 +205,18 @@ def refresh(sub: Subscription, profiles: ProfileStore, store: SubscriptionStore)
     sub.updated = time.time()
     store.save(sub)
     return sub
+
+
+def is_due(sub: Subscription, global_hours: float, now: float) -> bool:
+    """Whether `sub` should auto-refresh right now. A disabled sub is never
+    due. The sub's own interval wins over the global one when set; 0
+    (either one) means "off", matching the geo auto-update convention
+    elsewhere in this app -- never updated (updated == 0) is always due
+    once the effective interval is non-zero.
+    """
+    if not sub.enabled:
+        return False
+    hours = sub.auto_update_hours or global_hours
+    if not hours:
+        return False
+    return sub.updated < now - hours * 3600
