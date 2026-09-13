@@ -9,12 +9,16 @@ config or log: its own throwaway config lives under state_dir().
 from __future__ import annotations
 
 import json
+import os
 import subprocess
+import tempfile
+from pathlib import Path
 
 from .. import paths
 from . import proc
 
-_CONFIG_NAME = "xraycheck.json"
+_CONFIG_PREFIX = "xraycheck-"
+_CONFIG_SUFFIX = ".json"
 
 
 def check_rules(rules: list[dict], asset_dir=None) -> str | None:
@@ -34,18 +38,28 @@ def check_rules(rules: list[dict], asset_dir=None) -> str | None:
         "routing": {"domainStrategy": "IPIfNonMatch", "rules": rules},
     }
     paths.state_dir().mkdir(parents=True, exist_ok=True)
-    config_path = paths.state_dir() / _CONFIG_NAME
-    config_path.write_text(json.dumps(cfg, ensure_ascii=False), encoding="utf-8")
-
-    env = proc.child_env({"XRAY_LOCATION_ASSET": str(asset_dir or paths.asset_dir())})
+    # A unique file per call: a geo update and a routing dialog Save can
+    # both validate at once, and a shared fixed filename would let them
+    # stomp on each other's config mid-run.
+    fd, tmp_name = tempfile.mkstemp(
+        prefix=_CONFIG_PREFIX, suffix=_CONFIG_SUFFIX, dir=str(paths.state_dir())
+    )
+    config_path = Path(tmp_name)  # mkstemp(dir=...) already returns the full path
     try:
-        result = subprocess.run(
-            [str(paths.xray_exe()), "run", "-test", "-c", str(config_path)],
-            capture_output=True, text=True, env=env, cwd=str(paths.base_dir()),
-            timeout=20, creationflags=proc.CREATE_NO_WINDOW, startupinfo=proc._startupinfo(),
-        )
-    except subprocess.TimeoutExpired:
-        return "validation timed out"
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(json.dumps(cfg, ensure_ascii=False))
+
+        env = proc.child_env({"XRAY_LOCATION_ASSET": str(asset_dir or paths.asset_dir())})
+        try:
+            result = subprocess.run(
+                [str(paths.xray_exe()), "run", "-test", "-c", str(config_path)],
+                capture_output=True, text=True, env=env, cwd=str(paths.base_dir()),
+                timeout=20, creationflags=proc.CREATE_NO_WINDOW, startupinfo=proc._startupinfo(),
+            )
+        except subprocess.TimeoutExpired:
+            return "validation timed out"
+    finally:
+        config_path.unlink(missing_ok=True)
 
     if result.returncode == 0:
         return None
