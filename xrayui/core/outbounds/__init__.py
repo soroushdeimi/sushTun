@@ -6,10 +6,13 @@ handled, matching the pre-split behaviour where only wireguard branched off.
 from __future__ import annotations
 
 from ..profiles import Profile
-from . import vless, wireguard
+from . import shadowsocks, trojan, vless, vmess, wireguard
 
 _BUILDERS = {
     "wireguard": wireguard.apply,
+    "vmess": vmess.apply,
+    "trojan": trojan.apply,
+    "shadowsocks": shadowsocks.apply,
 }
 
 
