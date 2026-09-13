@@ -938,6 +938,16 @@ class MainWindow(QMainWindow):
                 self._needs_reconnect(", ".join(changed) + " changed")
             elif dlg.geo_updated():
                 self._needs_reconnect("Geo data updated")
+        # A restore replaces files on disk the moment it happens, whether or
+        # not the dialog is later accepted or cancelled -- so this is
+        # checked unconditionally, not only in the dlg.exec() branch above.
+        if dlg.restored():
+            self.settings = app_settings.load()
+            self._reload_profiles()
+            self._reload_subs()
+            self._refresh_routing_combo()
+            if self.conn.is_connected():
+                self._needs_reconnect("Settings restored from backup")
 
     def _open_routing(self) -> None:
         dlg = RoutingDialog(self.settings["routing"], self)

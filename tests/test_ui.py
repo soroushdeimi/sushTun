@@ -8,6 +8,7 @@ one part of the app no test ever executed.
 from __future__ import annotations
 
 import copy
+import json
 import os
 import sys
 import threading
@@ -27,7 +28,7 @@ else:
 # Must be set before the first QApplication; there is no display on a CI runner.
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
+from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox  # noqa: E402
 
 from xrayui import paths  # noqa: E402
 from xrayui.core import dns as dns_mod  # noqa: E402
@@ -336,6 +337,154 @@ def test_settings_dialog_save_blocked_by_a_check_failure_leaves_settings_unchang
     assert dlg.result() == 0
     assert defaults["core"]["fragment"]["enabled"] is False
     assert defaults["core"]["socks_port"] == 10808
+
+
+# -- Startup, backup/restore, updates (Phase 7a) -----------------------------
+def test_settings_dialog_startup_and_updates_round_trip(qapp, defaults, monkeypatch):
+    monkeypatch.setattr(dialogs_mod.autostart, "is_supported", lambda: (True, ""))
+    dlg = SettingsDialog(defaults)
+    dlg.start_minimized.setChecked(True)
+    dlg.auto_connect.setChecked(True)
+    dlg.check_updates.setChecked(False)
+
+    values = dlg.values()
+    assert values["startup"] == {
+        "start_on_login": False,
+        "start_minimized": True,
+        "auto_connect": True,
+    }
+    assert values["updates"]["check"] is False
+
+
+def test_settings_dialog_start_on_login_disabled_with_reason_when_unsupported(
+    qapp, defaults, monkeypatch,
+):
+    monkeypatch.setattr(dialogs_mod.autostart, "is_supported",
+                        lambda: (False, "Install the .deb package to start sushTun at login."))
+    dlg = SettingsDialog(defaults)
+    assert not dlg.start_on_login.isEnabled()
+    assert dlg.start_on_login.toolTip() == "Install the .deb package to start sushTun at login."
+
+
+def test_settings_dialog_start_on_login_enabled_when_supported(qapp, defaults, monkeypatch):
+    monkeypatch.setattr(dialogs_mod.autostart, "is_supported", lambda: (True, ""))
+    dlg = SettingsDialog(defaults)
+    assert dlg.start_on_login.isEnabled()
+
+
+def test_settings_dialog_save_enables_autostart_when_toggled_on(qapp, defaults, monkeypatch):
+    monkeypatch.setattr(dialogs_mod.xraycheck, "check_config", lambda *a, **k: None)
+    monkeypatch.setattr(dialogs_mod.autostart, "is_supported", lambda: (True, ""))
+    calls = []
+    monkeypatch.setattr(dialogs_mod.autostart, "enable", lambda: calls.append("enable"))
+    monkeypatch.setattr(dialogs_mod.autostart, "disable", lambda: calls.append("disable"))
+
+    dlg = SettingsDialog(defaults)
+    dlg.start_on_login.setChecked(True)
+    _save_and_wait(dlg)
+
+    assert calls == ["enable"]
+    assert dlg.result() == 1
+
+
+def test_settings_dialog_save_shows_an_error_when_enabling_autostart_fails(
+    qapp, defaults, warnings, monkeypatch,
+):
+    monkeypatch.setattr(dialogs_mod.xraycheck, "check_config", lambda *a, **k: None)
+    monkeypatch.setattr(dialogs_mod.autostart, "is_supported", lambda: (True, ""))
+
+    def raise_enable():
+        raise RuntimeError("could not write the polkit rule")
+
+    monkeypatch.setattr(dialogs_mod.autostart, "enable", raise_enable)
+
+    dlg = SettingsDialog(defaults)
+    dlg.start_on_login.setChecked(True)
+    _save_and_wait(dlg)
+
+    assert warnings
+    assert "polkit rule" in warnings[-1]
+    assert dlg.result() == 0
+
+
+def test_settings_dialog_backup_button_writes_a_zip_and_confirms(
+    qapp, defaults, tmp_path, monkeypatch,
+):
+    monkeypatch.setattr(paths, "base_dir", lambda: tmp_path)
+    paths.ensure_dirs()
+    (tmp_path / "settings.json").write_text("{}", encoding="utf-8")
+    dest = tmp_path / "out.zip"
+    monkeypatch.setattr(QFileDialog, "getSaveFileName",
+                        staticmethod(lambda *a, **k: (str(dest), "")), raising=False)
+    infos = []
+    monkeypatch.setattr(QMessageBox, "information",
+                        staticmethod(lambda *a, **k: infos.append(a) or None), raising=False)
+
+    dlg = SettingsDialog(defaults)
+    dlg._backup_now()
+
+    assert dest.exists()
+    assert infos
+    assert not dlg.restored()
+
+
+def test_settings_dialog_restore_button_round_trips_and_flags_restored(
+    qapp, defaults, tmp_path, monkeypatch,
+):
+    src = tmp_path / "src"
+    src.mkdir()
+    monkeypatch.setattr(paths, "base_dir", lambda: src)
+    paths.ensure_dirs()
+    (src / "settings.json").write_text('{"marker": "from-backup"}', encoding="utf-8")
+    zip_path = tmp_path / "backup.zip"
+    dialogs_mod.backup_mod.backup(zip_path)
+
+    dest = tmp_path / "dest"
+    dest.mkdir()
+    monkeypatch.setattr(paths, "base_dir", lambda: dest)
+    paths.ensure_dirs()
+
+    monkeypatch.setattr(QFileDialog, "getOpenFileName",
+                        staticmethod(lambda *a, **k: (str(zip_path), "")), raising=False)
+    monkeypatch.setattr(QMessageBox, "question",
+                        staticmethod(lambda *a, **k: QMessageBox.Yes), raising=False)
+    monkeypatch.setattr(QMessageBox, "information",
+                        staticmethod(lambda *a, **k: None), raising=False)
+
+    dlg = SettingsDialog(defaults)
+    dlg._restore_now()
+
+    assert dlg.restored()
+    assert json.loads((dest / "settings.json").read_text()) == {"marker": "from-backup"}
+
+
+def test_open_settings_reloads_profiles_and_tray_after_a_restore(window, monkeypatch):
+    profile = window.store.save(Profile(name="stale", address="a.example.com",
+                                        port=443, id="u"))
+    window.store.set_active(profile.uid)
+    window._reload_profiles()
+
+    class FakeDialog:
+        def __init__(self, *a, **k):
+            pass
+
+        def exec(self):
+            return 0
+
+        def restored(self):
+            return True
+
+    monkeypatch.setattr("xrayui.ui.main_window.SettingsDialog", FakeDialog)
+    monkeypatch.setattr(window.store, "list", lambda: [])
+    monkeypatch.setattr(window.store, "active_uid", lambda: None)
+    monkeypatch.setattr(window.conn, "is_connected", lambda: True)
+    reconnects = []
+    monkeypatch.setattr(window, "_needs_reconnect", lambda what: reconnects.append(what))
+
+    window._open_settings()
+
+    assert window.profiles.model.rowCount() == 0
+    assert reconnects == ["Settings restored from backup"]
 
 
 # -- Profile edit dialog -----------------------------------------------------
