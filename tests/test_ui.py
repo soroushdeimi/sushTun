@@ -34,6 +34,7 @@ from xrayui.core import dns as dns_mod  # noqa: E402
 from xrayui.core import network as network_mod  # noqa: E402
 from xrayui.core import settings as app_settings  # noqa: E402
 from xrayui.core import speedtest as speedtest_mod  # noqa: E402
+from xrayui.core import updates as updates_mod  # noqa: E402
 from xrayui.core.profiles import Profile  # noqa: E402
 from xrayui.core.subscription import Subscription  # noqa: E402
 from xrayui.ui import dialogs as dialogs_mod  # noqa: E402
@@ -1185,3 +1186,78 @@ def test_auto_connect_on_startup_gives_up_quietly_with_no_network(window, monkey
 
     assert calls == []
     assert any("failed" in s.lower() for s in steps)
+
+
+# -- Update check banner (Phase 7a) ------------------------------------------
+def test_update_check_is_skipped_when_the_setting_is_off(window, monkeypatch):
+    window.settings["updates"]["check"] = False
+    window.settings["updates"]["last_check"] = 0
+    called = []
+    monkeypatch.setattr(updates_mod, "latest_release", lambda: called.append(1))
+    window._maybe_check_updates()
+    assert called == []
+
+
+def test_update_check_is_skipped_when_checked_recently(window, monkeypatch):
+    window.settings["updates"]["check"] = True
+    window.settings["updates"]["last_check"] = time.time()
+    called = []
+    monkeypatch.setattr(updates_mod, "latest_release", lambda: called.append(1))
+    window._maybe_check_updates()
+    assert called == []
+
+
+def test_update_check_runs_and_records_last_check_when_due(window, monkeypatch):
+    window.settings["updates"]["check"] = True
+    window.settings["updates"]["last_check"] = 0
+    monkeypatch.setattr(updates_mod, "latest_release", lambda: None)
+    window._maybe_check_updates()
+    _pump(lambda: window.settings["updates"]["last_check"] != 0)
+    assert window.settings["updates"]["last_check"] > 0
+
+
+def test_update_check_shows_a_banner_with_a_copy_link_action_for_a_newer_version(
+    window, monkeypatch
+):
+    window.settings["updates"] = {"check": True, "last_check": 0, "notified_version": ""}
+    monkeypatch.setattr(
+        updates_mod, "latest_release",
+        lambda: ("v99.0.0", "https://example.com/releases/v99.0.0"),
+    )
+    window._on_update_checked(result=("v99.0.0", "https://example.com/releases/v99.0.0"))
+    assert not window.alert_banner.isHidden()
+    assert "v99.0.0" in window.alert_banner._label.text()
+    assert not window.alert_banner._action.isHidden()
+
+    from PySide6.QtWidgets import QApplication as _QApp
+    window.alert_banner._action.click()
+    assert _QApp.clipboard().text() == "https://example.com/releases/v99.0.0"
+
+
+def test_update_check_shows_the_tray_toast_only_once_per_version(window):
+    window.tray = _FakeTray()
+    try:
+        window.settings["updates"] = {"check": True, "last_check": 0, "notified_version": ""}
+        window._on_update_checked(result=("v99.0.0", "https://example.com/x"))
+        assert len(window.tray.messages) == 1
+        assert window.settings["updates"]["notified_version"] == "v99.0.0"
+
+        window._on_update_checked(result=("v99.0.0", "https://example.com/x"))
+        assert len(window.tray.messages) == 1
+    finally:
+        window.tray = None
+
+
+def test_update_check_ignores_a_non_newer_version(window):
+    from xrayui import __version__ as _cur
+    window.settings["updates"] = {"check": True, "last_check": 0, "notified_version": ""}
+    # Same-or-older than the running version must not surface a banner.
+    window._on_update_checked(result=(f"v{_cur}", "https://example.com/x"))
+    assert window.alert_banner.isHidden()
+
+
+def test_update_check_does_nothing_on_fetch_failure(window):
+    window.settings["updates"] = {"check": True, "last_check": 0, "notified_version": ""}
+    window._on_update_checked(result=None)
+    assert window.alert_banner.isHidden()
+    assert window.settings["updates"]["last_check"] > 0

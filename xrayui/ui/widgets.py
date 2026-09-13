@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import html
+from collections.abc import Callable
 
 from PySide6.QtCore import QItemSelection, QItemSelectionModel, Qt, Signal
 from PySide6.QtGui import QFont, QTextCursor
@@ -48,19 +49,37 @@ class AlertBanner(QFrame):
         row.setContentsMargins(12, 8, 8, 8)
         self._label = QLabel("")
         self._label.setWordWrap(True)
+        self._action = QPushButton("")
+        self._action.setVisible(False)
+        self._action_connected = False
         close = QPushButton("✕")
         close.setFixedWidth(28)
         close.clicked.connect(lambda: self.setVisible(False))
         row.addWidget(self._label, 1)
+        row.addWidget(self._action)
         row.addWidget(close)
 
-    def show_alert(self, level: str, message: str) -> None:
+    def show_alert(self, level: str, message: str, action_label: str = "",
+                   action: Callable[[], None] | None = None) -> None:
         color = ERR if level == "critical" else WARN
         self.setStyleSheet(
             f"QFrame{{background:rgba(0,0,0,0.25);border:1px solid {color};"
             f"border-radius:10px;}} QLabel{{color:{color};font-weight:600;}}"
         )
         self._label.setText(message)
+        # A banner shown twice with a fresh action must not also carry the
+        # previous one's connection -- track whether one is connected since
+        # disconnect() with nothing attached raises.
+        if self._action_connected:
+            self._action.clicked.disconnect()
+            self._action_connected = False
+        if action_label and action is not None:
+            self._action.setText(action_label)
+            self._action.clicked.connect(action)
+            self._action_connected = True
+            self._action.setVisible(True)
+        else:
+            self._action.setVisible(False)
         self.setVisible(True)
 
 

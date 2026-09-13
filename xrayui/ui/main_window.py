@@ -24,11 +24,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .. import __version__
 from ..core import alerts, hotspot, importer, metrics, network, speedtest
 from ..core import autostart as autostart_mod
 from ..core import geo as geo_mod
 from ..core import settings as app_settings
 from ..core import subscription as sub_mod
+from ..core import updates as updates_mod
 from ..core.alerts import human_bytes
 from ..core.connection import Connection, _resolve
 from ..core.profiles import Profile, ProfileStore
@@ -124,6 +126,10 @@ class MainWindow(QMainWindow):
         # a day never gets an overdue update; also check shortly after
         # startup rather than waiting out the first full hour.
         QTimer.singleShot(60_000, self._maybe_auto_update_geo)
+        self.update_check_timer = QTimer(self)
+        self.update_check_timer.timeout.connect(self._maybe_check_updates)
+        self.update_check_timer.start(24 * 60 * 60_000)
+        QTimer.singleShot(60_000, self._maybe_check_updates)
 
         self._reload_profiles()
         self._reload_subs()
@@ -696,6 +702,36 @@ class MainWindow(QMainWindow):
         if self.tray:
             icon = QSystemTrayIcon.Critical if level == "critical" else QSystemTrayIcon.Warning
             self.tray.showMessage("sushTun", message, icon, 8000)
+
+    def _maybe_check_updates(self) -> None:
+        cfg = self.settings.get("updates", {})
+        if not cfg.get("check", True):
+            return
+        last_check = cfg.get("last_check") or 0
+        if time.time() - last_check < 24 * 60 * 60:
+            return
+        self._run_async(updates_mod.latest_release, self._on_update_checked)
+
+    def _on_update_checked(self, result=None, error=None) -> None:
+        self.settings.setdefault("updates", {})["last_check"] = time.time()
+        app_settings.save(self.settings)
+        if error or not result:
+            return
+        tag, url = result
+        if not updates_mod.is_newer(tag, __version__):
+            return
+        self.alert_banner.show_alert(
+            "warning", f"sushTun {tag} is available",
+            action_label="Copy download link",
+            action=lambda: QApplication.clipboard().setText(url),
+        )
+        # A tray toast is a one-time nudge, not shown again for this version
+        # even across restarts -- the banner itself stays until dismissed.
+        if self.tray and self.settings["updates"].get("notified_version") != tag:
+            self.tray.showMessage("sushTun", f"sushTun {tag} is available",
+                                  QSystemTrayIcon.Information, 8000)
+            self.settings["updates"]["notified_version"] = tag
+            app_settings.save(self.settings)
 
     # Connection ------------------------------------------------------------
     def _connect(self) -> None:
