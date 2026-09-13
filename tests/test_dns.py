@@ -222,3 +222,246 @@ def test_tun_adapter_gets_a_resolver_from_the_template():
     tun = next(i for i in json.loads(TEMPLATE.read_text(encoding="utf-8"))["inbounds"]
                if i["tag"] == "tun-in")
     assert tun["settings"]["dns"] == ["127.0.0.1"]
+
+
+# -- Phase 3: domestic DNS, remote-via-tunnel, raw override -----------------
+PROXY_IP = "203.0.113.1"
+PROXY_HOST = "example.com"
+
+
+def test_domestic_presets_are_all_valid_literal_ips():
+    assert dns_mod.DOMESTIC_PRESETS
+    for name, addrs in dns_mod.DOMESTIC_PRESETS.items():
+        assert addrs, name
+        for addr in addrs:
+            assert dns_mod.validate_domestic([addr]) == [], f"{name}: {addr}"
+            assert not any(c.isalpha() for c in addr), f"{name}: {addr} is not a literal IP"
+
+
+def test_no_domestic_rule_without_both_servers_and_direct_domains():
+    block, rules = dns_mod.build_dns_and_rules(_dns(), [], PROXY_IP)
+    assert rules == []
+    block, rules = dns_mod.build_dns_and_rules(
+        _dns(domestic_servers=["178.22.122.100"]), [], PROXY_IP)
+    assert rules == []
+    block, rules = dns_mod.build_dns_and_rules(_dns(), ["domain:ir"], PROXY_IP)
+    assert rules == []
+
+
+def test_domestic_servers_are_prepended_with_the_right_shape():
+    block, rules = dns_mod.build_dns_and_rules(
+        _dns(domestic_servers=["178.22.122.100", "185.51.200.2"]),
+        ["domain:ir", "geosite:category-ir"], PROXY_IP)
+    entries = block["servers"][:2]
+    for entry, addr in zip(entries, ["178.22.122.100", "185.51.200.2"], strict=True):
+        assert entry == {
+            "address": addr, "domains": ["domain:ir", "geosite:category-ir"],
+            "skipFallback": True, "tag": "direct-dns",
+        }
+    assert rules == [{"type": "field", "inboundTag": ["direct-dns"], "outboundTag": "direct"}]
+
+
+def test_domestic_servers_go_ahead_of_the_users_own_servers():
+    block, _ = dns_mod.build_dns_and_rules(
+        _dns(domestic_servers=["178.22.122.100"], servers=["1.1.1.1"]),
+        ["domain:ir"], PROXY_IP)
+    assert block["servers"][0]["address"] == "178.22.122.100"
+    assert block["servers"][1] == "1.1.1.1"
+
+
+def test_bad_domestic_entries_are_dropped_not_fatal():
+    block, rules = dns_mod.build_dns_and_rules(
+        _dns(domestic_servers=["localhost", "fakedns", "not a server", "178.22.122.100"]),
+        ["domain:ir"], PROXY_IP)
+    addrs = [e["address"] for e in block["servers"]]
+    assert addrs == ["178.22.122.100"]
+    reasons = dns_mod.validate_domestic(["localhost", "fakedns", "not a server"])
+    assert len(reasons) == 3
+
+
+def test_domestic_host_port_is_split_like_a_dns_server_object():
+    block, _ = dns_mod.build_dns_and_rules(
+        _dns(domestic_servers=["178.22.122.100:5353"]), ["domain:ir"], PROXY_IP)
+    entry = block["servers"][0]
+    assert entry["address"] == "178.22.122.100"
+    assert entry["port"] == 5353
+
+
+# -- remote_via_tunnel -------------------------------------------------------
+def test_remote_via_tunnel_sets_tag_and_proxy_rule():
+    block, rules = dns_mod.build_dns_and_rules(
+        _dns(remote_via_tunnel=True, servers=["1.1.1.1"]), [], PROXY_IP)
+    assert block["tag"] == "dns-module"
+    assert {"type": "field", "inboundTag": ["dns-module"], "outboundTag": "proxy"} in rules
+
+
+def test_hostname_proxy_gets_a_bootstrap_entry():
+    block, rules = dns_mod.build_dns_and_rules(
+        _dns(remote_via_tunnel=True, servers=["1.1.1.1"]), [], PROXY_HOST)
+    bootstrap = block["servers"][0]
+    assert bootstrap["tag"] == "direct-dns"
+    assert bootstrap["domains"] == [f"full:{PROXY_HOST}"]
+    assert bootstrap["skipFallback"] is True
+    assert bootstrap["address"] == "1.1.1.1"  # first literal-IP server, no domestic set
+    assert {"type": "field", "inboundTag": ["direct-dns"], "outboundTag": "direct"} in rules
+
+
+def test_hostname_dns_server_also_gets_a_bootstrap_entry():
+    block, _ = dns_mod.build_dns_and_rules(
+        _dns(remote_via_tunnel=True, servers=["https://dns.google/dns-query", "1.1.1.1"]),
+        [], PROXY_IP)
+    bootstrap = block["servers"][0]
+    assert "full:dns.google" in bootstrap["domains"]
+    assert f"full:{PROXY_IP}" not in bootstrap["domains"]  # the proxy itself is an IP
+
+
+def test_ip_proxy_with_ip_servers_gets_no_bootstrap():
+    block, rules = dns_mod.build_dns_and_rules(
+        _dns(remote_via_tunnel=True, servers=["1.1.1.1", "8.8.8.8"]), [], PROXY_IP)
+    assert not any(s.get("tag") == "direct-dns" for s in block["servers"] if isinstance(s, dict))
+    assert rules == [{"type": "field", "inboundTag": ["dns-module"], "outboundTag": "proxy"}]
+
+
+def test_bootstrap_prefers_domestic_server_when_present():
+    block, _ = dns_mod.build_dns_and_rules(
+        _dns(remote_via_tunnel=True, domestic_servers=["178.22.122.100"], servers=["1.1.1.1"]),
+        ["domain:ir"], PROXY_HOST)
+    bootstrap = next(s for s in block["servers"] if s.get("tag") == "direct-dns"
+                      and f"full:{PROXY_HOST}" in s.get("domains", []))
+    assert bootstrap["address"] == "178.22.122.100"
+
+
+def test_bootstrap_falls_back_to_1111_with_no_domestic_or_literal_ip_servers():
+    block, _ = dns_mod.build_dns_and_rules(
+        _dns(remote_via_tunnel=True, servers=[]), [], PROXY_HOST)
+    bootstrap = block["servers"][0]
+    assert bootstrap["address"] == "1.1.1.1"
+
+
+def test_domestic_and_remote_via_tunnel_coexist_with_one_direct_dns_rule():
+    block, rules = dns_mod.build_dns_and_rules(
+        _dns(domestic_servers=["178.22.122.100"], remote_via_tunnel=True, servers=["1.1.1.1"]),
+        ["domain:ir"], PROXY_HOST)
+    direct_dns_entries = [s for s in block["servers"]
+                          if isinstance(s, dict) and s.get("tag") == "direct-dns"]
+    assert len(direct_dns_entries) == 2  # one for direct_domains, one bootstrap
+    direct_dns_rules = [r for r in rules if r.get("inboundTag") == ["direct-dns"]]
+    assert len(direct_dns_rules) == 1
+
+
+# -- parallel query / serve stale -------------------------------------------
+def test_parallel_query_and_serve_stale_are_opt_in():
+    block, _ = dns_mod.build_dns_and_rules(_dns(), [], PROXY_IP)
+    assert "enableParallelQuery" not in block
+    assert "serveStale" not in block
+    block, _ = dns_mod.build_dns_and_rules(
+        _dns(parallel_query=True, serve_stale=True), [], PROXY_IP)
+    assert block["enableParallelQuery"] is True
+    assert block["serveStale"] is True
+
+
+# -- raw override -------------------------------------------------------------
+def test_raw_override_replaces_the_whole_block_and_ignores_other_settings():
+    raw = json.dumps({"servers": ["9.9.9.9"], "queryStrategy": "UseIPv4"})
+    block, rules = dns_mod.build_dns_and_rules(
+        _dns(raw_override=raw, domestic_servers=["178.22.122.100"], remote_via_tunnel=True,
+             servers=["1.1.1.1"]),
+        ["domain:ir"], PROXY_HOST)
+    assert block == {"servers": ["9.9.9.9"], "queryStrategy": "UseIPv4"}
+    assert rules == []
+
+
+def test_invalid_raw_override_json_is_ignored_falls_through():
+    block, rules = dns_mod.build_dns_and_rules(
+        _dns(raw_override="{not json", servers=["1.1.1.1"]), [], PROXY_IP)
+    assert block["servers"] == ["1.1.1.1"]
+
+
+def test_raw_override_non_object_json_is_ignored():
+    block, rules = dns_mod.build_dns_and_rules(
+        _dns(raw_override="[1, 2, 3]", servers=["1.1.1.1"]), [], PROXY_IP)
+    assert block["servers"] == ["1.1.1.1"]
+
+
+def test_raw_override_drops_localhost_and_fakedns_at_render_time():
+    raw = json.dumps({"servers": ["localhost", "1.1.1.1", {"address": "fakedns"},
+                                  {"address": "8.8.8.8"}]})
+    block, _ = dns_mod.build_dns_and_rules(_dns(raw_override=raw), [], PROXY_IP)
+    assert block["servers"] == ["1.1.1.1", {"address": "8.8.8.8"}]
+
+
+def test_raw_override_refuses_to_save_localhost_or_fakedns():
+    assert dns_mod.raw_override_issues(json.dumps({"servers": ["localhost"]}))
+    assert dns_mod.raw_override_issues(json.dumps({"servers": [{"address": "fakedns"}]}))
+    assert dns_mod.raw_override_issues(json.dumps({"servers": ["1.1.1.1"]})) == []
+
+
+def test_raw_override_issues_never_refuses_invalid_json_or_non_object():
+    assert dns_mod.raw_override_issues("{not json") == []
+    assert dns_mod.raw_override_issues("[1, 2]") == []
+    assert dns_mod.raw_override_issues("") == []
+
+
+# -- render.py rule ordering --------------------------------------------------
+def test_defaults_produce_no_dns_routing_rules_byte_identical_render():
+    template = json.loads(TEMPLATE.read_text(encoding="utf-8"))
+    out = _render(dns_cfg=_dns())
+    assert out["routing"]["rules"] == template["routing"]["rules"]
+
+
+def test_domestic_dns_rule_lands_after_template_rules_and_before_a_user_catch_all():
+    r = copy.deepcopy(app_settings.DEFAULTS["routing"])
+    r["direct_iran"] = True
+    rules = routing.build_rules(r)
+    user_catch_all = {"type": "field", "port": "0-65535", "outboundTag": "proxy"}
+    out = _render(
+        routing_rules=rules + [user_catch_all],
+        dns_cfg=_dns(domestic_servers=["178.22.122.100"]),
+    )
+    template_rules = json.loads(TEMPLATE.read_text(encoding="utf-8"))["routing"]["rules"]
+    got = out["routing"]["rules"]
+    assert got[:len(template_rules)] == template_rules
+    direct_dns_idx = next(i for i, x in enumerate(got) if x.get("inboundTag") == ["direct-dns"])
+    catch_all_idx = got.index(user_catch_all)
+    assert len(template_rules) <= direct_dns_idx < catch_all_idx
+
+
+def test_remote_via_tunnel_rule_also_lands_before_a_user_catch_all():
+    user_catch_all = {"type": "field", "port": "0-65535", "outboundTag": "proxy"}
+    out = _render(
+        routing_rules=[user_catch_all],
+        dns_cfg=_dns(remote_via_tunnel=True, servers=["1.1.1.1"]),
+    )
+    got = out["routing"]["rules"]
+    dns_module_idx = next(i for i, x in enumerate(got) if x.get("inboundTag") == ["dns-module"])
+    catch_all_idx = got.index(user_catch_all)
+    assert dns_module_idx < catch_all_idx
+
+
+# -- xray run -test on real rendered configs ----------------------------------
+def _skip_if_no_binary():
+    from xrayui import paths
+    if not paths.xray_exe().exists():
+        pytest.skip("bundled xray binary not present")
+
+
+@pytest.mark.parametrize("dns_over", [
+    {},
+    {"domestic_servers": ["178.22.122.100", "185.51.200.2"]},
+    {"remote_via_tunnel": True, "servers": ["1.1.1.1"]},
+    {"domestic_servers": ["178.22.122.100"], "remote_via_tunnel": True, "servers": ["1.1.1.1"]},
+], ids=["defaults", "domestic", "remote_via_tunnel", "both"])
+def test_xray_test_accepts_the_fully_rendered_config(tmp_path, monkeypatch, dns_over):
+    _skip_if_no_binary()
+    from xrayui.core import xraycheck
+    monkeypatch.setattr(xraycheck.paths, "state_dir", lambda: tmp_path)
+
+    r = copy.deepcopy(app_settings.DEFAULTS["routing"])
+    r["direct_iran"] = True
+    rules = routing.build_rules(r)
+    text = render.build_text(
+        parse_vless(SAMPLE), "lo", TEMPLATE, routing_rules=rules,
+        domain_strategy=routing.domain_strategy_for(r), include_tun=False,
+        dns_cfg=_dns(**dns_over),
+    )
+    assert xraycheck.check_config(text) is None
