@@ -29,7 +29,8 @@ from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
 from xrayui import paths  # noqa: E402
 from xrayui.core import dns as dns_mod  # noqa: E402
 from xrayui.core import settings as app_settings  # noqa: E402
-from xrayui.ui.dialogs import SettingsDialog  # noqa: E402
+from xrayui.core.profiles import Profile  # noqa: E402
+from xrayui.ui.dialogs import ProfileEditDialog, SettingsDialog  # noqa: E402
 from xrayui.ui.dns_dialog import DnsDialog  # noqa: E402
 
 
@@ -134,6 +135,21 @@ def test_settings_dialog_offers_every_known_log_level(qapp, defaults):
     assert shown == list(app_settings.LOG_LEVELS)
 
 
+# -- Profile edit dialog -----------------------------------------------------
+def test_profile_edit_dialog_round_trips_alpn_and_spiderx(qapp):
+    p = Profile(name="r", address="a.com", port=443, id="u", network="ws",
+                security="reality", pbk="PUB", sid="ab", sni="www.test.com")
+    dlg = ProfileEditDialog(p)
+    assert dlg.f_alpn.text() == ""
+    assert dlg.f_spx.text() == ""
+    dlg.f_alpn.setText("h2,http/1.1")
+    dlg.f_spx.setText("/spider")
+    dlg._save()
+    saved = dlg.result_profile()
+    assert saved.alpn == "h2,http/1.1"
+    assert saved.spx == "/spider"
+
+
 # -- Main window -----------------------------------------------------------
 @pytest.fixture
 def window(qapp, tmp_path, monkeypatch):
@@ -162,6 +178,12 @@ def test_tool_signals_reach_their_handlers(window):
 
 def test_baseline_reports_plainly_when_not_connected(window):
     assert "Not connected" in window._baseline_fn()
+
+
+def test_window_and_tray_are_branded_sushtun(window):
+    assert window.windowTitle() == "sushTun"
+    if window.tray is not None:
+        assert window.tray.toolTip() == "sushTun"
 
 
 # -- Window chrome ---------------------------------------------------------

@@ -145,8 +145,10 @@ class ProfileEditDialog(QDialog):
         self.f_security.setCurrentText(p.security)
         self.f_sni = QLineEdit(p.sni)
         self.f_fp = QLineEdit(p.fp)
+        self.f_alpn = QLineEdit(p.alpn)
         self.f_pbk = QLineEdit(p.pbk)
         self.f_sid = QLineEdit(p.sid)
+        self.f_spx = QLineEdit(p.spx)
         self.f_path = QLineEdit(p.path)
         self.f_host = QLineEdit(p.host)
         self.f_service = QLineEdit(p.service_name)
@@ -173,14 +175,17 @@ class ProfileEditDialog(QDialog):
             self._add_row(form, "Security", self.f_security),
             self._add_row(form, "SNI", self.f_sni),
             self._add_row(form, "Fingerprint", self.f_fp),
+            self._add_row(form, "ALPN", self.f_alpn),
             self._add_row(form, "Reality sid", self.f_sid),
+            self._add_row(form, "Reality spiderX", self.f_spx),
             self._add_row(form, "Path", self.f_path),
             self._add_row(form, "Host", self.f_host),
             self._add_row(form, "gRPC service", self.f_service),
         ]
         self._vless_fields = [
             self.f_encryption, self.f_flow, self.f_network, self.f_security,
-            self.f_sni, self.f_fp, self.f_sid, self.f_path, self.f_host, self.f_service,
+            self.f_sni, self.f_fp, self.f_alpn, self.f_sid, self.f_spx,
+            self.f_path, self.f_host, self.f_service,
         ]
         self._wg_labs = [
             self._add_row(form, "Local address", self.f_wg_local),
@@ -233,8 +238,10 @@ class ProfileEditDialog(QDialog):
             p.security = self.f_security.currentText()
             p.sni = self.f_sni.text().strip()
             p.fp = self.f_fp.text().strip()
+            p.alpn = self.f_alpn.text().strip()
             p.pbk = self.f_pbk.text().strip()
             p.sid = self.f_sid.text().strip()
+            p.spx = self.f_spx.text().strip()
             p.path = self.f_path.text().strip()
             p.host = self.f_host.text().strip()
             p.service_name = self.f_service.text().strip()

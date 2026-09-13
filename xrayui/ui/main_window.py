@@ -59,7 +59,7 @@ class MainWindow(QMainWindow):
     def __init__(self, elevated: bool = True) -> None:
         super().__init__()
         self.titlebar = None  # changeEvent fires from here on, before the UI is built
-        self.setWindowTitle("Xray Portable")
+        self.setWindowTitle("sushTun")
         self.resize(1040, 700)
         # macOS draws real traffic lights; elsewhere we draw our own.
         self._frameless = sys.platform != "darwin"
@@ -259,7 +259,7 @@ class MainWindow(QMainWindow):
             self.tray = None
             return
         self.tray = QSystemTrayIcon(icon, self)
-        self.tray.setToolTip("Xray Portable")
+        self.tray.setToolTip("sushTun")
         menu = QMenu()
         menu.addAction("Show", self._show_window)
         menu.addAction("Connect", self._connect)
@@ -400,7 +400,7 @@ class MainWindow(QMainWindow):
         self.alert_banner.show_alert(level, message)
         if self.tray:
             icon = QSystemTrayIcon.Critical if level == "critical" else QSystemTrayIcon.Warning
-            self.tray.showMessage("Xray Portable", message, icon, 8000)
+            self.tray.showMessage("sushTun", message, icon, 8000)
 
     # Connection ------------------------------------------------------------
     def _connect(self) -> None:
@@ -688,7 +688,7 @@ class MainWindow(QMainWindow):
             if not self._told_about_tray:
                 self._told_about_tray = True
                 self.tray.showMessage(
-                    "Xray Portable",
+                    "sushTun",
                     "Still running here. Quit from this icon's menu, or press Ctrl+Q.",
                     QSystemTrayIcon.Information, 5000,
                 )
