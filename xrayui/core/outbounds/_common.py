@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import json
 
-from ..profiles import Profile
+from ..profiles import Profile, normalize_pcs, valid_pcs
 
 _PLACEHOLDER = "__IFACE__"
 
@@ -37,7 +37,9 @@ def stream_settings(p: Profile) -> dict:
         if p.ech:
             tls["echConfigList"] = p.ech
         if p.pcs:
-            tls["pinnedPeerCertSha256"] = p.pcs
+            pcs = normalize_pcs(p.pcs)
+            if valid_pcs(pcs):
+                tls["pinnedPeerCertSha256"] = pcs
         if p.vcn:
             tls["verifyPeerCertByName"] = p.vcn
         # allow_insecure is intentionally never rendered here: the bundled

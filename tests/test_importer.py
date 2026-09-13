@@ -390,6 +390,21 @@ def test_parse_json_xhttp_and_new_tls_keys():
     assert p.ech == "ECH" and p.pcs == "ab" * 32 and p.vcn == "a.com"
 
 
+def test_parse_json_pcs_colon_uppercase_is_normalized():
+    cfg = {"outbounds": [{
+        "tag": "proxy", "protocol": "vless",
+        "settings": {"vnext": [{"address": "1.2.3.4", "port": 443,
+                                "users": [{"id": "u", "encryption": "none"}]}]},
+        "streamSettings": {
+            "network": "tcp", "security": "tls",
+            "tlsSettings": {"serverName": "a.com",
+                            "pinnedPeerCertSha256": ":".join(["AB"] * 32)},
+        },
+    }]}
+    p = importer.parse_json(json.dumps(cfg))
+    assert p.pcs == "ab" * 32
+
+
 def test_parse_json_tcp_http_header():
     cfg = {"outbounds": [{
         "tag": "proxy", "protocol": "vless",
@@ -506,6 +521,12 @@ def test_parse_hy2_scheme_and_query_auth():
 
 def test_parse_hysteria2_pinsha256_maps_to_pcs():
     p = importer.parse_hysteria2(f"hysteria2://pw@c.example.com:443?pinSHA256={'ab' * 32}#HY3")
+    assert p.pcs == "ab" * 32
+
+
+def test_parse_hysteria2_pinsha256_colon_uppercase_is_normalized():
+    colon_form = "%3A".join(["AB"] * 32)  # ':' url-encoded so parse_qs doesn't split it
+    p = importer.parse_hysteria2(f"hysteria2://pw@c.example.com:443?pinSHA256={colon_form}#HY3")
     assert p.pcs == "ab" * 32
 
 

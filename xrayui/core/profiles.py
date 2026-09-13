@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from dataclasses import asdict, dataclass, field, fields
 
@@ -10,6 +11,24 @@ from .. import paths
 # SubscriptionStore keeps its own file in this same directory; list() must
 # not try to parse it as a profile.
 SUBSCRIPTIONS_FILENAME = "subscriptions.json"
+
+_PCS_HEX_RE = re.compile(r"^[0-9a-f]{64}$")
+
+
+def normalize_pcs(raw: str) -> str:
+    """pinnedPeerCertSha256 as most hysteria2 links and cert tools hand it
+    out -- "AB:CD:...", colon-separated uppercase hex -- normalized to the
+    unbroken lowercase hex Xray's own pin comparison actually wants.
+    Applied at every point a pcs value enters the app (import, editor
+    save, render) since any of them could be the one place a stray link
+    format or a hand-edited profile slipped through."""
+    return re.sub(r"[:\s]", "", raw or "").lower()
+
+
+def valid_pcs(raw: str) -> bool:
+    """Whether `raw` is (after normalizing) exactly 64 hex characters -- a
+    full SHA-256, the only shape Xray's pinnedPeerCertSha256 accepts."""
+    return bool(_PCS_HEX_RE.match(normalize_pcs(raw)))
 
 
 @dataclass

@@ -7,7 +7,7 @@ import json
 import re
 from urllib.parse import parse_qs, unquote, urlsplit
 
-from .profiles import Profile
+from .profiles import Profile, normalize_pcs
 
 
 def _b64decode(text: str) -> str:
@@ -53,7 +53,7 @@ def _std_query_fields(query: str) -> dict:
         "xhttp_extra": unquote(q.get("extra", "")),
         "allow_insecure": insecure in ("1", "true"),
         "ech": q.get("ech", ""),
-        "pcs": q.get("pcs", ""),
+        "pcs": normalize_pcs(q.get("pcs", "")),
         "vcn": q.get("vcn", ""),
     }
 
@@ -144,7 +144,7 @@ def _vmess_json_profile(data: dict) -> Profile:
         xhttp_mode=type_field if net == "xhttp" else "",
         allow_insecure=insecure in ("1", "true"),
         vcn=str(data.get("vcn") or ""),
-        pcs=str(data.get("pcs") or ""),
+        pcs=normalize_pcs(str(data.get("pcs") or "")),
     )
 
 
@@ -323,7 +323,7 @@ def parse_hysteria2(url: str) -> Profile:
         id=auth,
         sni=q.get("sni", ""),
         alpn=q.get("alpn", ""),
-        pcs=q.get("pinSHA256", ""),
+        pcs=normalize_pcs(q.get("pinSHA256", "")),
         vcn=q.get("vcn", ""),
         ech=q.get("ech", ""),
         allow_insecure=insecure in ("1", "true"),
@@ -536,7 +536,7 @@ def _stream_fields(stream: dict) -> dict:
         "xhttp_mode": xhttp_mode,
         "xhttp_extra": xhttp_extra,
         "ech": tls.get("echConfigList", ""),
-        "pcs": tls.get("pinnedPeerCertSha256", ""),
+        "pcs": normalize_pcs(tls.get("pinnedPeerCertSha256", "")),
         "vcn": tls.get("verifyPeerCertByName", ""),
     }
 
@@ -619,7 +619,7 @@ def _profile_from_hysteria2_outbound(proxy: dict) -> Profile:
         id=hy.get("auth", ""),
         sni=tls.get("serverName", ""),
         alpn=",".join(alpn) if isinstance(alpn, list) else str(alpn),
-        pcs=tls.get("pinnedPeerCertSha256", ""),
+        pcs=normalize_pcs(tls.get("pinnedPeerCertSha256", "")),
         vcn=tls.get("verifyPeerCertByName", ""),
         hy2_obfs_password=obfs_password,
         hy2_ports=hop.get("ports", ""),
