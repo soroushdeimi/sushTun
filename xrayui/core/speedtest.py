@@ -18,7 +18,7 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from .. import paths
-from . import metrics, outbounds, proc
+from . import coreopts, metrics, outbounds, proc
 from .profiles import Profile
 
 OnResult = Callable[[str, "float | None", "str | None"], None]
@@ -41,11 +41,16 @@ def is_skipped(error: str | None) -> bool:
     return error in SKIP_REASONS
 
 
-def build_test_config(profiles: list[Profile], ports: list[int], iface_alias: str) -> dict:
+def build_test_config(
+    profiles: list[Profile], ports: list[int], iface_alias: str, core_cfg: dict | None = None,
+) -> dict:
     """A from-scratch Xray config: one HTTP inbound + outbound pair per profile.
 
     No tun inbound, no dns-in, no stats API -- this never touches the ports
     or tags the live connection owns, so it can run concurrently with it.
+    core_cfg, when given, applies TLS fragment the same way render.build_text
+    does -- a server that only works with fragment enabled must not show up
+    as failed just because the test dialed it without.
     """
     inbounds = []
     outbounds_list = []
@@ -60,7 +65,10 @@ def build_test_config(profiles: list[Profile], ports: list[int], iface_alias: st
             "protocol": "http",
             "settings": {},
         })
-        outbounds_list.append(outbounds.build(p, out_tag))
+        outbound = outbounds.build(p, out_tag)
+        if core_cfg:
+            coreopts.apply_fragment({"outbounds": [outbound]}, core_cfg, p)
+        outbounds_list.append(outbound)
         rules.append({"type": "field", "inboundTag": [in_tag], "outboundTag": out_tag})
 
     cfg = {
@@ -165,6 +173,7 @@ def _measure_group(
 def _run_batch(
     profiles: list[Profile], ports: list[int], *,
     url: str, timeout: float, iface_alias: str, on_result: OnResult, cancel: threading.Event,
+    core_cfg: dict | None = None,
 ) -> bool:
     """Start our own throwaway xray for this batch and measure it.
 
@@ -177,7 +186,7 @@ def _run_batch(
     config_path = paths.state_dir() / _CONFIG_NAME
     log_path = paths.state_dir() / _LOG_NAME
 
-    cfg = build_test_config(profiles, ports, iface_alias)
+    cfg = build_test_config(profiles, ports, iface_alias, core_cfg=core_cfg)
     config_path.write_text(json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")
 
     # Our own Popen and log file: never XrayProcess (it truncates xray.log,
@@ -220,12 +229,13 @@ def _run_batch(
 def _test_group(
     profiles: list[Profile], on_result: OnResult, cancel: threading.Event, *,
     url: str, timeout: float, iface_alias: str, run_batch: RunBatch,
+    core_cfg: dict | None = None,
 ) -> None:
     if cancel.is_set() or not profiles:
         return
     ports = [_free_port() for _ in profiles]
     ok = run_batch(profiles, ports, url=url, timeout=timeout, iface_alias=iface_alias,
-                    on_result=on_result, cancel=cancel)
+                    on_result=on_result, cancel=cancel, core_cfg=core_cfg)
     if ok:
         return
     if len(profiles) == 1:
@@ -233,11 +243,13 @@ def _test_group(
         return
     mid = len(profiles) // 2
     _test_group(profiles[:mid], on_result, cancel,
-                url=url, timeout=timeout, iface_alias=iface_alias, run_batch=run_batch)
+                url=url, timeout=timeout, iface_alias=iface_alias, run_batch=run_batch,
+                core_cfg=core_cfg)
     if cancel.is_set():
         return
     _test_group(profiles[mid:], on_result, cancel,
-                url=url, timeout=timeout, iface_alias=iface_alias, run_batch=run_batch)
+                url=url, timeout=timeout, iface_alias=iface_alias, run_batch=run_batch,
+                core_cfg=core_cfg)
 
 
 def real_delay_all(
@@ -251,6 +263,7 @@ def real_delay_all(
     iface_alias: str,
     connected: bool = False,
     run_batch: RunBatch | None = None,
+    core_cfg: dict | None = None,
 ) -> None:
     run_batch = run_batch or _run_batch
 
@@ -269,7 +282,8 @@ def real_delay_all(
         if cancel.is_set():
             return
         _test_group(testable[i:i + batch_size], on_result, cancel,
-                    url=url, timeout=timeout, iface_alias=iface_alias, run_batch=run_batch)
+                    url=url, timeout=timeout, iface_alias=iface_alias, run_batch=run_batch,
+                    core_cfg=core_cfg)
 
 
 _TCP_PING_UNAVAILABLE = frozenset({"wireguard", "hysteria2"})

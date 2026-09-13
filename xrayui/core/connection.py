@@ -9,7 +9,7 @@ import time
 from collections.abc import Callable
 
 from .. import paths
-from . import bootrestore, hotspot, network, render, routing
+from . import bootrestore, coreopts, hotspot, network, render, routing
 from . import settings as app_settings
 from . import tun2socks as t2s
 from . import xray as xray_mod
@@ -19,7 +19,7 @@ from .state import State
 IS_MAC = sys.platform == "darwin"
 IS_WIN = sys.platform == "win32"
 SOCKS_HOST = "127.0.0.1"
-SOCKS_PORT = 10808
+SOCKS_PORT = coreopts.DEFAULT_SOCKS_PORT
 
 
 class ConnectError(Exception):
@@ -122,6 +122,14 @@ class Connection:
         paths.runtime_config().unlink(missing_ok=True)
         raise ConnectError(reason)
 
+    def _log_lan_share(self, core_cfg: dict, iface) -> None:
+        if not core_cfg.get("allow_lan"):
+            return
+        port = coreopts.valid_socks_port(core_cfg.get("socks_port"))
+        has_auth = bool(core_cfg.get("lan_user")) and bool(core_cfg.get("lan_pass"))
+        suffix = "" if has_auth else " (no password!)"
+        self._log(f"Local proxy shared on the LAN at {iface.ipv4}:{port}{suffix}")
+
     def _connect_generic(self, profile: Profile, iface, server_ip: str, dns) -> None:
         self._log("Building runtime config...")
         cfgs = app_settings.load()
@@ -130,7 +138,8 @@ class Connection:
                            domain_strategy=routing.domain_strategy_for(cfgs["routing"]),
                            stats=True, log_level=cfgs.get("log_level"),
                            dns_cfg=cfgs.get("dns"), tun_mtu=cfgs.get("tun_mtu"),
-                           server_ip=server_ip)
+                           server_ip=server_ip, core_cfg=cfgs.get("core"))
+        self._log_lan_share(cfgs.get("core") or {}, iface)
 
         self._log("Starting Xray...")
         network.remove_routes(server_ip)
@@ -207,20 +216,26 @@ class Connection:
         self._log("Building runtime config (macOS: SOCKS + tun2socks bridge)...")
         cfgs = app_settings.load()
         rules = routing.build_rules(cfgs["routing"])
+        core_cfg = cfgs.get("core") or {}
         cfg = render.build(profile, iface.alias, routing_rules=rules,
                             domain_strategy=routing.domain_strategy_for(cfgs["routing"]),
                             stats=True, include_tun=False, log_level=cfgs.get("log_level"),
-                            dns_cfg=cfgs.get("dns"), server_ip=server_ip)
+                            dns_cfg=cfgs.get("dns"), server_ip=server_ip, core_cfg=core_cfg)
+        self._log_lan_share(core_cfg, iface)
+        # Same validation render already applied to socks-in inside cfg, so
+        # the port this process waits on and bridges from is the one Xray
+        # actually opened.
+        socks_port = coreopts.valid_socks_port(core_cfg.get("socks_port"))
 
         self._log("Starting Xray...")
         network.remove_routes(server_ip)
         network.add_host_route(server_ip, iface.gateway)
         self.xray.start(cfg)
-        if not _wait_port(SOCKS_HOST, SOCKS_PORT):
+        if not _wait_port(SOCKS_HOST, socks_port):
             self._fail_connect(server_ip, "Xray SOCKS inbound did not come up")
 
         self._log("Starting tun2socks bridge...")
-        self.tun2socks.start(SOCKS_HOST, SOCKS_PORT)
+        self.tun2socks.start(SOCKS_HOST, socks_port)
         if not t2s.bring_up_device():
             self._fail_connect(server_ip, "tun2socks TUN device did not appear")
 

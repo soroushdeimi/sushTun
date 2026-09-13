@@ -28,6 +28,19 @@ def test_include_tun_false_drops_only_tun_inbound():
     assert "socks-in" in tags and "dns-in" in tags
 
 
+def test_macos_socks_bridge_uses_the_configured_socks_port():
+    # _connect_macos waits on and bridges from coreopts.valid_socks_port's
+    # result, which must be the exact port render.build_text put on
+    # socks-in -- otherwise the bridge waits on a port Xray never opened.
+    from xrayui.core import coreopts
+    core_cfg = {"socks_port": 12345}
+    out = json.loads(render.build_text(parse_vless(SAMPLE), "en0", TEMPLATE,
+                                       include_tun=False, core_cfg=core_cfg))
+    socks = next(i for i in out["inbounds"] if i["tag"] == "socks-in")
+    assert socks["port"] == 12345
+    assert coreopts.valid_socks_port(core_cfg.get("socks_port")) == 12345
+
+
 def test_include_tun_true_keeps_tun_inbound_by_default():
     out = json.loads(render.build_text(parse_vless(SAMPLE), "en0", TEMPLATE))
     tags = [i["tag"] for i in out["inbounds"]]

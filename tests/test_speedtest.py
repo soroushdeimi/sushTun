@@ -73,7 +73,7 @@ def test_halving_isolates_a_single_bad_profile(tmp_path, monkeypatch):
     def on_result(uid, delay, error):
         results[uid] = (delay, error)
 
-    def fake_run_batch(batch, ports, *, url, timeout, iface_alias, on_result, cancel):
+    def fake_run_batch(batch, ports, *, url, timeout, iface_alias, on_result, cancel, core_cfg=None):
         if any(p.uid == bad.uid for p in batch):
             return False
         for p in batch:
@@ -95,7 +95,7 @@ def test_whole_batch_succeeds_without_halving():
     profiles = [VLESS_A, VLESS_B]
     calls = []
 
-    def fake_run_batch(batch, ports, *, url, timeout, iface_alias, on_result, cancel):
+    def fake_run_batch(batch, ports, *, url, timeout, iface_alias, on_result, cancel, core_cfg=None):
         calls.append([p.uid for p in batch])
         for p in batch:
             on_result(p.uid, 10.0, None)
@@ -118,7 +118,7 @@ def test_cancel_stops_before_remaining_batches():
     cancel = threading.Event()
     seen: list[str] = []
 
-    def fake_run_batch(batch, ports, *, url, timeout, iface_alias, on_result, cancel):
+    def fake_run_batch(batch, ports, *, url, timeout, iface_alias, on_result, cancel, core_cfg=None):
         seen.extend(p.uid for p in batch)
         cancel.set()  # simulate a cancel firing during the first batch
         for p in batch:
