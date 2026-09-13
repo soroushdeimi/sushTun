@@ -83,6 +83,17 @@ QPushButton#Danger:hover {{ background: #ff5e55; }}
 QPushButton#Danger:pressed {{ background: #e0352b; }}
 QPushButton#Danger:disabled {{ background: #4a2624; color: #a07a77; }}
 
+/* Same look as QPushButton, so a QToolButton (e.g. a split button with a
+   dropdown menu) doesn't stand out from the QPushButtons next to it. */
+QToolButton {{
+    background: #3a3a3d; border: 1px solid #48484c; border-radius: 7px;
+    padding: 6px 14px;
+}}
+QToolButton:hover {{ background: #444448; }}
+QToolButton:pressed {{ background: #303033; }}
+QToolButton:disabled {{ color: #5c5c61; background: #28282b; border-color: #313134; }}
+QToolButton::menu-button {{ border: none; width: 18px; }}
+
 QListWidget {{
     background: {SURFACE}; border: 1px solid {LINE}; border-radius: 10px; padding: 5px;
     outline: none;
