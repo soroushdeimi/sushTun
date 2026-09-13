@@ -2,10 +2,13 @@
 from __future__ import annotations
 
 import copy
+import sys
 import time
 
-from PySide6.QtCore import Qt, QThreadPool, QTimer, Signal
+from PySide6.QtCore import QEvent, Qt, QThreadPool, QTimer, Signal
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
+    QApplication,
     QHBoxLayout,
     QInputDialog,
     QLabel,
@@ -32,8 +35,22 @@ from .dns_dialog import DnsDialog
 from .log_tailer import LogTailer
 from .routing_dialog import RoutingDialog
 from .subscription_panel import SubscriptionPanel
+from .titlebar import TitleBar
 from .tools_panel import ToolsPanel
 from .widgets import AlertBanner, LogView, ProfilePanel, StatusCard
+
+# How far in from the border a press starts a resize on the frameless window.
+_RESIZE_MARGIN = 6
+_EDGE_CURSORS = {
+    Qt.LeftEdge: Qt.SizeHorCursor,
+    Qt.RightEdge: Qt.SizeHorCursor,
+    Qt.TopEdge: Qt.SizeVerCursor,
+    Qt.BottomEdge: Qt.SizeVerCursor,
+    Qt.LeftEdge | Qt.TopEdge: Qt.SizeFDiagCursor,
+    Qt.RightEdge | Qt.BottomEdge: Qt.SizeFDiagCursor,
+    Qt.RightEdge | Qt.TopEdge: Qt.SizeBDiagCursor,
+    Qt.LeftEdge | Qt.BottomEdge: Qt.SizeBDiagCursor,
+}
 
 
 class MainWindow(QMainWindow):
@@ -41,8 +58,19 @@ class MainWindow(QMainWindow):
 
     def __init__(self, elevated: bool = True) -> None:
         super().__init__()
+        self.titlebar = None  # changeEvent fires from here on, before the UI is built
         self.setWindowTitle("Xray Portable")
-        self.resize(1040, 680)
+        self.resize(1040, 700)
+        # macOS draws real traffic lights; elsewhere we draw our own.
+        self._frameless = sys.platform != "darwin"
+        if self._frameless:
+            self.setObjectName("Frameless")
+            self.setWindowFlag(Qt.FramelessWindowHint)
+            self.setAttribute(Qt.WA_TranslucentBackground)
+        self._handle = None
+        self._edge_cursor = False
+        self._quitting = False
+        self._told_about_tray = False
 
         self.store = ProfileStore()
         self.subs = sub_mod.SubscriptionStore()
@@ -176,11 +204,30 @@ class MainWindow(QMainWindow):
         splitter.setStretchFactor(1, 1)
         splitter.setSizes([320, 720])
 
-        container = QWidget()
-        cl = QHBoxLayout(container)
-        cl.setContentsMargins(14, 14, 14, 14)
+        body = QWidget()
+        body.setObjectName("WindowBody")
+        cl = QHBoxLayout(body)
         cl.addWidget(splitter)
-        self.setCentralWidget(container)
+        if self._frameless:
+            cl.setContentsMargins(14, 2, 14, 14)
+            self.frame = QWidget()
+            self.frame.setObjectName("WindowFrame")
+            fl = QVBoxLayout(self.frame)
+            fl.setContentsMargins(0, 0, 0, 0)
+            fl.setSpacing(0)
+            self.titlebar = TitleBar(self)
+            fl.addWidget(self.titlebar)
+            fl.addWidget(body, 1)
+            self.setCentralWidget(self.frame)
+        else:
+            cl.setContentsMargins(14, 14, 14, 14)
+            self.titlebar = None
+            self.setCentralWidget(body)
+
+        # The shortcuts a Mac user reaches for; Ctrl stands in for Cmd off macOS.
+        QShortcut(QKeySequence.Close, self, activated=self.close)
+        QShortcut(QKeySequence("Ctrl+M"), self, activated=self.showMinimized)
+        QShortcut(QKeySequence("Ctrl+Q"), self, activated=self._quit)
 
         self.profiles.importRequested.connect(self._import)
         self.profiles.editRequested.connect(self._edit)
@@ -214,20 +261,28 @@ class MainWindow(QMainWindow):
         self.tray = QSystemTrayIcon(icon, self)
         self.tray.setToolTip("Xray Portable")
         menu = QMenu()
-        menu.addAction("Show", self.showNormal)
+        menu.addAction("Show", self._show_window)
         menu.addAction("Connect", self._connect)
         menu.addAction("Disconnect", self._disconnect)
         menu.addSeparator()
         menu.addAction("Quit", self._quit)
         self.tray.setContextMenu(menu)
         self.tray.activated.connect(
-            lambda reason: self.showNormal()
+            lambda reason: self._show_window()
             if reason == QSystemTrayIcon.Trigger else None
         )
         self.tray.show()
+        # Closing the window only hides it now; the app ends through Quit alone.
+        QApplication.instance().setQuitOnLastWindowClosed(False)
+
+    def _show_window(self) -> None:
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
 
     def _quit(self) -> None:
-        from PySide6.QtWidgets import QApplication
+        # Qt 6 asks every window to close before quitting; this lets ours agree.
+        self._quitting = True
         QApplication.instance().quit()
 
     # Profiles --------------------------------------------------------------
@@ -569,7 +624,75 @@ class MainWindow(QMainWindow):
         self.btn_disconnect.setEnabled(not busy)
         self.btn_cleanup.setEnabled(not busy)
 
+    # Frameless window chrome ----------------------------------------------
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        if self._frameless and self._handle is None:
+            # The native window only exists once shown. Its events arrive before any
+            # child widget's, so the border stays resizable whatever sits under it.
+            self._handle = self.windowHandle()
+            if self._handle is not None:
+                self._handle.installEventFilter(self)
+
+    def _edges_at(self, pos) -> Qt.Edge:
+        edges = Qt.Edge(0)
+        if self.isMaximized() or self.isFullScreen():
+            return edges
+        m = _RESIZE_MARGIN
+        if pos.x() < m:
+            edges |= Qt.LeftEdge
+        elif pos.x() >= self.width() - m:
+            edges |= Qt.RightEdge
+        if pos.y() < m:
+            edges |= Qt.TopEdge
+        elif pos.y() >= self.height() - m:
+            edges |= Qt.BottomEdge
+        return edges
+
+    def eventFilter(self, obj, event) -> bool:
+        if obj is not self._handle or self._handle is None:
+            return super().eventFilter(obj, event)
+        kind = event.type()
+        if kind == QEvent.MouseMove and event.buttons() == Qt.NoButton:
+            edges = self._edges_at(event.position().toPoint())
+            if edges:
+                self.setCursor(_EDGE_CURSORS[edges])
+                self._edge_cursor = True
+            elif self._edge_cursor:
+                self.unsetCursor()
+                self._edge_cursor = False
+        elif kind == QEvent.MouseButtonPress and event.button() == Qt.LeftButton:
+            edges = self._edges_at(event.position().toPoint())
+            if edges and self._handle.startSystemResize(edges):
+                return True
+        return super().eventFilter(obj, event)
+
+    def changeEvent(self, event) -> None:
+        super().changeEvent(event)
+        if self.titlebar is None:
+            return
+        if event.type() == QEvent.ActivationChange:
+            self.titlebar.set_active(self.isActiveWindow())
+        elif event.type() == QEvent.WindowStateChange:
+            # Square, borderless corners when maximized, as on macOS.
+            self.frame.setProperty("maximized", self.isMaximized() or self.isFullScreen())
+            self.frame.style().unpolish(self.frame)
+            self.frame.style().polish(self.frame)
+
     def closeEvent(self, event) -> None:
+        # As on macOS, the red button closes the window but not the app: the
+        # tunnel keeps running and the tray brings the window back.
+        if self.tray is not None and not self._quitting:
+            event.ignore()
+            self.hide()
+            if not self._told_about_tray:
+                self._told_about_tray = True
+                self.tray.showMessage(
+                    "Xray Portable",
+                    "Still running here. Quit from this icon's menu, or press Ctrl+Q.",
+                    QSystemTrayIcon.Information, 5000,
+                )
+            return
         for t in (self.timer, self.alert_timer, self.autorefresh_timer, self.route_timer):
             t.stop()
         self.tailer.stop()

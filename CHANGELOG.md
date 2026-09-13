@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### New: a macOS-style window on Windows and Linux
+- The window now has macOS traffic lights: red closes, yellow minimizes, green zooms.
+  Hovering over them shows their ×, − and zoom marks, and they turn grey when the window
+  is not focused. Drag the title bar to move the window, double-click it to zoom, and
+  drag any edge to resize. macOS keeps its own native title bar.
+- The red button now closes only the window, as on macOS: the tunnel keeps running and
+  the tray icon brings the window back. The first time, a tray message says so. Quit from
+  the tray menu or press Ctrl+Q. Where there is no tray icon, closing still quits.
+- New shortcuts: Ctrl+W closes the window, Ctrl+M minimizes it, Ctrl+Q quits.
+- The theme follows macOS dark mode: its colours and system fonts, segmented tabs, and a
+  highlighted state for the Low usage and hotspot toggles, which showed no on/off state
+  before.
+
 ### Fixed: DNS lookups other than plain addresses hung for seconds
 Xray answered only address (A/AAAA) queries itself and passed every other kind
 (HTTPS/SVCB, SRV, TXT, PTR) on to the tunnel's own address, where nothing answers.

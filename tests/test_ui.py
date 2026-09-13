@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import copy
 import os
+import sys
 
 import pytest
 
@@ -161,3 +162,50 @@ def test_tool_signals_reach_their_handlers(window):
 
 def test_baseline_reports_plainly_when_not_connected(window):
     assert "Not connected" in window._baseline_fn()
+
+
+# -- Window chrome ---------------------------------------------------------
+class _FakeTray:
+    def __init__(self):
+        self.messages = []
+
+    def showMessage(self, *args):
+        self.messages.append(args[1])
+
+
+@pytest.mark.skipif(sys.platform == "darwin", reason="macOS keeps its native title bar")
+def test_title_bar_has_the_three_traffic_lights(window):
+    kinds = [light.kind for light in window.titlebar.lights.lights]
+    assert kinds == ["close", "minimize", "zoom"]
+    assert window.titlebar.title.text() == window.windowTitle()
+
+
+def test_close_hides_to_the_tray_and_keeps_the_tunnel_running(window):
+    window.tray = _FakeTray()
+    try:
+        window.show()
+        window.close()
+        assert not window.isVisible()
+        assert window.timer.isActive(), "closing the window must not stop the app"
+        window.close()
+        assert len(window.tray.messages) == 1, "the tray hint should show only once"
+    finally:
+        window.tray = None
+
+
+def test_close_without_a_tray_shuts_the_window_down(window):
+    window.tray = None
+    window.show()
+    window.close()
+    assert not window.timer.isActive()
+
+
+def test_quit_closes_even_with_a_tray(window, monkeypatch):
+    window.tray = _FakeTray()
+    monkeypatch.setattr(QApplication, "quit", lambda *a: None)
+    window.show()
+    window._quit()
+    window.close()
+    assert not window.timer.isActive()
+    assert not window.tray.messages
+    window.tray = None
