@@ -248,11 +248,11 @@ def test_delay_column_fits_inside_a_320px_panel(qapp):
         panel.close()
 
 
-def test_type_column_is_hidden_by_default_transport_and_subscription_are_not(qapp):
+def test_type_and_subscription_hidden_by_default_transport_is_not(qapp):
     panel = ProfilePanel()
     assert panel.table.isColumnHidden(COL_TYPE)
+    assert panel.table.isColumnHidden(COL_SUB)
     assert not panel.table.isColumnHidden(COL_TRANSPORT)
-    assert not panel.table.isColumnHidden(COL_SUB)
 
 
 def test_header_menu_toggles_an_optional_column(qapp):

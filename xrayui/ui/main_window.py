@@ -210,7 +210,7 @@ class MainWindow(QMainWindow):
         splitter.addWidget(right)
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
-        splitter.setSizes([320, 720])
+        splitter.setSizes([380, 660])
 
         body = QWidget()
         body.setObjectName("WindowBody")

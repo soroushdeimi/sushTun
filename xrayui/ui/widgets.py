@@ -29,6 +29,7 @@ from .server_table import (
     COL_ACTIVE,
     COL_DELAY,
     COL_NAME,
+    COL_SUB,
     COL_TYPE,
     OPTIONAL_COLUMNS,
     ProfileFilterProxy,
@@ -165,7 +166,9 @@ class ProfilePanel(QWidget):
         for col in (COL_ACTIVE, COL_DELAY, *[c for c, _ in OPTIONAL_COLUMNS]):
             header.setSectionResizeMode(col, QHeaderView.ResizeToContents)
         header.setStretchLastSection(False)
-        self.table.setColumnHidden(COL_TYPE, True)  # Transport already implies it
+        # Transport already implies Type; both stay in the header menu.
+        self.table.setColumnHidden(COL_TYPE, True)
+        self.table.setColumnHidden(COL_SUB, True)
         header.setContextMenuPolicy(Qt.CustomContextMenu)
         header.customContextMenuRequested.connect(self._show_header_menu)
 
