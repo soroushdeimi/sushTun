@@ -28,6 +28,13 @@ DEFAULTS: dict = {
         "servers": [],
         "query_strategy": "",
         "hosts": [],
+        # New keys below: all opt-in, so an untouched install renders exactly
+        # what it always has. No migration needed -- see dns.build_dns_and_rules.
+        "domestic_servers": [],
+        "remote_via_tunnel": False,
+        "parallel_query": False,
+        "serve_stale": False,
+        "raw_override": "",
     },
     "routing": {
         # The flat toggles below are "Simple" mode -- unreshaped, so no
