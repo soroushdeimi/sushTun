@@ -590,7 +590,7 @@ class SettingsDialog(QDialog):
         self._start_on_login_was = self.start_on_login.isChecked()
 
         # -- Backup & restore ----------------------------------------------
-        backup_group = QGroupBox("Backup & restore")
+        backup_group = QGroupBox("Backup && restore")
         backup_layout = QVBoxLayout(backup_group)
         backup_warning = QLabel(
             "A backup file contains your server passwords in plain text — "
