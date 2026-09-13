@@ -4,6 +4,7 @@ from __future__ import annotations
 import base64
 import binascii
 import json
+import re
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from .profiles import Profile
@@ -26,10 +27,42 @@ def _maybe_b64(text: str) -> str:
     return text
 
 
+def _std_query_fields(query: str) -> dict:
+    """Transport/TLS query keys shared by vless, trojan and the std vmess://
+    URI form -- everything that means the same thing regardless of which
+    protocol's credential/userinfo carries the rest of the link."""
+    q = {k: v[0] for k, v in parse_qs(query).items()}
+    network = q.get("type", "tcp") or "tcp"
+    if network == "raw":  # v2rayN's wire alias for plain tcp
+        network = "tcp"
+    insecure = (q.get("allowInsecure") or q.get("insecure") or "").strip().lower()
+    return {
+        "network": network,
+        "security": q.get("security", "none") or "none",
+        "sni": q.get("sni", ""),
+        "fp": q.get("fp", ""),
+        "alpn": q.get("alpn", ""),
+        "pbk": q.get("pbk", ""),
+        "sid": q.get("sid", ""),
+        "spx": q.get("spx", ""),
+        "path": unquote(q.get("path", "")),
+        "host": q.get("host", ""),
+        "service_name": q.get("serviceName", ""),
+        "header_type": q.get("headerType", ""),
+        "xhttp_mode": q.get("mode", ""),
+        "xhttp_extra": unquote(q.get("extra", "")),
+        "allow_insecure": insecure in ("1", "true"),
+        "ech": q.get("ech", ""),
+        "pcs": q.get("pcs", ""),
+        "vcn": q.get("vcn", ""),
+    }
+
+
 def parse_vless(url: str) -> Profile:
     s = urlsplit(url.strip())
     if s.scheme != "vless" or not s.hostname:
         raise ValueError("not a vless:// link")
+    fields = _std_query_fields(s.query)
     q = {k: v[0] for k, v in parse_qs(s.query).items()}
     name = unquote(s.fragment) if s.fragment else (s.hostname or "")
     return Profile(
@@ -40,18 +73,200 @@ def parse_vless(url: str) -> Profile:
         id=unquote(s.username or ""),
         encryption=q.get("encryption", "none") or "none",
         flow=q.get("flow", ""),
-        network=q.get("type", "tcp"),
-        security=q.get("security", "none"),
-        sni=q.get("sni", ""),
-        fp=q.get("fp", ""),
-        alpn=q.get("alpn", ""),
-        pbk=q.get("pbk", ""),
-        sid=q.get("sid", ""),
-        spx=q.get("spx", ""),
-        path=unquote(q.get("path", "")),
-        host=q.get("host", ""),
-        service_name=q.get("serviceName", ""),
+        **fields,
     )
+
+
+def parse_trojan(url: str) -> Profile:
+    s = urlsplit(url.strip())
+    if s.scheme != "trojan" or not s.hostname:
+        raise ValueError("not a trojan:// link")
+    fields = _std_query_fields(s.query)
+    name = unquote(s.fragment) if s.fragment else (s.hostname or "")
+    return Profile(
+        name=name or s.hostname,
+        protocol="trojan",
+        address=s.hostname,
+        port=s.port or 443,
+        id=unquote(s.username or ""),
+        **fields,
+    )
+
+
+def _parse_std_vmess(url: str) -> Profile:
+    """vmess://uuid@host:port?...#name -- the newer, non-base64 form."""
+    s = urlsplit(url)
+    if s.scheme != "vmess" or not s.hostname or not s.username:
+        raise ValueError("not a std vmess:// link")
+    fields = _std_query_fields(s.query)
+    name = unquote(s.fragment) if s.fragment else (s.hostname or "")
+    return Profile(
+        name=name or s.hostname,
+        protocol="vmess",
+        address=s.hostname,
+        port=s.port or 443,
+        id=unquote(s.username or ""),
+        vmess_security="auto",
+        **fields,
+    )
+
+
+def _vmess_json_profile(data: dict) -> Profile:
+    """The legacy base64(JSON) vmess:// form. `type` doubles as the xhttp
+    mode or the raw/tcp header type depending on `net`; grpc uses host as
+    the service authority and path as the service name, same as v2rayN."""
+    net = str(data.get("net") or "tcp").strip() or "tcp"
+    if net == "raw":
+        net = "tcp"
+    host = str(data.get("host") or "")
+    path = str(data.get("path") or "")
+    service_name = ""
+    if net == "grpc":
+        service_name, path = path, ""
+    type_field = str(data.get("type") or "")
+    insecure = str(data.get("insecure") or "").strip().lower()
+    return Profile(
+        name=str(data.get("ps") or data.get("add") or "imported"),
+        protocol="vmess",
+        address=str(data.get("add") or ""),
+        port=int(data.get("port") or 443),
+        id=str(data.get("id") or ""),
+        vmess_security=str(data.get("scy") or "auto") or "auto",
+        network=net,
+        security=str(data.get("tls") or "none") or "none",
+        sni=str(data.get("sni") or ""),
+        fp=str(data.get("fp") or ""),
+        alpn=str(data.get("alpn") or ""),
+        path=path,
+        host=host,
+        service_name=service_name,
+        header_type=type_field if net == "tcp" else "",
+        xhttp_mode=type_field if net == "xhttp" else "",
+        allow_insecure=insecure in ("1", "true"),
+        vcn=str(data.get("vcn") or ""),
+        pcs=str(data.get("pcs") or ""),
+    )
+
+
+def parse_vmess(url: str) -> Profile:
+    s = url.strip()
+    if not s.startswith("vmess://"):
+        raise ValueError("not a vmess:// link")
+    body = s[len("vmess://"):]
+    head = body.split("?", 1)[0].split("#", 1)[0]
+    if "@" in head:
+        try:
+            return _parse_std_vmess(s)
+        except ValueError:
+            pass  # fall through to the base64 JSON form below
+    try:
+        data = json.loads(_b64decode(body))
+    except (ValueError, binascii.Error) as e:
+        raise ValueError("not a valid vmess:// link") from e
+    if not isinstance(data, dict):
+        raise ValueError("not a valid vmess:// link")
+    return _vmess_json_profile(data)
+
+
+def _apply_ss_plugin(p: Profile, plugin_str: str) -> None:
+    """v2rayN's SIP002 plugin mapping (ShadowsocksFmt.ResolveSip002):
+    obfs-local (or the simple-obfs typo) with obfs=http -> tcp + an http
+    header carrying the obfs host; v2ray-plugin mode=websocket -> ws
+    (+tls). Anything else this app cannot actually reproduce in an Xray
+    config, so the caller must drop the whole link rather than connect
+    silently without the plugin's obfuscation.
+    """
+    if not plugin_str:
+        return
+    parts = [x for x in plugin_str.split(";") if x]
+    if not parts:
+        return
+    name = "obfs-local" if parts[0] == "simple-obfs" else parts[0]
+    opts: dict[str, str] = {}
+    for part in parts[1:]:
+        k, _, v = part.partition("=")
+        opts[k] = v
+    if name == "obfs-local":
+        if opts.get("obfs") == "http" and opts.get("obfs-host"):
+            p.network = "tcp"
+            p.header_type = "http"
+            p.host = opts["obfs-host"]
+            return
+        raise ValueError(f"unsupported obfs-local plugin options: {plugin_str}")
+    if name == "v2ray-plugin":
+        if opts.get("mode", "websocket") != "websocket":
+            raise ValueError(f"unsupported v2ray-plugin mode: {plugin_str}")
+        p.network = "ws"
+        if opts.get("host"):
+            p.host = opts["host"]
+        if opts.get("path"):
+            p.path = opts["path"].replace("\\=", "=").replace("\\,", ",").replace("\\\\", "\\")
+        if "tls" in opts:
+            p.security = "tls"
+        return
+    raise ValueError(f"unsupported ss plugin: {name}")
+
+
+_SS_LEGACY_RE = re.compile(r"^(?P<method>.+?):(?P<password>.*)@(?P<host>.+?):(?P<port>\d+)$")
+
+
+def _parse_ss_legacy(url: str) -> Profile | None:
+    """ss://base64(method:password@host:port)#tag -- the whole authority is
+    base64'd as one blob. Returns None (not a ValueError) when `url` isn't
+    this form at all, so the caller can fall through to SIP002 instead of
+    treating "not legacy" as "not a valid link"."""
+    body = url[len("ss://"):]
+    body, _, frag = body.partition("#")
+    try:
+        decoded = _b64decode(body.rstrip("/"))
+    except (binascii.Error, ValueError):
+        return None
+    m = _SS_LEGACY_RE.match(decoded)
+    if not m:
+        return None
+    host = m.group("host")
+    name = unquote(frag) if frag else host
+    return Profile(
+        name=name or host, protocol="shadowsocks", address=host,
+        port=int(m.group("port")), id=m.group("password"), ss_method=m.group("method"),
+        network="tcp", security="none",
+    )
+
+
+def _parse_ss_sip002(url: str) -> Profile:
+    s = urlsplit(url)
+    if s.scheme != "ss" or not s.hostname:
+        raise ValueError("not a ss:// link")
+    if s.password is not None:
+        # 2022-blake3 ciphers: method:password in the clear, unquoted --
+        # the password itself is already base64 and would double-decode.
+        # urlsplit already split userinfo on the first ":" for us.
+        method, password = unquote(s.username or ""), unquote(s.password or "")
+    else:
+        try:
+            decoded = _b64decode(unquote(s.username or ""))
+        except (binascii.Error, ValueError) as e:
+            raise ValueError("invalid ss:// userinfo") from e
+        method, _, password = decoded.partition(":")
+    if not method or not password:
+        raise ValueError("ss:// link is missing method or password")
+    q = {k: v[0] for k, v in parse_qs(s.query).items()}
+    name = unquote(s.fragment) if s.fragment else (s.hostname or "")
+    p = Profile(
+        name=name or s.hostname, protocol="shadowsocks", address=s.hostname,
+        port=s.port or 8388, id=password, ss_method=method,
+        network="tcp", security="none",
+    )
+    _apply_ss_plugin(p, unquote(q.get("plugin", "")))
+    return p
+
+
+def parse_shadowsocks(url: str) -> Profile:
+    url = url.strip()
+    if not url.startswith("ss://"):
+        raise ValueError("not a ss:// link")
+    legacy = _parse_ss_legacy(url)
+    return legacy if legacy is not None else _parse_ss_sip002(url)
 
 
 def _query_map(query: str) -> dict[str, str]:
@@ -175,6 +390,12 @@ def parse_share_text(text: str) -> list[Profile]:
         try:
             if line.startswith("vless://"):
                 out.append(parse_vless(line))
+            elif line.startswith("vmess://"):
+                out.append(parse_vmess(line))
+            elif line.startswith("trojan://"):
+                out.append(parse_trojan(line))
+            elif line.startswith("ss://"):
+                out.append(parse_shadowsocks(line))
             elif line.startswith("wireguard://") or line.startswith("wg://"):
                 out.append(parse_wireguard(line))
         except ValueError:
@@ -212,28 +433,17 @@ def _profile_from_wg_outbound(proxy: dict) -> Profile:
     )
 
 
-def _profile_from_config(cfg: dict) -> Profile:
-    outbounds = cfg.get("outbounds", [])
-    proxy = next((o for o in outbounds if o.get("tag") == "proxy"), None)
-    if proxy is None:
-        proxy = next(
-            (o for o in outbounds if o.get("protocol") in ("vless", "wireguard")),
-            None,
-        )
-    if proxy is None:
-        raise ValueError("no vless/wireguard/proxy outbound in config")
-    if (proxy.get("protocol") or "").lower() == "wireguard":
-        return _profile_from_wg_outbound(proxy)
-    vnext = proxy.get("settings", {}).get("vnext", [{}])[0]
-    user = (vnext.get("users") or [{}])[0]
-    stream = proxy.get("streamSettings", {})
+def _stream_fields(stream: dict) -> dict:
+    """streamSettings -> the Profile transport/TLS fields shared by every
+    stream-based protocol (vless, vmess, trojan, shadowsocks) -- the
+    reverse of core/outbounds/_common.py's stream_settings."""
     security = stream.get("security", "none")
     network = stream.get("network", "tcp")
     tls = stream.get("tlsSettings", {}) if security == "tls" else {}
     reality = stream.get("realitySettings", {}) if security == "reality" else {}
     alpn = tls.get("alpn", [])
 
-    path = host = service_name = ""
+    path = host = service_name = header_type = xhttp_mode = xhttp_extra = ""
     if network == "ws":
         ws = stream.get("wsSettings", {}) or {}
         path = ws.get("path", "")
@@ -247,7 +457,53 @@ def _profile_from_config(cfg: dict) -> Profile:
         path = h2.get("path", "")
         h2_host = h2.get("host", [])
         host = ",".join(h2_host) if isinstance(h2_host, list) else str(h2_host)
+    elif network == "xhttp":
+        xh = stream.get("xhttpSettings", {}) or {}
+        path = xh.get("path", "")
+        host = xh.get("host", "")
+        xhttp_mode = xh.get("mode", "")
+        extra = xh.get("extra")
+        if isinstance(extra, dict):
+            xhttp_extra = json.dumps(extra, ensure_ascii=False)
+    elif network == "httpupgrade":
+        hu = stream.get("httpupgradeSettings", {}) or {}
+        path = hu.get("path", "")
+        host = hu.get("host", "")
+    elif network == "tcp":
+        tcp = stream.get("tcpSettings", {}) or {}
+        header = tcp.get("header", {}) or {}
+        if header.get("type") == "http":
+            header_type = "http"
+            request = header.get("request", {}) or {}
+            paths = request.get("path") or []
+            path = paths[0] if paths else ""
+            hdr_hosts = (request.get("headers") or {}).get("Host") or []
+            host = ",".join(hdr_hosts) if isinstance(hdr_hosts, list) else str(hdr_hosts)
 
+    return {
+        "network": network,
+        "security": security,
+        "sni": tls.get("serverName", "") or reality.get("serverName", ""),
+        "fp": tls.get("fingerprint", "") or reality.get("fingerprint", ""),
+        "alpn": ",".join(alpn) if isinstance(alpn, list) else str(alpn),
+        "pbk": reality.get("publicKey", ""),
+        "sid": reality.get("shortId", ""),
+        "spx": reality.get("spiderX", ""),
+        "path": path,
+        "host": host,
+        "service_name": service_name,
+        "header_type": header_type,
+        "xhttp_mode": xhttp_mode,
+        "xhttp_extra": xhttp_extra,
+        "ech": tls.get("echConfigList", ""),
+        "pcs": tls.get("pinnedPeerCertSha256", ""),
+        "vcn": tls.get("verifyPeerCertByName", ""),
+    }
+
+
+def _profile_from_vless_outbound(proxy: dict) -> Profile:
+    vnext = proxy.get("settings", {}).get("vnext", [{}])[0]
+    user = (vnext.get("users") or [{}])[0]
     return Profile(
         name=vnext.get("address", "imported"),
         protocol=proxy.get("protocol", "vless"),
@@ -256,18 +512,71 @@ def _profile_from_config(cfg: dict) -> Profile:
         id=user.get("id", ""),
         encryption=user.get("encryption", "none") or "none",
         flow=user.get("flow", ""),
-        network=network,
-        security=security,
-        sni=tls.get("serverName", "") or reality.get("serverName", ""),
-        fp=tls.get("fingerprint", "") or reality.get("fingerprint", ""),
-        alpn=",".join(alpn) if isinstance(alpn, list) else str(alpn),
-        pbk=reality.get("publicKey", ""),
-        sid=reality.get("shortId", ""),
-        spx=reality.get("spiderX", ""),
-        path=path,
-        host=host,
-        service_name=service_name,
+        **_stream_fields(proxy.get("streamSettings", {})),
     )
+
+
+def _profile_from_vmess_outbound(proxy: dict) -> Profile:
+    vnext = proxy.get("settings", {}).get("vnext", [{}])[0]
+    user = (vnext.get("users") or [{}])[0]
+    return Profile(
+        name=vnext.get("address", "imported"),
+        protocol="vmess",
+        address=vnext.get("address", ""),
+        port=int(vnext.get("port", 443)),
+        id=user.get("id", ""),
+        vmess_security=user.get("security", "auto") or "auto",
+        **_stream_fields(proxy.get("streamSettings", {})),
+    )
+
+
+def _profile_from_trojan_outbound(proxy: dict) -> Profile:
+    server = (proxy.get("settings", {}).get("servers") or [{}])[0]
+    return Profile(
+        name=server.get("address", "imported"),
+        protocol="trojan",
+        address=server.get("address", ""),
+        port=int(server.get("port", 443)),
+        id=server.get("password", ""),
+        **_stream_fields(proxy.get("streamSettings", {})),
+    )
+
+
+def _profile_from_ss_outbound(proxy: dict) -> Profile:
+    server = (proxy.get("settings", {}).get("servers") or [{}])[0]
+    return Profile(
+        name=server.get("address", "imported"),
+        protocol="shadowsocks",
+        address=server.get("address", ""),
+        port=int(server.get("port", 443)),
+        id=server.get("password", ""),
+        ss_method=server.get("method", ""),
+        **_stream_fields(proxy.get("streamSettings", {})),
+    )
+
+
+_KNOWN_PROTOCOLS = ("vless", "vmess", "trojan", "shadowsocks", "wireguard")
+
+
+def _profile_from_config(cfg: dict) -> Profile:
+    outbounds = cfg.get("outbounds", [])
+    proxy = next((o for o in outbounds if o.get("tag") == "proxy"), None)
+    if proxy is None:
+        proxy = next(
+            (o for o in outbounds if o.get("protocol") in _KNOWN_PROTOCOLS), None,
+        )
+    if proxy is None:
+        raise ValueError("no proxy outbound in config")
+    protocol = (proxy.get("protocol") or "").lower()
+    if protocol == "wireguard":
+        return _profile_from_wg_outbound(proxy)
+    if protocol == "trojan":
+        return _profile_from_trojan_outbound(proxy)
+    if protocol == "shadowsocks":
+        return _profile_from_ss_outbound(proxy)
+    if protocol == "vmess":
+        return _profile_from_vmess_outbound(proxy)
+    return _profile_from_vless_outbound(proxy)
 
 
 def parse_json(text: str) -> Profile:
@@ -295,6 +604,12 @@ def parse_qr(image_path: str) -> list[Profile]:
         raise ValueError("no QR code found")
     if data.startswith("vless://"):
         return [parse_vless(data)]
+    if data.startswith("vmess://"):
+        return [parse_vmess(data)]
+    if data.startswith("trojan://"):
+        return [parse_trojan(data)]
+    if data.startswith("ss://"):
+        return [parse_shadowsocks(data)]
     if data.startswith("wireguard://") or data.startswith("wg://"):
         return [parse_wireguard(data)]
     if data.lstrip().startswith(("{", "[")):
