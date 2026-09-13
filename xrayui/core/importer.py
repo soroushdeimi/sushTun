@@ -301,6 +301,37 @@ def _split_endpoint(ep: str) -> tuple[str, int]:
     return host, int(port or 51820)
 
 
+def parse_hysteria2(url: str) -> Profile:
+    """hysteria2:// or hy2://. Auth is the userinfo, or ?auth= when the
+    userinfo is absent. mport, ':' becomes '-' the same way the outbound
+    builder and share.py both use, so no conversion happens either way
+    here -- it's stored and re-emitted as '-' throughout.
+    """
+    s = urlsplit(url.strip())
+    if s.scheme not in ("hysteria2", "hy2") or not s.hostname:
+        raise ValueError("not a hysteria2:// link")
+    q = {k: v[0] for k, v in parse_qs(s.query).items()}
+    auth = unquote(s.username or "") or q.get("auth", "")
+    insecure = (q.get("insecure") or "").strip().lower()
+    obfs_password = q.get("obfs-password", "") if q.get("obfs") == "salamander" else ""
+    name = unquote(s.fragment) if s.fragment else (s.hostname or "")
+    return Profile(
+        name=name or s.hostname,
+        protocol="hysteria2",
+        address=s.hostname,
+        port=s.port or 443,
+        id=auth,
+        sni=q.get("sni", ""),
+        alpn=q.get("alpn", ""),
+        pcs=q.get("pinSHA256", ""),
+        vcn=q.get("vcn", ""),
+        ech=q.get("ech", ""),
+        allow_insecure=insecure in ("1", "true"),
+        hy2_obfs_password=obfs_password,
+        hy2_ports=q.get("mport", "").replace(":", "-"),
+    )
+
+
 def parse_wireguard(url: str) -> Profile:
     s = urlsplit(url.strip())
     if s.scheme not in ("wireguard", "wg") or not s.hostname:
@@ -396,6 +427,8 @@ def parse_share_text(text: str) -> list[Profile]:
                 p = parse_trojan(line)
             elif line.startswith("ss://"):
                 p = parse_shadowsocks(line)
+            elif line.startswith("hysteria2://") or line.startswith("hy2://"):
+                p = parse_hysteria2(line)
             elif line.startswith("wireguard://") or line.startswith("wg://"):
                 p = parse_wireguard(line)
             else:
@@ -562,7 +595,41 @@ def _profile_from_ss_outbound(proxy: dict) -> Profile:
     )
 
 
-_KNOWN_PROTOCOLS = ("vless", "vmess", "trojan", "shadowsocks", "wireguard")
+def _profile_from_hysteria2_outbound(proxy: dict) -> Profile:
+    settings = proxy.get("settings") or {}
+    stream = proxy.get("streamSettings") or {}
+    tls = stream.get("tlsSettings") or {}
+    hy = stream.get("hysteriaSettings") or {}
+    finalmask = stream.get("finalmask") or {}
+    quic = finalmask.get("quicParams") or {}
+    hop = quic.get("udpHop") or {}
+    obfs_password = ""
+    for mask in finalmask.get("udp") or []:
+        if isinstance(mask, dict) and mask.get("type") == "salamander":
+            obfs_password = (mask.get("settings") or {}).get("password", "")
+            break
+    alpn = tls.get("alpn", [])
+    up = str(quic.get("brutalUp") or "").removesuffix("mbps")
+    down = str(quic.get("brutalDown") or "").removesuffix("mbps")
+    return Profile(
+        name=settings.get("address", "imported"),
+        protocol="hysteria2",
+        address=settings.get("address", ""),
+        port=int(settings.get("port", 443)),
+        id=hy.get("auth", ""),
+        sni=tls.get("serverName", ""),
+        alpn=",".join(alpn) if isinstance(alpn, list) else str(alpn),
+        pcs=tls.get("pinnedPeerCertSha256", ""),
+        vcn=tls.get("verifyPeerCertByName", ""),
+        hy2_obfs_password=obfs_password,
+        hy2_ports=hop.get("ports", ""),
+        hy2_hop_interval=str(hop.get("interval") or ""),
+        hy2_up_mbps=int(up) if up.isdigit() else 0,
+        hy2_down_mbps=int(down) if down.isdigit() else 0,
+    )
+
+
+_KNOWN_PROTOCOLS = ("vless", "vmess", "trojan", "shadowsocks", "hysteria", "wireguard")
 
 
 def _profile_from_config(cfg: dict) -> Profile:
@@ -583,6 +650,8 @@ def _profile_from_config(cfg: dict) -> Profile:
         return _profile_from_ss_outbound(proxy)
     if protocol == "vmess":
         return _profile_from_vmess_outbound(proxy)
+    if protocol == "hysteria":
+        return _profile_from_hysteria2_outbound(proxy)
     return _profile_from_vless_outbound(proxy)
 
 
@@ -622,6 +691,8 @@ def parse_qr(image_path: str) -> list[Profile]:
         p = parse_trojan(data)
     elif data.startswith("ss://"):
         p = parse_shadowsocks(data)
+    elif data.startswith("hysteria2://") or data.startswith("hy2://"):
+        p = parse_hysteria2(data)
     elif data.startswith("wireguard://") or data.startswith("wg://"):
         p = parse_wireguard(data)
     if p is not None:

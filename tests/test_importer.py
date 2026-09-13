@@ -479,3 +479,76 @@ def test_parse_json_raises_for_a_config_with_no_credential():
     }]}
     with pytest.raises(ValueError):
         importer.parse_json(json.dumps(cfg))
+
+
+# -- Hysteria2 ----------------------------------------------------------------
+def test_parse_hysteria2_userinfo_auth():
+    link = ("hysteria2://mypassword@a.example.com:443?sni=a.example.com&insecure=1"
+           "&obfs=salamander&obfs-password=obfspass&mport=20000-30000&alpn=h3#HY1")
+    p = importer.parse_hysteria2(link)
+    assert p.protocol == "hysteria2"
+    assert p.address == "a.example.com" and p.port == 443
+    assert p.id == "mypassword"
+    assert p.sni == "a.example.com"
+    assert p.allow_insecure is True
+    assert p.hy2_obfs_password == "obfspass"
+    assert p.hy2_ports == "20000-30000"
+    assert p.alpn == "h3"
+    assert p.name == "HY1"
+
+
+def test_parse_hy2_scheme_and_query_auth():
+    p = importer.parse_hysteria2("hy2://b.example.com:443?auth=mypass2&sni=b.example.com#HY2")
+    assert p.protocol == "hysteria2"
+    assert p.address == "b.example.com"
+    assert p.id == "mypass2"
+
+
+def test_parse_hysteria2_pinsha256_maps_to_pcs():
+    p = importer.parse_hysteria2(f"hysteria2://pw@c.example.com:443?pinSHA256={'ab' * 32}#HY3")
+    assert p.pcs == "ab" * 32
+
+
+def test_parse_hysteria2_default_port_443():
+    p = importer.parse_hysteria2("hysteria2://pw@d.example.com#HY4")
+    assert p.port == 443
+
+
+def test_parse_hysteria2_rejects_other_schemes():
+    with pytest.raises(ValueError):
+        importer.parse_hysteria2("vless://u@a.com:443")
+
+
+def test_parse_json_hysteria_outbound():
+    cfg = {"outbounds": [{
+        "tag": "proxy", "protocol": "hysteria",
+        "settings": {"address": "a.example.com", "port": 443, "version": 2},
+        "streamSettings": {
+            "network": "hysteria", "security": "tls",
+            "tlsSettings": {"serverName": "a.example.com", "alpn": ["h3"],
+                            "pinnedPeerCertSha256": "ab" * 32},
+            "hysteriaSettings": {"version": 2, "auth": "hy2pass"},
+            "finalmask": {
+                "quicParams": {"congestion": "brutal", "brutalUp": "100mbps",
+                              "brutalDown": "50mbps",
+                              "udpHop": {"ports": "20000-30000", "interval": "30"}},
+                "udp": [{"type": "salamander", "settings": {"password": "obfspass"}}],
+            },
+        },
+    }]}
+    p = importer.parse_json(json.dumps(cfg))
+    assert p.protocol == "hysteria2"
+    assert p.address == "a.example.com" and p.id == "hy2pass"
+    assert p.sni == "a.example.com" and p.alpn == "h3"
+    assert p.pcs == "ab" * 32
+    assert p.hy2_obfs_password == "obfspass"
+    assert p.hy2_ports == "20000-30000" and p.hy2_hop_interval == "30"
+    assert p.hy2_up_mbps == 100 and p.hy2_down_mbps == 50
+
+
+def test_mixed_subscription_includes_hysteria2():
+    blob = base64.b64encode(
+        f"{SAMPLE}\nhysteria2://pw@h.example.com:443?sni=h.example.com#HY\n".encode()
+    ).decode()
+    profiles = importer.parse_subscription(blob)
+    assert [p.protocol for p in profiles] == ["vless", "hysteria2"]
