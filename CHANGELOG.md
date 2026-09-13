@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.1.13
 
 ### New: a macOS-style window on Windows and Linux
 - The window now has macOS traffic lights: red closes, yellow minimizes, green zooms.
