@@ -151,6 +151,24 @@ def test_geo_update_now_success_sets_last_update_and_status(qapp, defaults, tmp_
     assert dlg.values()["geo"]["last_update"] > 0
 
 
+def test_geo_update_now_persists_the_source_alongside_last_update(qapp, defaults, tmp_path,
+                                                                    monkeypatch):
+    # A successful Update now already swapped real files on disk for that
+    # source; if the user then hits Cancel, settings must not claim a
+    # different source produced those files.
+    monkeypatch.setattr(dialogs_mod.app_settings.paths, "base_dir", lambda: tmp_path)
+    monkeypatch.setattr(dialogs_mod.geo_mod, "update", lambda source, fetch=None: None)
+    dlg = SettingsDialog(defaults)
+    dlg.geo_source.setCurrentText("Chocolate4U (Iran)")
+
+    dlg._update_geo_now()
+    _pump(lambda: not dlg._geo_busy)
+
+    saved = dialogs_mod.app_settings.load()
+    assert saved["geo"]["source"] == "Chocolate4U (Iran)"
+    assert saved["geo"]["last_update"] > 0
+
+
 def test_geo_update_now_failure_shows_inline_no_popup(qapp, defaults, tmp_path, monkeypatch):
     monkeypatch.setattr(dialogs_mod.app_settings.paths, "base_dir", lambda: tmp_path)
 

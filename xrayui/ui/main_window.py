@@ -118,6 +118,10 @@ class MainWindow(QMainWindow):
         self.geo_timer = QTimer(self)
         self.geo_timer.timeout.connect(self._maybe_auto_update_geo)
         self.geo_timer.start(60 * 60_000)
+        # An hourly-only timer means someone who opens the app briefly once
+        # a day never gets an overdue update; also check shortly after
+        # startup rather than waiting out the first full hour.
+        QTimer.singleShot(60_000, self._maybe_auto_update_geo)
 
         self._reload_profiles()
         self._reload_subs()

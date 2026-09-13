@@ -373,10 +373,15 @@ class SettingsDialog(QDialog):
             self._last_update = time.time()
             self._geo_updated = True
             # The files were already swapped on disk by geo.update() -- persist
-            # last_update right away rather than waiting on this dialog's own
-            # Save, so it survives even if the user then hits Cancel.
+            # last_update AND the source actually used right away, rather than
+            # waiting on this dialog's own Save, so both survive even if the
+            # user then hits Cancel. `source` is what was actually downloaded
+            # (captured before the update started), not necessarily whatever
+            # the combo shows by the time it finishes.
             data = app_settings.load()
-            data.setdefault("geo", {})["last_update"] = self._last_update
+            data.setdefault("geo", {})
+            data["geo"]["last_update"] = self._last_update
+            data["geo"]["source"] = source
             app_settings.save(data)
             self.geo_status.setText(self._format_last_update())
 
