@@ -126,6 +126,34 @@ def share_shadowsocks(p: Profile) -> str | None:
     return f"ss://{userinfo}@{_authority(p.address, p.port)}#{quote(p.name)}"
 
 
+def _hysteria2_query(p: Profile) -> dict[str, str]:
+    q: dict[str, str] = {}
+    if p.sni:
+        q["sni"] = p.sni
+    if p.alpn:
+        q["alpn"] = p.alpn
+    if p.allow_insecure:
+        q["insecure"] = "1"
+    if p.pcs:
+        q["pinSHA256"] = p.pcs
+    if p.vcn:
+        q["vcn"] = p.vcn
+    if p.ech:
+        q["ech"] = p.ech
+    if p.hy2_obfs_password:
+        q["obfs"] = "salamander"
+        q["obfs-password"] = p.hy2_obfs_password
+    if p.hy2_ports:
+        q["mport"] = p.hy2_ports
+    return q
+
+
+def share_hysteria2(p: Profile) -> str:
+    query = urlencode(_hysteria2_query(p), quote_via=quote)
+    userinfo = quote(p.id, safe="")
+    return f"hysteria2://{userinfo}@{_authority(p.address, p.port)}?{query}#{quote(p.name)}"
+
+
 def _wireguard_query(p: Profile) -> dict[str, str]:
     q: dict[str, str] = {"publickey": p.pbk}
     if p.wg_local_address:
@@ -158,6 +186,8 @@ def share_link(p: Profile) -> str | None:
         return share_vmess(p)
     if protocol == "trojan":
         return share_trojan(p)
+    if protocol == "hysteria2":
+        return share_hysteria2(p)
     if protocol == "shadowsocks":
         return share_shadowsocks(p)
     return share_vless(p)

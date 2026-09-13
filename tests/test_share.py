@@ -1,5 +1,6 @@
 from xrayui.core import share
 from xrayui.core.importer import (
+    parse_hysteria2,
     parse_shadowsocks,
     parse_trojan,
     parse_vless,
@@ -134,6 +135,24 @@ def test_shadowsocks_link_is_none_for_a_transport_sip002_cannot_express():
                      id="ss-pass", ss_method="aes-256-gcm", network="tcp",
                      header_type="http", host="cdn.i.example.com")
     assert share.share_link(p_obfs) is None
+
+
+def test_hysteria2_link_round_trips_plain():
+    p = Profile(
+        name="HY plain", protocol="hysteria2", address="a.example.com", port=443,
+        id="hy2-auth", sni="a.example.com",
+    )
+    assert _same(parse_hysteria2(share.share_link(p)), p)
+
+
+def test_hysteria2_link_round_trips_every_field():
+    p = Profile(
+        name="HY full", protocol="hysteria2", address="b.example.com", port=443,
+        id="hy2-auth2", sni="b.example.com", alpn="h3", allow_insecure=True,
+        pcs="ab" * 32, vcn="b.example.com", ech="ECHCONFIG",
+        hy2_obfs_password="obfspass", hy2_ports="20000-30000",
+    )
+    assert _same(parse_hysteria2(share.share_link(p)), p)
 
 
 def test_wireguard_link_round_trips_base64_keys_with_slash_plus_and_equals():
