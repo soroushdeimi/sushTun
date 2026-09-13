@@ -9,7 +9,7 @@ from dataclasses import asdict, dataclass, field
 
 from .. import paths
 from . import importer
-from .profiles import Profile, ProfileStore
+from .profiles import SUBSCRIPTIONS_FILENAME, Profile, ProfileStore
 
 _UA = "v2rayNG/1.8.5"
 
@@ -91,7 +91,7 @@ def fetch(url: str, timeout: float = 20.0):
 
 class SubscriptionStore:
     def __init__(self) -> None:
-        self.file = paths.profiles_dir() / "subscriptions.json"
+        self.file = paths.profiles_dir() / SUBSCRIPTIONS_FILENAME
 
     def list(self) -> list[Subscription]:
         if not self.file.exists():

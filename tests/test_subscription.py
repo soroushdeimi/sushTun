@@ -76,6 +76,7 @@ def test_refresh_keeps_active_uid_for_a_server_that_reappears(tmp_path, monkeypa
     assert profiles.active_uid() == old.uid
     kept = profiles.get(old.uid)
     assert kept is not None and kept.name == "New name"
+    assert [p.uid for p in profiles.list()] == [old.uid]
 
 
 def test_refresh_drops_a_server_that_disappeared(tmp_path, monkeypatch):

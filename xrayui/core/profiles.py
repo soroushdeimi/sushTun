@@ -7,6 +7,10 @@ from dataclasses import asdict, dataclass, field, fields
 
 from .. import paths
 
+# SubscriptionStore keeps its own file in this same directory; list() must
+# not try to parse it as a profile.
+SUBSCRIPTIONS_FILENAME = "subscriptions.json"
+
 
 @dataclass
 class Profile:
@@ -60,10 +64,15 @@ class ProfileStore:
         self.dir.mkdir(parents=True, exist_ok=True)
         items = []
         for p in self.dir.glob("*.json"):
+            if p.name == SUBSCRIPTIONS_FILENAME:
+                continue
             try:
-                items.append(Profile.from_dict(json.loads(p.read_text(encoding="utf-8"))))
+                data = json.loads(p.read_text(encoding="utf-8"))
             except (ValueError, OSError):
                 continue
+            if not isinstance(data, dict):
+                continue
+            items.append(Profile.from_dict(data))
         return sorted(items, key=lambda x: x.name.lower())
 
     def get(self, uid: str) -> Profile | None:
