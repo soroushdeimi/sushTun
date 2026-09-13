@@ -15,14 +15,14 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            artifact: XrayPortable-windows.exe
-            source: dist/XrayPortable.exe
+            artifact: sushTun-windows.exe
+            source: dist/sushTun.exe
           - os: ubuntu-latest
-            artifact: XrayPortable-linux
-            source: dist/XrayPortable
+            artifact: sushTun-linux
+            source: dist/sushTun
           - os: macos-latest
-            artifact: XrayPortable-macos
-            source: dist/XrayPortable
+            artifact: sushTun-macos
+            source: dist/sushTun
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4

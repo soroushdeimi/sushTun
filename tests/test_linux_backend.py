@@ -133,7 +133,7 @@ def test_installed_build_keeps_data_out_of_opt(monkeypatch, tmp_path):
 
 
 def test_portable_build_still_writes_next_to_itself(monkeypatch, tmp_path):
-    exe = tmp_path / "Downloads" / "XrayPortable-linux"
+    exe = tmp_path / "Downloads" / "sushTun-linux"
     _frozen_at(monkeypatch, exe)
     assert paths.base_dir() == exe.parent
 

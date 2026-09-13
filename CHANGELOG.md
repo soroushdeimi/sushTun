@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Changed: portable download names
+Downloads are now named `sushTun-windows.exe` / `sushTun-linux` / `sushTun-macos`
+instead of `XrayPortable-*`. The portable build keeps settings and profiles next to
+the file, so put the new file in the same folder as the old one. The Windows
+boot-restore task re-registers itself with the new file on the next Connect.
+
 ## v0.1.13
 
 ### New: a macOS-style window on Windows and Linux

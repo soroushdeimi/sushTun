@@ -53,7 +53,7 @@ else:
         a.scripts,
         a.binaries,
         a.datas,
-        name="XrayPortable",
+        name="sushTun",
         console=False,
         uac_admin=IS_WIN,
         upx=False,
