@@ -2,6 +2,8 @@ import copy
 import json
 from pathlib import Path
 
+import pytest
+
 from xrayui.core import render, routing
 from xrayui.core.importer import parse_vless
 from xrayui.core.settings import DEFAULTS
@@ -161,6 +163,28 @@ def test_custom_set_sanitizes_bad_ip_port_network():
 def test_custom_set_drops_a_rule_with_a_bad_outbound():
     rule = _rule(outbound="balancer:foo", domain=["example.com"])
     assert routing.build_rules(_with_set([rule])) == []
+
+
+@pytest.mark.parametrize("bad_field", [
+    {"port": 443},                # int instead of str
+    {"ip": [1234]},                # non-str entry in a list
+    {"network": ["tcp"]},          # list instead of str
+    {"domain": "google.com"},      # bare str instead of a list
+    {"protocol": "bittorrent"},    # bare str instead of a list
+])
+def test_custom_set_never_raises_on_malformed_fields(bad_field):
+    rule = _rule(**bad_field)
+    # Must not raise, from either the low-level converter or the full
+    # mode-dispatching entry point a real settings.json goes through.
+    out = routing.convert_user_rule(rule)
+    assert isinstance(out, list)
+    out2 = routing.build_rules(_with_set([rule]))
+    assert isinstance(out2, list)
+    for r in out + out2:
+        for key in ("domain", "ip", "protocol", "process"):
+            assert key not in r or all(isinstance(v, str) for v in r[key])
+        assert "port" not in r or isinstance(r["port"], str)
+        assert "network" not in r or isinstance(r["network"], str)
 
 
 def test_unknown_or_missing_set_falls_back_to_simple():

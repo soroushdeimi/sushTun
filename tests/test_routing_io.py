@@ -67,6 +67,23 @@ def test_import_case_insensitive_keys():
     assert sets[0]["rules"][0]["ip"] == ["geoip:private"]
 
 
+def test_import_normalizes_malformed_fields_so_stored_rules_are_type_safe():
+    # A hand-edited or third-party file can get these wrong the same ways
+    # a hand-edited settings.json can -- imported rules must come out just
+    # as safe to build_rules() as anything the app itself ever wrote.
+    text = json.dumps([
+        {"outboundTag": "proxy", "port": 443},
+        {"outboundTag": "proxy", "domain": "google.com"},
+        {"outboundTag": "proxy", "network": ["tcp"]},
+    ])
+    sets, skipped = routing_io.import_rules(text)
+    assert skipped == 0
+    rules = sets[0]["rules"]
+    assert rules[0]["port"] == "443" and isinstance(rules[0]["port"], str)
+    assert rules[1]["domain"] == ["google.com"]
+    assert rules[2]["network"] == ""  # a list isn't a valid network value
+
+
 def test_import_url_uses_the_v2rayng_user_agent():
     seen = {}
 

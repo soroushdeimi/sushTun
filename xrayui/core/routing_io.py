@@ -12,7 +12,7 @@ import urllib.request
 import uuid
 from collections.abc import Callable
 
-from . import subscription
+from . import routing, subscription
 
 _UA = subscription._UA  # same v2rayNG UA subscription.py already uses
 
@@ -35,16 +35,21 @@ def _rule_from_dict(d: dict) -> dict | None:
     outbound = _ci_get(d, "outboundTag", "outbound", default="proxy")
     if outbound not in _OUTBOUNDS:
         return None
+    # Same normalization convert_user_rule applies at build time (a list
+    # field given as a bare string, a port given as a JSON number, ...) --
+    # imported or hand-edited JSON commonly gets these wrong, and a stored
+    # rule the UI or build_rules can't safely handle is exactly the kind of
+    # thing that must never reach Xray.
     return {
-        "remarks": _ci_get(d, "remarks", default="") or "",
+        "remarks": routing._coerce_str(_ci_get(d, "remarks", default="")),
         "enabled": bool(_ci_get(d, "enabled", default=True)),
         "outbound": outbound,
-        "domain": list(_ci_get(d, "domain", default=[]) or []),
-        "ip": list(_ci_get(d, "ip", default=[]) or []),
-        "port": _ci_get(d, "port", default="") or "",
-        "network": _ci_get(d, "network", default="") or "",
-        "protocol": list(_ci_get(d, "protocol", default=[]) or []),
-        "process": list(_ci_get(d, "process", default=[]) or []),
+        "domain": routing._coerce_str_list(_ci_get(d, "domain", default=[])),
+        "ip": routing._coerce_str_list(_ci_get(d, "ip", default=[])),
+        "port": routing._sanitize_port(_ci_get(d, "port", default="")),
+        "network": routing._sanitize_network(_ci_get(d, "network", default="")),
+        "protocol": routing._coerce_str_list(_ci_get(d, "protocol", default=[])),
+        "process": routing._coerce_str_list(_ci_get(d, "process", default=[])),
     }
 
 

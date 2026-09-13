@@ -118,20 +118,46 @@ def domain_strategy_for(r: dict) -> str:
     return strategy if strategy in DOMAIN_STRATEGIES else "IPIfNonMatch"
 
 
+def _coerce_str(value) -> str:
+    """Anything a hand-edited or imported JSON might put in a string field.
+
+    Notably: an int (a port typed as a JSON number, not a string) coerces;
+    anything else that isn't already a string (a list, a dict, None) can't
+    be meaningfully turned into one, so it becomes empty rather than
+    crashing whatever calls .strip() on the result next.
+    """
+    if isinstance(value, str):
+        return value
+    if isinstance(value, int) and not isinstance(value, bool):
+        return str(value)
+    return ""
+
+
+def _coerce_str_list(value) -> list[str]:
+    """A list field given as a bare string becomes a one-item list (a
+    common hand-editing mistake); non-string entries are dropped rather
+    than iterated character-by-character or crashing on .strip()."""
+    if isinstance(value, str):
+        value = [value]
+    elif not isinstance(value, list):
+        return []
+    return [v.strip() for v in value if isinstance(v, str) and v.strip()]
+
+
 def _sanitize_port(port) -> str:
-    port = (port or "").strip()
+    port = _coerce_str(port).strip()
     return port if _PORT_RE.match(port) else ""
 
 
 def _sanitize_network(network) -> str:
-    network = (network or "").strip()
+    network = _coerce_str(network).strip()
     return network if network in _NETWORKS else ""
 
 
-def _sanitize_ip(ip: str) -> str | None:
-    ip = (ip or "").strip()
-    if not ip:
+def _sanitize_ip(ip) -> str | None:
+    if not isinstance(ip, str) or not ip.strip():
         return None
+    ip = ip.strip()
     if ip.startswith(("geoip:", "ext:")):
         return ip
     try:
@@ -160,16 +186,16 @@ def convert_user_rule(rule: dict) -> list[dict]:
 
     port = _sanitize_port(rule.get("port", ""))
     network = _sanitize_network(rule.get("network", ""))
-    protocol = [p.strip() for p in (rule.get("protocol") or []) if p and p.strip()]
-    process = [p.strip() for p in (rule.get("process") or []) if p and p.strip()]
+    protocol = _coerce_str_list(rule.get("protocol"))
+    process = _coerce_str_list(rule.get("process"))
 
     domains = []
-    for d in rule.get("domain") or []:
-        d = (d or "").replace("<COMMA>", ",").strip()
+    for d in _coerce_str_list(rule.get("domain")):
+        d = d.replace("<COMMA>", ",").strip()
         if d and not d.startswith("#"):
             domains.append(_norm_domain(d))
 
-    ips = [ip for ip in (_sanitize_ip(x) for x in (rule.get("ip") or [])) if ip]
+    ips = [ip for ip in (_sanitize_ip(x) for x in _coerce_str_list(rule.get("ip"))) if ip]
 
     def base() -> dict:
         out: dict = {"type": "field", "outboundTag": outbound}
@@ -213,8 +239,17 @@ def build_rules(r: dict) -> list[dict]:
         domains = list(LOW_USAGE_CATEGORIES) + list(LOW_USAGE_DOMAINS)
         rules.append({"type": "field", "domain": domains, "outboundTag": "direct"})
     for rule in custom.get("rules") or []:
-        if isinstance(rule, dict):
+        if not isinstance(rule, dict):
+            continue
+        try:
             rules.extend(convert_user_rule(rule))
+        except Exception:
+            # Belt-and-suspenders on top of convert_user_rule's own field
+            # sanitizing: hand-edited or imported JSON can still hold a
+            # shape neither of us anticipated, and one bad rule must never
+            # stop the rest of the set -- let alone Xray itself -- from
+            # working.
+            continue
     return rules
 
 
