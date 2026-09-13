@@ -35,8 +35,13 @@ from xrayui.core import network as network_mod  # noqa: E402
 from xrayui.core import settings as app_settings  # noqa: E402
 from xrayui.core import speedtest as speedtest_mod  # noqa: E402
 from xrayui.core.profiles import Profile  # noqa: E402
+from xrayui.core.subscription import Subscription  # noqa: E402
 from xrayui.ui import dialogs as dialogs_mod  # noqa: E402
-from xrayui.ui.dialogs import ProfileEditDialog, SettingsDialog  # noqa: E402
+from xrayui.ui.dialogs import (  # noqa: E402
+    ProfileEditDialog,
+    SettingsDialog,
+    SubscriptionEditDialog,
+)
 from xrayui.ui.dns_dialog import DnsDialog  # noqa: E402
 from xrayui.ui.server_table import COL_DELAY  # noqa: E402
 
@@ -845,3 +850,184 @@ def test_tray_routing_submenu_checks_current_mode_and_switching_updates_combo(wi
     assert window.settings["routing"]["mode"] == "s1"
     assert window.routing_combo.currentData() == "s1"
     assert window.routing_menu.actions()[1].isChecked()
+
+
+# -- Subscriptions (Phase 6) --------------------------------------------------
+def test_subscription_edit_dialog_round_trips_all_fields(qapp, warnings):
+    sub = Subscription(url="https://sub.example/x", name="My sub")
+    dlg = SubscriptionEditDialog(sub)
+    dlg.f_enabled.setChecked(False)
+    dlg.f_auto_hours.setValue(12)
+    dlg.f_name_filter.setText("germany")
+    dlg.f_user_agent.setText("MyClient/1.0")
+    dlg._save()
+    assert not warnings
+    assert dlg.result() == 1
+    saved = dlg.result_subscription()
+    assert saved.enabled is False
+    assert saved.auto_update_hours == 12
+    assert saved.name_filter == "germany"
+    assert saved.user_agent == "MyClient/1.0"
+
+
+def test_subscription_edit_dialog_refuses_a_bad_regex(qapp, warnings):
+    sub = Subscription(url="https://sub.example/x", name="My sub")
+    dlg = SubscriptionEditDialog(sub)
+    dlg.f_name_filter.setText("[unterminated")
+    dlg._save()
+    assert warnings
+    assert dlg.result() == 0
+
+
+def test_subscription_edit_dialog_requires_a_url(qapp, warnings):
+    dlg = SubscriptionEditDialog(Subscription())
+    dlg._save()
+    assert warnings
+    assert dlg.result() == 0
+
+
+def test_subscription_edit_dialog_autofills_name_from_url_host(qapp):
+    dlg = SubscriptionEditDialog(Subscription())
+    dlg.f_url.setText("https://sub.example.com/abc123")
+    dlg._maybe_autofill_name(dlg.f_url.text())
+    assert dlg.f_name.text() == "sub.example.com"
+
+
+def test_add_sub_uses_the_edit_dialog(window, monkeypatch):
+    created = {}
+
+    class FakeDialog:
+        def __init__(self, sub, parent=None):
+            sub.name = "Added sub"
+            sub.url = "https://sub.example/added"
+            created["sub"] = sub
+
+        def exec(self):
+            return 1
+
+        def result_subscription(self):
+            return created["sub"]
+
+    import xrayui.ui.main_window as main_window_mod
+    monkeypatch.setattr(main_window_mod, "SubscriptionEditDialog", FakeDialog)
+    monkeypatch.setattr(window, "_refresh_sub", lambda uid: None)
+    window._add_sub()
+
+    subs = window.subs.list()
+    assert len(subs) == 1
+    assert subs[0].name == "Added sub"
+    assert subs[0].url == "https://sub.example/added"
+
+
+def test_edit_button_and_double_click_open_the_editor_for_the_right_uid(window, monkeypatch):
+    from xrayui.ui.subscription_panel import SubscriptionRow
+
+    sub = Subscription(name="A sub", url="https://sub.example/x")
+    window.subs.save(sub)
+    window._reload_subs()
+
+    seen = []
+    # MainWindow.__init__ already connected subs_panel.editRequested to
+    # _edit_sub; monkeypatching the attribute is enough, no extra connect.
+    monkeypatch.setattr(window, "_edit_sub", lambda uid: seen.append(uid))
+
+    row = window.subs_panel.findChild(SubscriptionRow)
+    assert row.uid == sub.uid
+
+    row.editRequested.emit(row.uid)
+    assert seen == [sub.uid]
+
+    seen.clear()
+    from PySide6.QtCore import QEvent, QPointF, Qt
+    from PySide6.QtGui import QMouseEvent
+    event = QMouseEvent(QEvent.MouseButtonDblClick, QPointF(5, 5), QPointF(5, 5),
+                        Qt.LeftButton, Qt.LeftButton, Qt.NoModifier)
+    row.mouseDoubleClickEvent(event)
+    assert seen == [sub.uid]
+
+
+def test_disabled_sub_row_is_muted_and_meta_says_disabled(window):
+    from PySide6.QtWidgets import QLabel
+
+    from xrayui.ui.subscription_panel import SubscriptionRow
+
+    window.subs.save(Subscription(name="Off sub", url="https://sub.example/x", enabled=False))
+    window._reload_subs()
+    row = window.subs_panel.findChild(SubscriptionRow)
+    labels = row.findChildren(QLabel)
+    name_label = next(lab for lab in labels if lab.text() == "Off sub")
+    assert name_label.objectName() == "Muted"
+    meta_label = next(lab for lab in labels if "updated" in lab.text())
+    assert "disabled" in meta_label.text()
+
+
+def test_update_all_skips_disabled_and_updates_sequentially(window, monkeypatch):
+    order = []
+
+    def fake_refresh(sub, profiles, subs_store):
+        order.append(sub.uid)
+        sub.updated = time.time()
+        return sub
+
+    monkeypatch.setattr("xrayui.ui.main_window.sub_mod.refresh", fake_refresh)
+    on = Subscription(name="On", url="https://sub.example/on", enabled=True)
+    off = Subscription(name="Off", url="https://sub.example/off", enabled=False)
+    on2 = Subscription(name="On2", url="https://sub.example/on2", enabled=True)
+    window.subs.save(on)
+    window.subs.save(off)
+    window.subs.save(on2)
+
+    window._update_all_subs()
+    _pump(lambda: not window._workers)
+
+    assert order == [on.uid, on2.uid]
+    assert "Updated 2 of 2 subscriptions" in window.step_label.text()
+
+
+def test_update_all_reports_the_first_error(window, monkeypatch):
+    def fake_refresh(sub, profiles, subs_store):
+        if sub.name == "Bad":
+            raise ValueError("boom")
+        sub.updated = time.time()
+        return sub
+
+    monkeypatch.setattr("xrayui.ui.main_window.sub_mod.refresh", fake_refresh)
+    window.subs.save(Subscription(name="Bad", url="https://sub.example/bad", enabled=True))
+    window.subs.save(Subscription(name="Good", url="https://sub.example/good", enabled=True))
+
+    window._update_all_subs()
+    _pump(lambda: not window._workers)
+
+    assert "Updated 1 of 2 subscriptions" in window.step_label.text()
+    assert "boom" in window.step_label.text()
+
+
+def test_update_all_with_no_enabled_subs_does_nothing(window, monkeypatch):
+    called = []
+    monkeypatch.setattr("xrayui.ui.main_window.sub_mod.refresh",
+                        lambda *a, **k: called.append(1))
+    window.subs.save(Subscription(name="Off", url="https://sub.example/off", enabled=False))
+
+    window._update_all_subs()
+
+    assert called == []
+    assert "No enabled subscriptions" in window.step_label.text()
+
+
+def test_auto_refresh_subs_uses_is_due_and_skips_disabled(window, monkeypatch):
+    refreshed = []
+    monkeypatch.setattr(window, "_refresh_sub", lambda uid: refreshed.append(uid))
+    window.settings["alerts"]["auto_refresh_hours"] = 6
+
+    due = Subscription(name="Due", url="https://sub.example/due", enabled=True, updated=0)
+    not_due = Subscription(name="NotDue", url="https://sub.example/notdue",
+                           enabled=True, updated=time.time())
+    disabled = Subscription(name="Disabled", url="https://sub.example/disabled",
+                            enabled=False, updated=0)
+    window.subs.save(due)
+    window.subs.save(not_due)
+    window.subs.save(disabled)
+
+    window._auto_refresh_subs()
+
+    assert refreshed == [due.uid]

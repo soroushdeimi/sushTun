@@ -12,7 +12,6 @@ from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
     QHBoxLayout,
-    QInputDialog,
     QLabel,
     QMainWindow,
     QMenu,
@@ -33,7 +32,7 @@ from ..core.alerts import human_bytes
 from ..core.connection import Connection, _resolve
 from ..core.profiles import Profile, ProfileStore
 from ..core.xray import is_xray_running
-from .dialogs import ImportDialog, ProfileEditDialog, SettingsDialog
+from .dialogs import ImportDialog, ProfileEditDialog, SettingsDialog, SubscriptionEditDialog
 from .dns_dialog import DnsDialog
 from .log_tailer import LogTailer
 from .routing_dialog import RoutingDialog
@@ -287,6 +286,8 @@ class MainWindow(QMainWindow):
         self.subs_panel.addRequested.connect(self._add_sub)
         self.subs_panel.refreshRequested.connect(self._refresh_sub)
         self.subs_panel.deleteRequested.connect(self._delete_sub)
+        self.subs_panel.editRequested.connect(self._edit_sub)
+        self.subs_panel.updateAllRequested.connect(self._update_all_subs)
         self.tools.pingRequested.connect(lambda: self._run_tool(self._ping_fn))
         self.tools.delayRequested.connect(lambda: self._run_tool(self._delay_fn))
         self.tools.throughputRequested.connect(lambda: self._run_tool(self._throughput_fn))
@@ -537,15 +538,22 @@ class MainWindow(QMainWindow):
         self.subs_panel.set_subscriptions(self.subs.list())
 
     def _add_sub(self) -> None:
-        url, ok = QInputDialog.getText(self, "Add subscription", "Subscription URL:")
-        url = url.strip()
-        if not ok or not url:
+        dlg = SubscriptionEditDialog(sub_mod.Subscription(), self)
+        if not dlg.exec():
             return
-        name = url.split("//", 1)[-1].split("/", 1)[0] or url[:40]
-        sub = sub_mod.Subscription(url=url, name=name)
+        sub = dlg.result_subscription()
         self.subs.save(sub)
         self._reload_subs()
         self._refresh_sub(sub.uid)
+
+    def _edit_sub(self, uid: str) -> None:
+        sub = next((s for s in self.subs.list() if s.uid == uid), None)
+        if not sub:
+            return
+        dlg = SubscriptionEditDialog(sub, self)
+        if dlg.exec():
+            self.subs.save(dlg.result_subscription())
+            self._reload_subs()
 
     def _refresh_sub(self, uid: str) -> None:
         sub = next((s for s in self.subs.list() if s.uid == uid), None)
@@ -571,11 +579,48 @@ class MainWindow(QMainWindow):
             self._reload_subs()
             self._reload_profiles()
 
+    def _update_all_subs(self) -> None:
+        subs = [s for s in self.subs.list() if s.enabled]
+        if not subs:
+            self.step_label.setText("No enabled subscriptions to update.")
+            return
+        self.step_label.setText(f"Updating 0 of {len(subs)} subscriptions…")
+
+        def work():
+            # Sequential, not N parallel fetches: subscription hosts are
+            # often rate-limited, and this reuses the same UI-thread-safe
+            # pattern every other subscription action already uses.
+            updated = 0
+            first_error: str | None = None
+            for sub in subs:
+                try:
+                    sub_mod.refresh(sub, self.store, self.subs)
+                    updated += 1
+                except Exception as exc:
+                    if first_error is None:
+                        first_error = str(exc)
+            return updated, len(subs), first_error
+
+        def done(result=None, error=None):
+            if error:
+                self.step_label.setText(f"Update all failed: {error}")
+            else:
+                updated, total, first_error = result
+                msg = f"Updated {updated} of {total} subscriptions."
+                if first_error:
+                    msg += f" First error: {first_error}"
+                self.step_label.setText(msg)
+            self._reload_subs()
+            self._reload_profiles()
+            self._check_alerts()
+
+        self._run_async(work, done)
+
     def _auto_refresh_subs(self) -> None:
-        hours = self.settings.get("alerts", {}).get("auto_refresh_hours", 6)
-        cutoff = time.time() - hours * 3600
+        global_hours = self.settings.get("alerts", {}).get("auto_refresh_hours", 6)
+        now = time.time()
         for sub in self.subs.list():
-            if sub.updated < cutoff:
+            if sub_mod.is_due(sub, global_hours, now):
                 self._refresh_sub(sub.uid)
 
     # Alerts ----------------------------------------------------------------

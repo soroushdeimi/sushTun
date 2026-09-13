@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 
 from PySide6.QtCore import QThreadPool
@@ -32,6 +33,7 @@ from ..core import geo as geo_mod
 from ..core import settings as app_settings
 from ..core.outbounds.hysteria2 import normalize_ports
 from ..core.profiles import Profile, normalize_pcs, valid_pcs
+from ..core.subscription import DEFAULT_USER_AGENT, Subscription
 from .rule_editor import CollapsibleSection
 from .workers import Worker
 
@@ -810,3 +812,81 @@ class SettingsDialog(QDialog):
             self.accept()
 
         self._run_async(work, done)
+
+
+class SubscriptionEditDialog(QDialog):
+    def __init__(self, sub: Subscription, parent=None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Edit subscription")
+        self.resize(420, 0)
+        self._sub = sub
+        # Auto-fill Name from the URL's host, same as the old bare "paste a
+        # URL" Add flow -- but only until the user actually types a name of
+        # their own; an existing sub's real name must never get clobbered
+        # just because its URL field was touched.
+        self._name_auto = sub.name in ("", "Subscription")
+
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+        layout.addLayout(form)
+
+        self.f_name = QLineEdit(sub.name)
+        form.addRow("Name", self.f_name)
+        self.f_url = QLineEdit(sub.url)
+        form.addRow("URL", self.f_url)
+        self.f_enabled = QCheckBox("Enabled")
+        self.f_enabled.setChecked(sub.enabled)
+        form.addRow(self.f_enabled)
+        self.f_auto_hours = QSpinBox()
+        self.f_auto_hours.setRange(0, 168)
+        self.f_auto_hours.setSpecialValueText("0 (default)")
+        self.f_auto_hours.setValue(int(sub.auto_update_hours))
+        form.addRow("Auto-update every (hours)", self.f_auto_hours)
+        self.f_name_filter = QLineEdit(sub.name_filter)
+        self.f_name_filter.setPlaceholderText("Only keep servers whose name matches (regex)")
+        form.addRow("Name filter", self.f_name_filter)
+        self.f_user_agent = QLineEdit(sub.user_agent)
+        self.f_user_agent.setPlaceholderText(DEFAULT_USER_AGENT)
+        form.addRow("User-Agent", self.f_user_agent)
+
+        self.f_url.textEdited.connect(self._maybe_autofill_name)
+        self.f_name.textEdited.connect(self._stop_autofill_name)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self._save)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def _stop_autofill_name(self, _text: str) -> None:
+        self._name_auto = False
+
+    def _maybe_autofill_name(self, text: str) -> None:
+        if not self._name_auto:
+            return
+        # setText() below never emits textEdited (only user typing does),
+        # so this doesn't re-trigger _stop_autofill_name on itself.
+        host = text.strip().split("//", 1)[-1].split("/", 1)[0]
+        self.f_name.setText(host)
+
+    def _save(self) -> None:
+        url = self.f_url.text().strip()
+        if not url:
+            QMessageBox.warning(self, "Missing URL", "Subscription URL is required.")
+            return
+        name_filter = self.f_name_filter.text().strip()
+        if name_filter:
+            try:
+                re.compile(name_filter)
+            except re.error as exc:
+                QMessageBox.warning(self, "Invalid name filter", str(exc))
+                return
+        self._sub.name = self.f_name.text().strip() or url
+        self._sub.url = url
+        self._sub.enabled = self.f_enabled.isChecked()
+        self._sub.auto_update_hours = self.f_auto_hours.value()
+        self._sub.name_filter = name_filter
+        self._sub.user_agent = self.f_user_agent.text().strip()
+        self.accept()
+
+    def result_subscription(self) -> Subscription:
+        return self._sub

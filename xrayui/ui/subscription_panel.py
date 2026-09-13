@@ -43,6 +43,7 @@ def _ago(ts: float) -> str:
 class SubscriptionRow(QFrame):
     refreshRequested = Signal(str)
     deleteRequested = Signal(str)
+    editRequested = Signal(str)
 
     def __init__(self, sub: Subscription) -> None:
         super().__init__()
@@ -54,15 +55,20 @@ class SubscriptionRow(QFrame):
 
         top = QHBoxLayout()
         name = QLabel(sub.name)
-        name.setObjectName("H1")
+        # A disabled sub is still fully clickable (edit/enable it again) --
+        # only the name reads muted, rather than disabling the whole row.
+        name.setObjectName("Muted" if not sub.enabled else "H1")
+        edit = QPushButton("✎")
         refresh = QPushButton("↻")
         delete = QPushButton("✕")
-        for b in (refresh, delete):
+        for b in (edit, refresh, delete):
             b.setFixedWidth(34)
+        edit.clicked.connect(lambda: self.editRequested.emit(self.uid))
         refresh.clicked.connect(lambda: self.refreshRequested.emit(self.uid))
         delete.clicked.connect(lambda: self.deleteRequested.emit(self.uid))
         top.addWidget(name)
         top.addStretch(1)
+        top.addWidget(edit)
         top.addWidget(refresh)
         top.addWidget(delete)
         layout.addLayout(top)
@@ -83,6 +89,8 @@ class SubscriptionRow(QFrame):
         layout.addWidget(bar)
 
         parts = []
+        if not sub.enabled:
+            parts.append("disabled")
         if u.total:
             parts.append(f"{human_bytes(u.used)} / {human_bytes(u.total)}")
             parts.append(f"{human_bytes(u.remaining)} left")
@@ -95,11 +103,17 @@ class SubscriptionRow(QFrame):
         meta.setObjectName("Muted")
         layout.addWidget(meta)
 
+    def mouseDoubleClickEvent(self, event) -> None:
+        self.editRequested.emit(self.uid)
+        super().mouseDoubleClickEvent(event)
+
 
 class SubscriptionPanel(QWidget):
     addRequested = Signal()
     refreshRequested = Signal(str)
     deleteRequested = Signal(str)
+    editRequested = Signal(str)
+    updateAllRequested = Signal()
 
     def __init__(self) -> None:
         super().__init__()
@@ -109,10 +123,13 @@ class SubscriptionPanel(QWidget):
         head = QHBoxLayout()
         title = QLabel("Subscriptions")
         title.setObjectName("H1")
+        update_all = QPushButton("Update all")
+        update_all.clicked.connect(self.updateAllRequested)
         add = QPushButton("Add")
         add.clicked.connect(self.addRequested)
         head.addWidget(title)
         head.addStretch(1)
+        head.addWidget(update_all)
         head.addWidget(add)
         outer.addLayout(head)
 
@@ -134,4 +151,5 @@ class SubscriptionPanel(QWidget):
             row = SubscriptionRow(sub)
             row.refreshRequested.connect(self.refreshRequested)
             row.deleteRequested.connect(self.deleteRequested)
+            row.editRequested.connect(self.editRequested)
             self._rows.addWidget(row)
