@@ -405,6 +405,35 @@ def test_reconnect_now_disconnects_then_connects_then_hides(window, monkeypatch)
     assert window.btn_reconnect.isHidden()
 
 
+def test_reconnect_now_connects_to_the_active_profile_not_the_selected_row(window, monkeypatch):
+    a = window.store.save(Profile(name="A", address="a.example.com", port=443, id="u1"))
+    b = window.store.save(Profile(name="B", address="b.example.com", port=443, id="u2"))
+    window.store.set_active(a.uid)
+    window._reload_profiles()
+
+    # Select row A -- a single selection also activates it (existing
+    # behaviour), so store.active_uid() and current_uid() agree so far.
+    row_a = window.profiles.model.row_of_uid(a.uid)
+    window.profiles.table.selectRow(row_a)
+    assert window.profiles.current_uid() == a.uid
+
+    # Use fastest makes B active without disturbing the table selection --
+    # this is exactly what diverges the two after the multi-select fix.
+    window._use_fastest(b.uid)
+    assert window.store.active_uid() == b.uid
+    assert window.profiles.current_uid() == a.uid
+
+    calls = []
+    monkeypatch.setattr(window.conn, "disconnect", lambda: calls.append("disconnect"))
+    monkeypatch.setattr(window.conn, "connect", lambda p: calls.append(("connect", p.uid)))
+    monkeypatch.setattr(window.conn, "is_connected", lambda: True)
+
+    window._reconnect_now()
+    _pump(lambda: not window._busy)
+
+    assert calls == ["disconnect", ("connect", b.uid)]
+
+
 def test_tray_routing_submenu_checks_current_mode_and_switching_updates_combo(window):
     from PySide6.QtWidgets import QMenu
     window.routing_menu = QMenu()

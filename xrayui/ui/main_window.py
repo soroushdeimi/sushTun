@@ -334,7 +334,11 @@ class MainWindow(QMainWindow):
         self.profiles.set_profiles(profiles, self.store.active_uid())
 
     def _active_profile(self) -> Profile | None:
-        uid = self.profiles.current_uid() or self.store.active_uid()
+        # The store's active uid (the ● marker) is what Connect/Reconnect
+        # actually dial -- since multi-select landed, a selected row no
+        # longer implies it's the active one, so current_uid() is only a
+        # fallback for when nothing has ever been made active yet.
+        uid = self.store.active_uid() or self.profiles.current_uid()
         return self.store.get(uid) if uid else None
 
     def _import(self) -> None:

@@ -101,6 +101,23 @@ def test_set_active_uid_moves_the_marker_without_a_reset(qapp):
     assert model.data(idx(1, 0), Qt.DisplayRole) == "●"
 
 
+def test_set_results_and_set_sub_names_do_not_reset_the_model(qapp):
+    # _reload_profiles() calls these before set_profiles(); a reset here
+    # would clear the view's selection before set_profiles ever gets a
+    # chance to preserve it (see main_window's Reconnect-now fix).
+    model = ProfileTableModel()
+    model.set_profiles([A, B], "a")
+    resets = []
+    model.modelAboutToBeReset.connect(lambda: resets.append(1))
+
+    model.set_results({"a": {"delay_ms": 12.0, "error": None}})
+    model.set_sub_names({"s1": "My Sub"})
+
+    assert resets == []
+    assert model.data(model.index(0, COL_DELAY), Qt.DisplayRole) == "12 ms"
+    assert model.data(model.index(0, COL_SUB), Qt.DisplayRole) == "My Sub"
+
+
 def test_filter_matches_name_or_address(qapp):
     model = ProfileTableModel()
     model.set_profiles([A, B, C], None)

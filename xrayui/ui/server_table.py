@@ -48,15 +48,23 @@ class ProfileTableModel(QAbstractTableModel):
         self._active_uid = active_uid
         self.endResetModel()
 
+    def _redraw(self) -> None:
+        # A plain data refresh, not a structural change: dataChanged (not a
+        # begin/endResetModel pair) so the view's selection survives it.
+        # _reload_profiles() calls set_results/set_sub_names before
+        # set_profiles, and a reset here would clear the selection set_
+        # profiles later tries to preserve, before it ever gets a chance to.
+        if self.rowCount():
+            self.dataChanged.emit(self.index(0, 0),
+                                  self.index(self.rowCount() - 1, self.columnCount() - 1))
+
     def set_results(self, results: dict) -> None:
-        self.beginResetModel()
         self._results = dict(results)
-        self.endResetModel()
+        self._redraw()
 
     def set_sub_names(self, names: dict) -> None:
-        self.beginResetModel()
         self._sub_names = dict(names)
-        self.endResetModel()
+        self._redraw()
 
     def set_active_uid(self, uid: str | None) -> None:
         # Only the ● column of the old and new active rows changes -- no
