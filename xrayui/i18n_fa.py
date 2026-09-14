@@ -505,4 +505,6 @@ TRANSLATIONS_FA: dict[str, str] = {
 
     # -- ui/a-pages-main -----------------------------------------------------
     "More server actions": "گزینه‌های بیشتر سرور",
+    "Import…": "وارد کردن…",
+    "Delete subscription": "حذف اشتراک",
 }

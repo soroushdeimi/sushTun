@@ -46,7 +46,7 @@ _ALLOWLIST = {
 def _bare_literal_calls() -> list[tuple[str, int, str, str]]:
     """(filename, lineno, call-context, literal text) for every flagged call."""
     found = []
-    for path in sorted(UI_DIR.glob("*.py")):
+    for path in sorted([*UI_DIR.glob("*.py"), *(UI_DIR / "pages").glob("*.py")]):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
             if not isinstance(node, ast.Call):
