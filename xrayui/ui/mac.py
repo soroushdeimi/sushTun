@@ -41,6 +41,9 @@ class Switch(QAbstractButton):
         super().__init__(parent)
         self.setCheckable(True)
         self.setCursor(Qt.PointingHandCursor)
+        # The track has a fixed shape; layout must not stretch it.
+        from PySide6.QtWidgets import QSizePolicy
+        self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
 
     def sizeHint(self) -> QSize:
         return QSize(32, 19)
@@ -112,12 +115,15 @@ class InsetGroup(QFrame):
             note = QLabel(footnote, row)
             note.setObjectName("GroupRowFootnote")
             text_col.addWidget(note)
-        h.addLayout(text_col, 1)
+        h.addLayout(text_col, 0)
 
         if widget is not None:
             # Trailing side in both directions: the layout mirrors the
             # widget to the leading edge under RTL automatically.
-            h.addWidget(widget, 0, Qt.AlignVCenter)
+            # stretch 1 lets the widget fill remaining space (e.g. a
+            # PopupButton grows up to its maxWidth to show full text,
+            # while a Switch with Fixed policy ignores the stretch).
+            h.addWidget(widget, 1, Qt.AlignVCenter)
 
         self._rows.addWidget(row)
         return row
@@ -242,11 +248,19 @@ class IconButton(QToolButton):
         self.setToolTip(tooltip)
         self.setAccessibleName(tooltip)
 
+    def sizeHint(self) -> QSize:
+        # Always a square icon button; the QSS hides the menu-indicator that
+        # a QToolButton with a menu would otherwise add to this hint.
+        return QSize(28, 28)
+
 
 class PopupButton(QToolButton):
     """A 26px macOS popup: a muted label, a normal-coloured value and a
     chevron, opening an InstantPopup QMenu. set_menu() attaches the menu;
-    set_value() restyles it."""
+    set_value() restyles it. Grows to fit the full text up to 240px, then
+    elides and shows a tooltip holding the full value."""
+
+    _MAX_WIDTH = 240
 
     def __init__(self, label: str, value: str = "", parent=None) -> None:
         super().__init__(parent)
@@ -254,6 +268,7 @@ class PopupButton(QToolButton):
         self._value = value
         self.setPopupMode(QToolButton.InstantPopup)
         self.setCursor(Qt.PointingHandCursor)
+        self.setMaximumWidth(self._MAX_WIDTH)
         self._sync_accessible()
 
     def set_value(self, text: str) -> None:
@@ -268,9 +283,24 @@ class PopupButton(QToolButton):
     def _sync_accessible(self) -> None:
         self.setAccessibleName(f"{self._label}: {self._value}".strip(": ") or self._label)
 
+    def resizeEvent(self, event) -> None:  # noqa: N802 – Qt convention
+        super().resizeEvent(event)
+        # Any elision in paintEvent means the value no longer fits; the
+        # tooltip then carries the full label/value instead of clipping it.
+        fm = self.fontMetrics()
+        avail = max(self.width() - 2 * 10 - 12 - 6, 0)
+        full = self._full_text()
+        if fm.elidedText(full, Qt.ElideRight, avail) != full:
+            self.setToolTip(full)
+        else:
+            self.setToolTip("")
+
     def sizeHint(self) -> QSize:
-        w = self.fontMetrics().horizontalAdvance(self._full_text()) + 10 + 12 + 12
-        return QSize(w, 26)
+        # Same geometry the painter uses: leading pad + chevron + gap (+8 for
+        # slack) on the leading side and trailing pad, so the full text fits
+        # at its natural size and the paint code need not elide a Pixel early.
+        w = self.fontMetrics().horizontalAdvance(self._full_text()) + 10 + 12 + 8 + 10
+        return QSize(min(w, self._MAX_WIDTH), 26)
 
     def _full_text(self) -> str:
         text = self._value

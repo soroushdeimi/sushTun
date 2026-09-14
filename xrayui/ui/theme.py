@@ -209,6 +209,14 @@ QToolButton#IconButton:pressed {{
     background: rgba(255,255,255,0.12);
 }}
 QToolButton#IconButton:disabled {{ background: transparent; }}
+QToolButton#IconButton::menu-indicator {{ image: none; width: 0px; }}
+QPushButton#HeaderAction {{
+    background: #3a3a3d; border: 1px solid #48484c; color: {TEXT};
+    font-weight: 600; padding: 9px 20px; border-radius: 8px;
+}}
+QPushButton#HeaderAction:hover {{ background: #444448; }}
+QPushButton#HeaderAction:pressed {{ background: #303033; }}
+QPushButton#HeaderAction:disabled {{ background: #28282b; color: #5c5c61; border-color: #313134; }}
 
 QMenu {{
     background: #2c2c2e; border: 1px solid #45454a; border-radius: 8px; padding: 5px;

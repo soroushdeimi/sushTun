@@ -5,22 +5,24 @@ interaction, signal plumbing and RTL mirroring.
 from __future__ import annotations
 
 import os
+import re
 
 import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import Qt  # noqa: E402
+from PySide6.QtCore import QSize, Qt  # noqa: E402
 from PySide6.QtGui import QPixmap  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
-from PySide6.QtWidgets import (
+from PySide6.QtWidgets import (  # noqa: E402
+    QAbstractButton,
     QApplication,
     QFrame,
     QLabel,
     QMenu,
     QToolButton,
     QWidget,
-)  # noqa: E402
+)
 
 from xrayui import i18n  # noqa: E402
 from xrayui.ui import icons, theme  # noqa: E402
@@ -127,6 +129,30 @@ def test_inset_group_leading_trailing_mirrors_in_rtl(qapp):
     assert lbl.x() > sw.x()
 
 
+def test_inset_group_label_keeps_full_width_in_narrow_row(qapp):
+    # A row must never squeeze its label: the trailing widget gets the
+    # leftover space, not the label. (The gallery used to show "ro…".)
+    grp = InsetGroup()
+    row = grp.add_row("Server settings", Switch())
+    grp.resize(200, 60)
+    grp.show()
+    qapp.processEvents()
+    lbl = row.findChild(QLabel, "GroupRowLabel")
+    assert lbl.width() >= lbl.sizeHint().width()
+
+
+def test_inset_group_trailing_switch_keeps_natural_size(qapp):
+    # A Fixed-policy Switch ignores the row's extra stretch and stays
+    # track-sized instead of ballooning across the row.
+    grp = InsetGroup()
+    sw = Switch()
+    grp.add_row("Label", sw)
+    grp.resize(420, 60)
+    grp.show()
+    qapp.processEvents()
+    assert sw.width() == sw.sizeHint().width()
+
+
 # -- Sidebar ------------------------------------------------
 def test_sidebar_item_checked_state(qapp):
     item = SidebarItem("Servers", "servers")
@@ -173,6 +199,26 @@ def test_popup_button_renders(qapp):
     _render(pb)
 
 
+def test_popup_button_size_hint_respects_max_width(qapp):
+    pb = PopupButton("Region", "x" * 200)
+    assert pb.maximumWidth() == PopupButton._MAX_WIDTH
+    assert pb.sizeHint().width() == PopupButton._MAX_WIDTH
+
+
+def test_popup_button_elides_and_tooltips_at_narrow_width(qapp):
+    value = "Iran smart routing"
+    pb = PopupButton("Region", value)
+    pb.show()
+    qapp.processEvents()
+    assert pb.width() <= PopupButton._MAX_WIDTH
+    pb.resize(150, 26)
+    qapp.processEvents()
+    assert pb.toolTip() == f"Region: {value}"
+    pb.resize(pb.sizeHint())
+    qapp.processEvents()
+    assert pb.toolTip() == ""
+
+
 # -- IconButton -----------------------------------------------------------
 def test_icon_button_tooltip_is_the_accessible_name(qapp):
     btn = IconButton("refresh", "Refresh")
@@ -190,6 +236,7 @@ def test_icon_button_without_tooltip_is_impossible(qapp):
 def test_icon_button_is_an_icon_only_28_square(qapp):
     btn = IconButton("ellipsis", "More")
     assert btn.width() == 28 and btn.height() == 28
+    assert btn.sizeHint() == QSize(28, 28)  # the hidden menu indicator adds nothing
     assert not btn.icon().isNull()
 
 
@@ -263,8 +310,8 @@ def test_connection_header_set_and_connected(qapp):
     h = ConnectionHeader()
     h.set("throughput", "↓ 4.2 ↑ 0.3 Mbit/s")
     h.set("used", "18.6 GB")
-    assert h._down_up.text() == i18n.ltr("↓ 4.2 ↑ 0.3 Mbit/s")
-    assert h._session.text() == i18n.ltr("18.6 GB")
+    assert h._down_up_col[1].text() == i18n.ltr("↓ 4.2 ↑ 0.3 Mbit/s")
+    assert h._session_col[1].text() == i18n.ltr("18.6 GB")
     assert h._meta.text() == "—"
 
 
@@ -280,12 +327,13 @@ def test_connection_header_meta_line_uses_ltr(qapp):
 
 def test_connection_header_connected_state(qapp):
     h = ConnectionHeader()
+    h.show()
     h.set_connected(False)
     assert h._state.text() == "Disconnected"
-    assert h.btn_connect.isEnabled() and not h.btn_disconnect.isEnabled()
+    assert h.btn_connect.isVisible() and not h.btn_disconnect.isVisible()
     h.set_connected(True)
     assert h._state.text() == "Connected"
-    assert not h.btn_connect.isEnabled() and h.btn_disconnect.isEnabled()
+    assert not h.btn_connect.isVisible() and h.btn_disconnect.isVisible()
 
 
 def test_connection_header_state_translates_to_fa(_english_namespace):
@@ -354,3 +402,111 @@ def test_connection_header_renders_every_state(qapp):
     h.set_connected(True)
     h.hide_reconnect()
     _render(h)
+
+
+# -- layout gate: nothing may clip -------------------------------------
+# The review gate materialised as tests: render the header at a given width
+# in the given language and assert every label/button is at least its
+# sizeHint wide, except the two labels that elide on purpose and then carry
+# the full text in their tooltip (_meta, _notice_label -- checked separately).
+
+
+def _header_for_layout_tests() -> ConnectionHeader:
+    h = ConnectionHeader()
+    h.set("endpoint", "de.example.com:443")
+    h.set("protocol", "reality")
+    h.set("delay", "650 ms")
+    h.set("iface", "utun3")
+    h.set("throughput", "↓ 4.2 ↑ 0.3 Mbit/s")
+    h.set("used", "18.6 GB")
+    h.set_connected(True)
+    h.set_timer("00:42:17")
+    return h
+
+
+@pytest.mark.parametrize("lang,width", [
+    ("en", 560), ("en", 800),
+    ("fa", 560), ("fa", 800),
+])
+def test_connection_header_lays_out_without_clipping(qapp, lang, width):
+    i18n.set_language(lang)
+    h = _header_for_layout_tests()
+    h.show_reconnect(
+        i18n.tr("{what} — reconnect to apply.", what=i18n.tr("DNS saved")))
+    h.resize(width, 180)
+    h.show()
+    qapp.processEvents()
+    # If the header refused to shrink below its content, the test would be
+    # vacuously green; the object of this test is a 560px window.
+    assert h.width() == width
+    elide = (h._meta, h._notice_label)
+    kids = h.findChildren(QLabel) + h.findChildren(QAbstractButton)
+    for w in kids:
+        if w in elide:
+            continue
+        hint = w.sizeHint().width()
+        assert w.width() + 1 >= hint, (
+            f"{lang}/{width}px: {w.objectName() or type(w).__name__} "
+            f"at {w.width()}px < sizeHint {hint}px")
+    h.hide()
+    i18n.set_language("en")
+
+
+def test_connection_header_elide_labels_tooltip_the_full_text(qapp):
+    i18n.set_language("fa")
+    h = _header_for_layout_tests()
+    h.show_reconnect(
+        i18n.tr("{what} — reconnect to apply.", what=i18n.tr("DNS saved")))
+    h.resize(480, 180)
+    h.show()
+    qapp.processEvents()
+    for lbl, full in ((h._meta, h._meta_full),
+                      (h._notice_label, h._notice_full)):
+        fits = lbl.fontMetrics().horizontalAdvance(full) <= lbl.width()
+        if fits:
+            assert lbl.toolTip() == "", lbl.objectName()
+        else:
+            assert lbl.toolTip() == full, lbl.objectName()
+    h.hide()
+    i18n.set_language("en")
+
+
+def test_connection_header_meta_elides_middle_with_tooltip(qapp):
+    h = ConnectionHeader()
+    h.set("endpoint", "an-extra-long-server-address.example-vpn-provider.com")
+    h.set("protocol", "reality")
+    h.set("iface", "utun3")
+    h.set_connected(True)
+    h.resize(360, 160)
+    h.show()
+    qapp.processEvents()
+    fm = h._meta.fontMetrics()
+    assert fm.horizontalAdvance(h._meta.text()) < fm.horizontalAdvance(h._meta_full)
+    assert "…" in h._meta.text()
+    assert h._meta.toolTip() == h._meta_full
+    h.hide()
+
+
+# -- fa reconnect notice: no English leaks (except technical terms) -------
+def test_fa_reconnect_notice_keeps_only_technical_terms_latin(qapp):
+    i18n.set_language("fa")
+    h = ConnectionHeader()
+    # Advanced-settings path: the changed list is built from translated
+    # labels -- a bare literal here would leak into the notice.
+    changed = [label for label, old, new in (
+        (i18n.tr("MTU"), 1, 2),
+        (i18n.tr("Log level"), "a", "b"),
+        (i18n.tr("Core options"), {}, {}),
+    ) if old != new]
+    h.show_reconnect(i18n.tr(
+        "{what} — reconnect to apply.",
+        what=i18n.tr("{items} changed", items=", ".join(changed))))
+    latin = set(re.findall(r"[A-Za-z]+", h._notice_full))
+    assert latin <= {"MTU"}, f"unexpected English in fa notice: {sorted(latin)}"
+    # A second path ("DNS saved"): DNS stays Latin, everything else is fa.
+    h.show_reconnect(i18n.tr(
+        "{what} — reconnect to apply.", what=i18n.tr("DNS saved")))
+    latin = set(re.findall(r"[A-Za-z]+", h._notice_full))
+    assert latin <= {"DNS"}, f"unexpected English in fa notice: {sorted(latin)}"
+    h.hide()
+    i18n.set_language("en")
