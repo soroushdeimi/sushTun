@@ -16,7 +16,7 @@ else:
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import Qt  # noqa: E402
-from PySide6.QtWidgets import QApplication  # noqa: E402
+from PySide6.QtWidgets import QApplication, QLineEdit, QPlainTextEdit  # noqa: E402
 
 from xrayui import i18n, paths  # noqa: E402
 from xrayui.core.profiles import Profile  # noqa: E402
@@ -84,6 +84,14 @@ def test_import_dialog_builds_in_persian(fa, qapp):
         dlg.close()
 
 
+# Every ProfileEditDialog f_* text field is a technical value (address, key,
+# path, JSON, a port range...) except the freeform display name --
+# enumerated below instead of named one by one, so a new technical field
+# added later without an explicit LTR override fails this test instead of
+# silently drifting.
+_FREE_TEXT_FIELDS = {"f_name"}
+
+
 @pytest.mark.parametrize("protocol", [
     "vless", "vmess", "trojan", "shadowsocks", "hysteria2", "wireguard",
 ])
@@ -93,8 +101,14 @@ def test_profile_edit_dialog_builds_in_persian_for_every_protocol(fa, qapp, prot
     dlg = ProfileEditDialog(p)
     try:
         assert dlg.windowTitle() == "ویرایش سرور"
-        assert dlg.f_address.layoutDirection() == Qt.LeftToRight
-        assert dlg.f_id.layoutDirection() == Qt.LeftToRight
+        checked = 0
+        for name, widget in vars(dlg).items():
+            if not name.startswith("f_") or not isinstance(widget, (QLineEdit, QPlainTextEdit)):
+                continue
+            checked += 1
+            expected = Qt.RightToLeft if name in _FREE_TEXT_FIELDS else Qt.LeftToRight
+            assert widget.layoutDirection() == expected, f"{name} has the wrong direction"
+        assert checked >= 20, "expected many more f_* text fields than were found"
     finally:
         dlg.close()
 

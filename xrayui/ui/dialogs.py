@@ -242,7 +242,8 @@ class ProfileEditDialog(QDialog):
         for f in (self.f_address, self.f_id, self.f_encryption, self.f_flow, self.f_sni,
                  self.f_fp, self.f_alpn, self.f_pbk, self.f_sid, self.f_spx, self.f_path,
                  self.f_host, self.f_service, self.f_wg_local, self.f_wg_psk,
-                 self.f_wg_reserved, self.f_hy2_pcs, self.f_hy2_obfs_password):
+                 self.f_wg_reserved, self.f_hy2_pcs, self.f_hy2_obfs_password,
+                 self.f_hy2_ports):
             f.setLayoutDirection(Qt.LeftToRight)
 
         self._add_row(form, tr("Name"), self.f_name)
