@@ -502,4 +502,7 @@ TRANSLATIONS_FA: dict[str, str] = {
     "Down / Up": "دانلود / آپلود",
     "This session": "این نشست",
     "More connection actions": "گزینه‌های بیشتر اتصال",
+
+    # -- ui/a-pages-main -----------------------------------------------------
+    "More server actions": "گزینه‌های بیشتر سرور",
 }

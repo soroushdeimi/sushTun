@@ -142,15 +142,19 @@ class StatusCard(QFrame):
         self.pill.style().polish(self.pill)
 
 
-class ProfilePanel(QWidget):
-    # Kept exactly as before so MainWindow's wiring stays small.
+class _ServerTableCore(QWidget):
+    """The server table's reusable core: model, proxy, multi-select table,
+    context menu, header menu and share/QR, extracted from ProfilePanel so
+    the old panel and the new ServersPage behave identically. The filter
+    input and the toolbar buttons exist here as widgets but the consumer
+    places them in its own layout (the panel puts the toolbar below the
+    table, the page above it)."""
+
     importRequested = Signal()
     editRequested = Signal(str)
     duplicateRequested = Signal(str)
     deleteRequested = Signal(str)
     activated = Signal(str)
-
-    # New, additive: multi-select delete and the speed-test toolbar/menu.
     deleteManyRequested = Signal(list)
     testRealDelayRequested = Signal(list)
     tcpPingRequested = Signal(list)
@@ -161,16 +165,12 @@ class ProfilePanel(QWidget):
 
     def __init__(self) -> None:
         super().__init__()
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-
-        header = QLabel(tr("Servers"))
-        header.setObjectName("H1")
-        layout.addWidget(header)
+        if not hasattr(self, "_layout"):
+            self._layout = QVBoxLayout(self)
+        self._layout.setContentsMargins(0, 0, 0, 0)
 
         self.filter_edit = QLineEdit()
         self.filter_edit.setPlaceholderText(tr("Filter by name or address…"))
-        layout.addWidget(self.filter_edit)
 
         self.model = ProfileTableModel()
         self.proxy = ProfileFilterProxy()
@@ -204,10 +204,10 @@ class ProfilePanel(QWidget):
         self.table.customContextMenuRequested.connect(self._show_menu)
         self.table.doubleClicked.connect(lambda _i: self._emit_current(self.editRequested))
         self.table.selectionModel().selectionChanged.connect(self._on_selection_changed)
-        layout.addWidget(self.table, 1)
+        self._layout.addWidget(self.table, 1)
 
+        # Toolbar buttons, placed by the consumer's own layout.
         self._testing = False
-        toolbar = QHBoxLayout()
         self.btn_import = QPushButton(tr("Import"))
         self.btn_import.setObjectName("Primary")
         self.btn_import.clicked.connect(self.importRequested)
@@ -232,10 +232,13 @@ class ProfilePanel(QWidget):
         more_menu.addAction(tr("Remove duplicates"), self.removeDuplicatesRequested)
         self.btn_more.setMenu(more_menu)
 
-        for w in (self.btn_import, self.btn_test, self.btn_fastest, self.btn_more):
-            toolbar.addWidget(w)
-        toolbar.addStretch(1)
-        layout.addLayout(toolbar)
+        self.btn_import.setAccessibleName(tr("Import"))
+        self.btn_test.setAccessibleName(tr("Test"))
+        self.btn_fastest.setAccessibleName(tr("Use fastest"))
+        self.btn_more.setAccessibleName(tr("More server actions"))
+
+    def set_filter_text(self, text: str) -> None:
+        self.filter_edit.setText(text)
 
     # -- population ----------------------------------------------------
     def set_profiles(self, profiles: list[Profile], active_uid: str | None) -> None:
@@ -427,6 +430,24 @@ class ProfilePanel(QWidget):
     def _show_header_menu(self, pos) -> None:
         menu = self._build_header_menu()
         menu.exec(self.table.horizontalHeader().viewport().mapToGlobal(pos))
+
+
+class ProfilePanel(_ServerTableCore):
+    # Thin layout wrapper around _ServerTableCore: heading, filter, then the
+    # toolbar under the table, exactly as before the extraction.
+    def __init__(self) -> None:
+        super().__init__()
+        layout = self._layout
+        header = QLabel(tr("Servers"))
+        header.setObjectName("H1")
+        layout.insertWidget(0, header)
+        layout.insertWidget(1, self.filter_edit)
+
+        toolbar = QHBoxLayout()
+        for w in (self.btn_import, self.btn_test, self.btn_fastest, self.btn_more):
+            toolbar.addWidget(w)
+        toolbar.addStretch(1)
+        layout.addLayout(toolbar)
 
 
 class LogView(QTextEdit):
