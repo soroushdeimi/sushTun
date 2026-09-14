@@ -103,6 +103,7 @@ class ConnectionHeader(QFrame):
         self._row2.addWidget(self._meta, 1)
 
         self._stats_box = QWidget(self)
+        self._stats_box.setObjectName("HeaderStats")
         stats_layout = QHBoxLayout(self._stats_box)
         stats_layout.setContentsMargins(0, 0, 0, 0)
         stats_layout.setSpacing(22)

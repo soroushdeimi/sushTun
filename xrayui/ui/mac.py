@@ -110,10 +110,14 @@ class InsetGroup(QFrame):
         text_col.setSpacing(2)
         lbl = QLabel(label, row)
         lbl.setObjectName("GroupRowLabel")
+        # A long label wraps to more lines instead of clipping when the row
+        # is too narrow for label + trailing widget on one line.
+        lbl.setWordWrap(True)
         text_col.addWidget(lbl)
         if footnote:
             note = QLabel(footnote, row)
             note.setObjectName("GroupRowFootnote")
+            note.setWordWrap(True)
             text_col.addWidget(note)
         h.addLayout(text_col, 0)
 
@@ -123,6 +127,9 @@ class InsetGroup(QFrame):
             # stretch 1 lets the widget fill remaining space (e.g. a
             # PopupButton grows up to its maxWidth to show full text,
             # while a Switch with Fixed policy ignores the stretch).
+            # The label absorbs a shortage by wrapping; the trailing
+            # control therefore never shrinks below its natural content.
+            widget.setMinimumWidth(widget.sizeHint().width())
             h.addWidget(widget, 1, Qt.AlignVCenter)
 
         self._rows.addWidget(row)
@@ -264,6 +271,7 @@ class PopupButton(QToolButton):
 
     def __init__(self, label: str, value: str = "", parent=None) -> None:
         super().__init__(parent)
+        self.setObjectName("PopupButton")
         self._label = label
         self._value = value
         self.setPopupMode(QToolButton.InstantPopup)

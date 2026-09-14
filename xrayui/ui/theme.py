@@ -201,12 +201,13 @@ QLabel#GroupRowFootnote {{ color: {MUTED}; font-size: 11.5px; background: transp
 QLabel#SidebarSection {{ font-size: 11px; font-weight: 600; color: #7c7c82; background: transparent; }}
 QToolButton#IconButton {{
     border: none; border-radius: 6px; background: transparent;
+    padding: 0; margin: 0;
 }}
 QToolButton#IconButton:hover {{
-    background: rgba(255,255,255,0.08);
+    background: #3a3a3d;
 }}
 QToolButton#IconButton:pressed {{
-    background: rgba(255,255,255,0.12);
+    background: #444448;
 }}
 QToolButton#IconButton:disabled {{ background: transparent; }}
 QToolButton#IconButton::menu-indicator {{ image: none; width: 0px; }}
@@ -217,6 +218,14 @@ QPushButton#HeaderAction {{
 QPushButton#HeaderAction:hover {{ background: #444448; }}
 QPushButton#HeaderAction:pressed {{ background: #303033; }}
 QPushButton#HeaderAction:disabled {{ background: #28282b; color: #5c5c61; border-color: #313134; }}
+/* The PopupButton is fully self-painted; keep the generic tool-button box
+   (padding/border/background) from bleeding into its custom surface. */
+QToolButton#PopupButton {{
+    background: transparent; border: none; padding: 0; margin: 0;
+}}
+/* The header card's inner container must not repaint the global BG: #1e1e20
+   over the card's SURFACE (#2a2a2d). */
+QFrame#Card QWidget#HeaderStats {{ background: transparent; }}
 
 QMenu {{
     background: #2c2c2e; border: 1px solid #45454a; border-radius: 8px; padding: 5px;
