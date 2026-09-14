@@ -147,6 +147,7 @@ class RuleEditorDialog(QDialog):
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         buttons.button(QDialogButtonBox.Save).setText(tr("Save"))
         buttons.button(QDialogButtonBox.Cancel).setText(tr("Cancel"))
+        buttons.button(QDialogButtonBox.Save).setDefault(True)
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)

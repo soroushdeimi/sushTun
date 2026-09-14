@@ -495,4 +495,11 @@ TRANSLATIONS_FA: dict[str, str] = {
     "Routing": "مسیریابی",
     "{what} — reconnect to apply.": "{what} — برای اعمال، دوباره متصل شوید.",
     "Copy download link": "کپی لینک دانلود",
+
+    # -- ui/mac-a: connection header ----------------------------------------
+    "Connected": "متصل",
+    "Disconnected": "قطع شده",
+    "Down / Up": "دانلود / آپلود",
+    "This session": "این نشست",
+    "More connection actions": "گزینه‌های بیشتر اتصال",
 }

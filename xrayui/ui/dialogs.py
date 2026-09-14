@@ -89,6 +89,7 @@ class ImportDialog(QDialog):
         # overridden explicitly instead.
         buttons.button(QDialogButtonBox.Ok).setText(tr("OK"))
         buttons.button(QDialogButtonBox.Cancel).setText(tr("Cancel"))
+        buttons.button(QDialogButtonBox.Ok).setDefault(True)
         buttons.accepted.connect(self._accept)
         buttons.rejected.connect(self.reject)
 
@@ -155,6 +156,7 @@ class ProfileEditDialog(QDialog):
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         buttons.button(QDialogButtonBox.Save).setText(tr("Save"))
         buttons.button(QDialogButtonBox.Cancel).setText(tr("Cancel"))
+        buttons.button(QDialogButtonBox.Save).setDefault(True)
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
 
@@ -770,6 +772,7 @@ class SettingsDialog(QDialog):
         self.btn_save = buttons.button(QDialogButtonBox.Save)
         self.btn_save.setText(tr("Save"))
         buttons.button(QDialogButtonBox.Cancel).setText(tr("Cancel"))
+        self.btn_save.setDefault(True)
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
         outer.addWidget(buttons)
@@ -1040,6 +1043,7 @@ class SubscriptionEditDialog(QDialog):
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         buttons.button(QDialogButtonBox.Save).setText(tr("Save"))
         buttons.button(QDialogButtonBox.Cancel).setText(tr("Cancel"))
+        buttons.button(QDialogButtonBox.Save).setDefault(True)
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)

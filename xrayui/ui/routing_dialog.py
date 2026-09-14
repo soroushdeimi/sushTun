@@ -241,6 +241,7 @@ class RoutingDialog(QDialog):
         self.btn_save = buttons.button(QDialogButtonBox.Save)
         self.btn_save.setText(tr("Save"))
         buttons.button(QDialogButtonBox.Cancel).setText(tr("Cancel"))
+        self.btn_save.setDefault(True)
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
