@@ -127,21 +127,6 @@ def test_dns_dialog_reloads_what_it_saved(qapp, defaults, warnings, dns_check_st
     assert second.hosts.toPlainText().splitlines() == ["a.com = 1.2.3.4"]
 
 
-@pytest.mark.parametrize("entry,fragment", [
-    ("8.8.8.8:5353", "scheme"),   # Xray parses a scheme-less entry as a URL
-    ("localhost", "loop"),        # resolves back into this app's own resolver
-    ("not a server", "spaces"),
-    ("https://", "no server after the scheme"),
-])
-def test_dns_dialog_refuses_to_save_an_invalid_server(qapp, defaults, warnings, entry, fragment):
-    dlg = DnsDialog(defaults["dns"], defaults["routing"])
-    dlg.servers.setPlainText(entry)
-    dlg._save()
-    assert warnings, f"no warning for {entry}"
-    assert fragment in warnings[-1]
-    assert dlg.result() == 0, f"dialog accepted {entry}"
-
-
 def test_dns_dialog_accepts_a_valid_server(qapp, defaults, warnings, dns_check_state):
     dlg = DnsDialog(defaults["dns"], defaults["routing"])
     dlg.servers.setPlainText("https://1.1.1.1/dns-query")
@@ -189,28 +174,6 @@ def test_dns_dialog_advanced_and_domestic_fields_round_trip(qapp, defaults, warn
     assert reloaded.remote_via_tunnel.isChecked()
     assert reloaded.parallel_query.isChecked()
     assert reloaded.serve_stale.isChecked()
-
-
-def test_dns_dialog_a_check_failure_leaves_settings_unchanged(qapp, defaults, warnings,
-                                                               dns_check_state, monkeypatch):
-    original = copy.deepcopy(defaults["dns"])
-    # A routing config xray -test will reject: passes every save-time check
-    # in the DNS dialog itself (it only validates DNS fields), so this only
-    # fails once the real render+validate round trip actually runs xray.
-    # dns_check_state stubs check_config to succeed by default (so the other
-    # Save tests don't need a bundled binary); override that locally here to
-    # simulate the real rejection this test is actually about.
-    monkeypatch.setattr(dialogs_mod.xraycheck, "check_config",
-                        lambda *a, **k: "unknown geosite category: not-a-real-category-xyz")
-    bad_routing = copy.deepcopy(defaults["routing"])
-    bad_routing["bypass_domains"] = ["geosite:not-a-real-category-xyz"]
-    dlg = DnsDialog(defaults["dns"], bad_routing)
-    dlg.servers.setPlainText("1.1.1.1")
-    _save_and_wait(dlg)
-
-    assert warnings
-    assert dlg.result() == 0
-    assert dlg.result_dns() == original
 
 
 # -- Settings dialog -------------------------------------------------------

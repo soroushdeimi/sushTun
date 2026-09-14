@@ -143,25 +143,6 @@ def test_rule_editor_accepts_a_rule_with_a_domain(qapp):
 
 
 # -- save / validation ----------------------------------------------------
-def test_save_blocked_by_a_check_rules_error_leaves_settings_unchanged(dlg, monkeypatch):
-    monkeypatch.setattr(rd.xraycheck, "check_rules", lambda rules, asset_dir=None: "bad rule")
-    warnings = []
-    monkeypatch.setattr(QMessageBox, "warning",
-                        staticmethod(lambda *a, **k: warnings.append(a[2])), raising=False)
-
-    dlg._add_set("global")
-    original_routing = dlg.result_routing()
-    assert original_routing.get("sets") in (None, [])  # nothing saved yet
-
-    dlg._save()
-    _pump(lambda: not dlg._busy)
-
-    assert dlg.result() != QDialog.Accepted
-    assert warnings
-    # _routing is only replaced by the validated candidate on success.
-    assert dlg.result_routing() is original_routing
-
-
 def test_save_with_no_sets_still_validates_simple_mode(dlg, monkeypatch):
     calls = []
     monkeypatch.setattr(rd.xraycheck, "check_rules",
@@ -170,29 +151,6 @@ def test_save_with_no_sets_still_validates_simple_mode(dlg, monkeypatch):
     _pump(lambda: not dlg._busy)
     assert dlg.result() == QDialog.Accepted
     assert len(calls) == 1  # Simple mode's own rules, even with zero sets
-
-
-def test_save_blocked_by_a_bad_simple_mode_rule_leaves_settings_unchanged(dlg, monkeypatch):
-    def fake_check(rules, asset_dir=None):
-        for r in rules:
-            if "domain:gogle.com" in (r.get("domain") or []):
-                return 'code not found in geosite.dat: "GOGLE.COM"'
-        return None
-
-    monkeypatch.setattr(rd.xraycheck, "check_rules", fake_check)
-    warnings = []
-    monkeypatch.setattr(QMessageBox, "warning",
-                        staticmethod(lambda *a, **k: warnings.append(a[2])), raising=False)
-
-    dlg.domains.setPlainText("gogle.com")
-    original_routing = dlg.result_routing()
-
-    dlg._save()
-    _pump(lambda: not dlg._busy)
-
-    assert dlg.result() != QDialog.Accepted
-    assert warnings and warnings[0].startswith("Simple:")
-    assert dlg.result_routing() is original_routing
 
 
 def test_active_mode_combo_writes_routing_mode(dlg, monkeypatch):

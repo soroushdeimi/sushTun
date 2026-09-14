@@ -93,12 +93,8 @@ TRANSLATIONS_FA: dict[str, str] = {
     "Parallel query": "پرس‌وجوی موازی",
     "Serve stale": "پاسخ‌گویی با داده کهنه",
     "Raw DNS override (replaces everything above):": "بازنویسی خام DNS (جایگزین همه موارد بالا):",
-    "Invalid resolver": "سرور DNS نامعتبر",
-    "Invalid domestic resolver": "سرور DNS داخلی نامعتبر",
-    "Invalid DNS override": "بازنویسی DNS نامعتبر",
-    "Validating…": "در حال بررسی…",
+                "Validating…": "در حال بررسی…",
     "Validation failed": "بررسی ناموفق بود",
-    "DNS settings invalid": "تنظیمات DNS نامعتبر است",
 
     # -- core/dns.py validation-reason templates (value + template, see
     # ui/dns_dialog.py._save) -- {value} is the user's own raw input and
@@ -198,7 +194,6 @@ TRANSLATIONS_FA: dict[str, str] = {
     "Copied to clipboard.": "در کلیپ‌بورد کپی شد.",
     "Export rule set": "خروجی گرفتن از مجموعه قوانین",
     "Export failed": "خروجی گرفتن ناموفق بود",
-    "Routing invalid": "مسیریابی نامعتبر است",
 
     # -- dialogs.py: ImportDialog ------------------------------------------
     "Import profiles": "وارد کردن سرورها",
