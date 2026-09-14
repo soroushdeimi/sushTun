@@ -445,4 +445,48 @@ TRANSLATIONS_FA: dict[str, str] = {
     # -- dialogs.py: SettingsDialog language ---------------------------------
     "Language": "زبان",
     "Restart sushTun to apply the new language.": "برای اعمال زبان جدید، sushTun را دوباره اجرا کنید.",
+
+    # -- core/connection.py's on_step callback (ui/main_window.py._on_step) --
+    # A small, fixed set of the (English-only, core/ stays that way) step
+    # strings connection.py emits -- tr() translates these known ones and
+    # falls back to English for any dynamic one (an interface name, an
+    # exception message) it has never seen.
+    "Experimental platform (Linux) — network backend is unverified.":
+        "پلتفرم آزمایشی (Linux) — باطن شبکه تأیید نشده است.",
+    "Detecting active interface...": "در حال شناسایی رابط فعال...",
+    "Backing up DNS...": "در حال پشتیبان‌گیری از DNS...",
+    "Building runtime config...": "در حال ساخت پیکربندی اجرایی...",
+    "Starting Xray...": "در حال اجرای Xray...",
+    "Waiting for TUN adapter...": "در انتظار آداپتور TUN...",
+    "Configuring tunnel adapter...": "در حال پیکربندی آداپتور تونل...",
+    "Routing DNS and traffic through the tunnel...": "در حال مسیریابی DNS و ترافیک از طریق تونل...",
+    "WARNING: DNS could not be routed through the tunnel — "
+    "lookups will leave unencrypted via the local network.":
+        "هشدار: DNS نتوانست از طریق تونل مسیریابی شود — "
+        "درخواست‌ها به‌صورت رمزنگاری‌نشده از شبکه محلی خارج می‌شوند.",
+    "Connected.": "متصل شد.",
+    "Starting Windows hotspot...": "در حال راه‌اندازی هات‌اسپات ویندوز...",
+    "Starting Wi-Fi hotspot...": "در حال راه‌اندازی هات‌اسپات Wi-Fi...",
+    "Gateway mode on — hotspot clients now use the tunnel.":
+        "حالت دروازه روشن است — کلاینت‌های هات‌اسپات اکنون از تونل استفاده می‌کنند.",
+    "Building runtime config (macOS: SOCKS + tun2socks bridge)...":
+        "در حال ساخت پیکربندی اجرایی (macOS: پل SOCKS + tun2socks)...",
+    "Starting tun2socks bridge...": "در حال اجرای پل tun2socks...",
+    "Previous session left DNS pointing at 127.0.0.1. Restoring...":
+        "نشست قبلی DNS را روی 127.0.0.1 رها کرده بود. در حال بازگردانی...",
+    "Disconnecting...": "در حال قطع اتصال...",
+    "Network restored.": "شبکه بازگردانی شد.",
+    "Tunnel DNS was cleared by another program — restored.":
+        "DNS تونل توسط برنامه دیگری پاک شده بود — بازگردانی شد.",
+    "WARNING: tunnel DNS was cleared by another program and could not "
+    "be restored — lookups are leaving outside the tunnel.":
+        "هشدار: DNS تونل توسط برنامه دیگری پاک شد و بازگردانی نشد — "
+        "درخواست‌ها بیرون از تونل خارج می‌شوند.",
+
+    # -- missed on the first pass, caught by test_i18n_coverage.py ----------
+    "XUDP concurrency": "هم‌روندی XUDP",
+    "Allow other devices on your network": "اجازه به دستگاه‌های دیگر در شبکه شما",
+    "Routing": "مسیریابی",
+    "{what} — reconnect to apply.": "{what} — برای اعمال، دوباره متصل شوید.",
+    "Copy download link": "کپی لینک دانلود",
 }
