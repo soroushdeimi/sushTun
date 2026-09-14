@@ -26,7 +26,13 @@ _PROTOCOLS = ["http", "tls", "bittorrent"]
 
 
 class CollapsibleSection(QWidget):
-    """A "Name ▸"/"Name ▾" header that shows or hides a content widget."""
+    """A "▸ Name"/"▾ Name" header that shows or hides a content widget.
+
+    The glyph is part of the button's own text rather than Qt's built-in
+    arrow icon (QToolButton.setArrowType): that icon paints in a fixed
+    corner regardless of the widget's layoutDirection, so in RTL it lands
+    on top of the Persian title instead of beside it.
+    """
 
     def __init__(self, title: str, content: QWidget, parent=None) -> None:
         super().__init__(parent)
@@ -36,20 +42,27 @@ class CollapsibleSection(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         self._toggle = QToolButton()
-        self._toggle.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
-        self._toggle.setArrowType(Qt.RightArrow)
+        self._toggle.setToolButtonStyle(Qt.ToolButtonTextOnly)
         self._toggle.setCheckable(True)
         self._toggle.setChecked(False)
-        self._toggle.setText(title)
         self._toggle.setStyleSheet("QToolButton { border: none; }")
         self._toggle.toggled.connect(self._on_toggled)
+        self._update_text(False)
 
         layout.addWidget(self._toggle)
         layout.addWidget(content)
         content.setVisible(False)
 
+    def _update_text(self, expanded: bool) -> None:
+        if expanded:
+            glyph = "▾"
+        else:
+            glyph = "◂" if self.isRightToLeft() else "▸"
+        self._toggle.setText(f"{self._title} {glyph}" if self.isRightToLeft()
+                             else f"{glyph} {self._title}")
+
     def _on_toggled(self, expanded: bool) -> None:
-        self._toggle.setArrowType(Qt.DownArrow if expanded else Qt.RightArrow)
+        self._update_text(expanded)
         self._content.setVisible(expanded)
 
     def set_expanded(self, expanded: bool) -> None:
