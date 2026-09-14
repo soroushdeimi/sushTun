@@ -132,6 +132,8 @@ class RuleEditorDialog(QDialog):
         layout.addWidget(CollapsibleSection(tr("Advanced"), adv_widget))
 
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        buttons.button(QDialogButtonBox.Save).setText(tr("Save"))
+        buttons.button(QDialogButtonBox.Cancel).setText(tr("Cancel"))
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)

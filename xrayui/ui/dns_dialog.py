@@ -149,6 +149,8 @@ class DnsDialog(QDialog):
 
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         self.btn_save = buttons.button(QDialogButtonBox.Save)
+        self.btn_save.setText(tr("Save"))
+        buttons.button(QDialogButtonBox.Cancel).setText(tr("Cancel"))
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)

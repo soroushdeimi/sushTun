@@ -446,6 +446,10 @@ TRANSLATIONS_FA: dict[str, str] = {
     "Language": "زبان",
     "Restart sushTun to apply the new language.": "برای اعمال زبان جدید، sushTun را دوباره اجرا کنید.",
 
+    # -- standard QDialogButtonBox text, overridden explicitly -------------
+    "Save": "ذخیره",
+    "OK": "تأیید",
+
     # -- core/connection.py's on_step callback (ui/main_window.py._on_step) --
     # A small, fixed set of the (English-only, core/ stays that way) step
     # strings connection.py emits -- tr() translates these known ones and

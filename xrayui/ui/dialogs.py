@@ -84,6 +84,11 @@ class ImportDialog(QDialog):
         self.tabs.addTab(self._qr_tab(), tr("QR image"))
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        # Qt's own standard-button text isn't translated by this app's i18n
+        # (that needs a bundled Qt translation file, out of scope here) --
+        # overridden explicitly instead.
+        buttons.button(QDialogButtonBox.Ok).setText(tr("OK"))
+        buttons.button(QDialogButtonBox.Cancel).setText(tr("Cancel"))
         buttons.accepted.connect(self._accept)
         buttons.rejected.connect(self.reject)
 
@@ -148,6 +153,8 @@ class ProfileEditDialog(QDialog):
         self.tabs.addTab(self.raw, tr("Raw JSON"))
 
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        buttons.button(QDialogButtonBox.Save).setText(tr("Save"))
+        buttons.button(QDialogButtonBox.Cancel).setText(tr("Cancel"))
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
 
@@ -760,6 +767,8 @@ class SettingsDialog(QDialog):
 
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         self.btn_save = buttons.button(QDialogButtonBox.Save)
+        self.btn_save.setText(tr("Save"))
+        buttons.button(QDialogButtonBox.Cancel).setText(tr("Cancel"))
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
         outer.addWidget(buttons)
@@ -1028,6 +1037,8 @@ class SubscriptionEditDialog(QDialog):
         self.f_name.textEdited.connect(self._stop_autofill_name)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        buttons.button(QDialogButtonBox.Save).setText(tr("Save"))
+        buttons.button(QDialogButtonBox.Cancel).setText(tr("Cancel"))
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
