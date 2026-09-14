@@ -34,6 +34,7 @@ from ...core.profiles import Profile
 from ...i18n import tr
 from ..rule_editor import CollapsibleSection
 from ..workers import Worker
+from .flow import FlowLayout
 
 _CHECK_PROFILE = Profile(
     name="dns check", protocol="vless", address="203.0.113.1", port=443,
@@ -80,16 +81,19 @@ class DnsPage(QWidget):
 
         layout = QVBoxLayout(self)
 
-        presets = QHBoxLayout()
-        presets.addWidget(QLabel(tr("Preset:")))
+        presets = FlowLayout()
+        presets_label = QLabel(tr("Preset:"))
+        presets_label.setWordWrap(True)
+        presets.addWidget(presets_label)
         for name, servers in dns_mod.PRESETS.items():
             btn = QPushButton(name)
             btn.clicked.connect(lambda _=False, s=servers: self._fill(s))
             presets.addWidget(btn)
-        presets.addStretch(1)
         layout.addLayout(presets)
 
-        layout.addWidget(QLabel(tr("Resolvers (one per line, in order):")))
+        resolver_label = QLabel(tr("Resolvers (one per line, in order):"))
+        resolver_label.setWordWrap(True)
+        layout.addWidget(resolver_label)
         self.servers = QPlainTextEdit("\n".join(dns.get("servers") or []))
         self.servers.setPlaceholderText(
             tr("Leave empty to keep the template's servers.") + "\n"
@@ -117,7 +121,9 @@ class DnsPage(QWidget):
         strategy.addWidget(self.strategy, 1)
         layout.addLayout(strategy)
 
-        layout.addWidget(QLabel(tr("Static overrides (domain = address):")))
+        over_label = QLabel(tr("Static overrides (domain = address):"))
+        over_label.setWordWrap(True)
+        layout.addWidget(over_label)
         self.hosts = QPlainTextEdit("\n".join(dns.get("hosts") or []))
         self.hosts.setPlaceholderText(
             "example.com = 93.184.216.34\ncdn.example.com = 1.2.3.4, 5.6.7.8")
@@ -127,13 +133,14 @@ class DnsPage(QWidget):
         # -- Domestic DNS ----------------------------------------------
         dom_label = QLabel(tr("Domestic DNS (for sites that go direct):"))
         dom_label.setToolTip(tr("Used only for domains your active routing sends direct."))
+        dom_label.setWordWrap(True)
         layout.addWidget(dom_label)
-        dom_row = QHBoxLayout()
         self.domestic = QLineEdit(", ".join(dns.get("domestic_servers") or []))
         self.domestic.setPlaceholderText("178.22.122.100, 185.51.200.2")
         self.domestic.setToolTip(tr("Used only for domains your active routing sends direct."))
         self.domestic.setLayoutDirection(Qt.LeftToRight)
-        dom_row.addWidget(self.domestic, 1)
+        layout.addWidget(self.domestic)
+        dom_row = FlowLayout()
         for name, addrs in dns_mod.DOMESTIC_PRESETS.items():
             btn = QPushButton(name)
             btn.clicked.connect(lambda _=False, a=addrs: self._fill_domestic(a))
@@ -153,6 +160,7 @@ class DnsPage(QWidget):
 
         self.note = QLabel()
         self.note.setObjectName("Muted")
+        self.note.setWordWrap(True)
         layout.addWidget(self.note)
         self._update_note()
 
@@ -166,7 +174,9 @@ class DnsPage(QWidget):
         self.serve_stale = QCheckBox(tr("Serve stale"))
         self.serve_stale.setChecked(bool(dns.get("serve_stale")))
         adv.addWidget(self.serve_stale)
-        adv.addWidget(QLabel(tr("Raw DNS override (replaces everything above):")))
+        raw_label = QLabel(tr("Raw DNS override (replaces everything above):"))
+        raw_label.setWordWrap(True)
+        adv.addWidget(raw_label)
         self.raw_override = QPlainTextEdit(str(dns.get("raw_override") or ""))
         self.raw_override.setPlaceholderText('{"servers": [...]}')
         self.raw_override.setLayoutDirection(Qt.LeftToRight)
