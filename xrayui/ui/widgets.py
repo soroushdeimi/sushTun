@@ -389,10 +389,9 @@ class ProfilePanel(QWidget):
             return
         QrDialog(p.name, link, self).exec()
 
-    def _show_menu(self, pos) -> None:
-        uids = self.selected_uids()
+    def _build_context_menu(self, uids: list[str]) -> QMenu | None:
         if not uids:
-            return
+            return None
         menu = QMenu(self)
         if len(uids) == 1:
             uid = uids[0]
@@ -406,6 +405,12 @@ class ProfilePanel(QWidget):
             menu.addAction(tr("Show QR"), lambda: self._show_qr(uids[0]))
         menu.addSeparator()
         menu.addAction(tr("Delete"), lambda: self._delete_selected(uids))
+        return menu
+
+    def _show_menu(self, pos) -> None:
+        menu = self._build_context_menu(self.selected_uids())
+        if menu is None:
+            return
         menu.exec(self.table.viewport().mapToGlobal(pos))
 
     def _build_header_menu(self) -> QMenu:
