@@ -142,6 +142,18 @@ def test_rule_editor_accepts_a_rule_with_a_domain(qapp):
     assert editor.result_rule()["outbound"] == "direct"
 
 
+# -- dialog wrapper ---------------------------------------------------------
+def test_dialog_is_a_thin_pages_wrapper(dlg):
+    from xrayui.ui.routing_page import RoutingPage
+    assert isinstance(dlg.page, RoutingPage)
+    # Attributes the tests touch resolve onto the page; _save guards the
+    # busy state before delegating an apply.
+    original = dlg.result_routing()
+    assert dlg.result_routing() is original
+    assert dlg._busy is False
+    assert dlg.tabs is dlg.page.tabs
+
+
 # -- save / validation ----------------------------------------------------
 def test_save_with_no_sets_still_validates_simple_mode(dlg, monkeypatch):
     calls = []

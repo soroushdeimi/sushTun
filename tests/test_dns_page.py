@@ -18,6 +18,8 @@ else:
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PySide6.QtCore import Qt  # noqa: E402
+from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from xrayui.core import xraycheck  # noqa: E402
@@ -71,3 +73,59 @@ def test_config_check_failure_leaves_settings_unchanged(qapp, monkeypatch):
 
     assert "unknown geosite category" in page.status_label.text()
     assert page.result_dns() == original
+
+
+def test_dns_page_starts_clean_and_silent(qapp):
+    # An empty resolvers field means "inherit the template", so a genuinely
+    # clean page must not reject anything nor show a stale status.
+    page = DnsPage(DEFAULTS["dns"], DEFAULTS["routing"])
+    assert not page.is_dirty()
+    assert page.status_label.text() == ""
+
+
+def test_dns_page_dirty_revert_and_applied_signal(qapp, monkeypatch):
+    monkeypatch.setattr(xraycheck, "check_config", lambda *a, **k: None)
+    page = DnsPage(DEFAULTS["dns"], DEFAULTS["routing"])
+    assert not page.is_dirty()
+    assert not page.btn_apply.isEnabled()
+
+    captured = []
+    page.applied.connect(lambda cfg: captured.append(cfg))
+    page.servers.setPlainText("1.1.1.1")
+    assert page.is_dirty()
+    assert page.btn_apply.isEnabled()
+    assert page.result_dns()["servers"] == []  # not applied yet
+
+    page.apply()
+    _pump(lambda: not page._busy)
+
+    assert len(captured) == 1
+    assert page.result_dns()["servers"] == ["1.1.1.1"]
+    assert not page.is_dirty()
+    assert not page.btn_apply.isEnabled()
+
+    page.servers.setPlainText("8.8.8.8")
+    assert page.is_dirty()
+    page.revert()
+    assert not page.is_dirty()
+    assert page.result_dns()["servers"] == ["1.1.1.1"]
+    assert page.servers.toPlainText() == "1.1.1.1"
+
+
+def test_refusal_text_isolates_the_raw_value(qapp):
+    # The user's own raw input inside a refusal text is wrapped in isolation
+    # marks so Persian RTL layout renders it left-to-right as one unit.
+    page = DnsPage(DEFAULTS["dns"], DEFAULTS["routing"])
+    page.servers.setPlainText("not a server")
+    page.apply()
+    assert "\u2066not a server\u2069" in page.status_label.text()
+
+
+def test_enter_in_the_resolvers_editor_inserts_a_newline_not_an_apply(qapp, monkeypatch):
+    calls = []
+    monkeypatch.setattr(xraycheck, "check_config", lambda *a, **k: calls.append(1) or None)
+    page = DnsPage(DEFAULTS["dns"], DEFAULTS["routing"])
+    page.servers.setFocus()
+    QTest.keyClick(page.servers, Qt.Key_Return)
+    assert not calls  # Return is a new paragraph, never a save
+    assert "\n" in page.servers.toPlainText()
