@@ -509,4 +509,7 @@ TRANSLATIONS_FA: dict[str, str] = {
     "Move rule up": "انتقال قانون به بالا",
     "Move rule down": "انتقال قانون به پایین",
     "New set": "مجموعه جدید",
+    "Apply changes?": "اعمال تغییرات؟",
+    "Discard": "نادیده‌گرفتن",
+    "You have unsaved changes.": "تغییرات ذخیره‌نشده دارید.",
 }
