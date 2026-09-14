@@ -441,4 +441,8 @@ TRANSLATIONS_FA: dict[str, str] = {
         "اشتراک‌گذاری هات‌اسپات روشن شد — در اتصال بعدی اعمال می‌شود.",
     "Still running here. Quit from this icon's menu, or press Ctrl+Q.":
         "همچنان در حال اجراست. از منوی این آیکون خارج شوید یا Ctrl+Q را بزنید.",
+
+    # -- dialogs.py: SettingsDialog language ---------------------------------
+    "Language": "زبان",
+    "Restart sushTun to apply the new language.": "برای اعمال زبان جدید، sushTun را دوباره اجرا کنید.",
 }

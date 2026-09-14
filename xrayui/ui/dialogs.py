@@ -552,10 +552,18 @@ class SettingsDialog(QDialog):
         self.check_updates.setChecked(bool((settings.get("updates") or {}).get("check", True)))
         self._updates_extra = dict(settings.get("updates") or {})
 
+        self.language = QComboBox()
+        self.language.addItem("English", "en")
+        self.language.addItem("فارسی", "fa")
+        self._language_was = settings.get("language") or "en"
+        idx = self.language.findData(self._language_was)
+        self.language.setCurrentIndex(idx if idx >= 0 else 0)
+
         form.addRow(tr("Ping target"), self.ping_target)
         form.addRow(tr("Throughput sample (s)"), self.sample_seconds)
         form.addRow(tr("Tunnel MTU"), self.tun_mtu)
         form.addRow(tr("Xray log level"), self.log_level)
+        form.addRow(tr("Language"), self.language)
         form.addRow(self.check_updates)
 
         # -- Geo data ---------------------------------------------------
@@ -860,6 +868,7 @@ class SettingsDialog(QDialog):
             "sample_seconds": self.sample_seconds.value(),
             "tun_mtu": self.tun_mtu.value(),
             "log_level": self.log_level.currentText(),
+            "language": self.language.currentData() or "en",
             "geo": {
                 "source": self.geo_source.currentText(),
                 "auto_update_hours": self.geo_auto_hours.value(),
@@ -969,6 +978,9 @@ class SettingsDialog(QDialog):
                 QMessageBox.warning(self, tr("Startup setting failed"), startup_error)
                 return
             self._start_on_login_was = want_login
+            if (self.language.currentData() or "en") != self._language_was:
+                QMessageBox.information(self, tr("Language"),
+                                        tr("Restart sushTun to apply the new language."))
             self.accept()
 
         self._run_async(work, done)
