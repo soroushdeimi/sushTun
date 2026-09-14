@@ -270,4 +270,85 @@ TRANSLATIONS_FA: dict[str, str] = {
     "Missing fields": "فیلدهای ناقص",
     "Address and UUID / private key are required.": "آدرس و UUID / کلید خصوصی الزامی هستند.",
     "WireGuard peer public key is required.": "کلید عمومی Peer در WireGuard الزامی است.",
+    "Default": "پیش‌فرض",
+    "0 lets Xray pick its own default. Otherwise 5-3600 seconds.":
+        "0 یعنی Xray مقدار پیش‌فرض خودش را انتخاب کند. در غیر این صورت 5 تا 3600 ثانیه.",
+    "Leave 0 to let the congestion control pick (BBR).":
+        "برای انتخاب خودکار توسط کنترل ازدحام (BBR) روی 0 بگذارید.",
+
+    # -- dialogs.py: SettingsDialog ------------------------------------------
+    "Settings": "تنظیمات",
+    "Ping target": "مقصد پینگ",
+    "Throughput sample (s)": "نمونه‌برداری توان عبوری (ثانیه)",
+    "Tunnel MTU": "MTU تونل",
+    "Tunnel MTU. Lower leaves more headroom for encapsulation; "
+    "higher reduces per-packet overhead. 1420 is a safe default.":
+        "MTU تونل. مقدار کمتر فضای بیشتری برای کپسوله‌سازی می‌گذارد؛ "
+        "مقدار بیشتر سربار هر بسته را کاهش می‌دهد. 1420 مقداری امن و پیش‌فرض است.",
+    "Xray log level": "سطح لاگ Xray",
+    "Check for updates": "بررسی به‌روزرسانی",
+    "Geo data": "داده‌های جغرافیایی",
+    "Source": "منبع",
+    "Update now": "به‌روزرسانی اکنون",
+    "Auto-update every (hours)": "به‌روزرسانی خودکار هر (ساعت)",
+    "Startup": "راه‌اندازی",
+    "Start sushTun when I log in": "اجرای sushTun هنگام ورود من",
+    "Start minimized to the tray": "شروع به‌صورت کوچک‌شده در نوار سیستم",
+    "Connect automatically on start": "اتصال خودکار هنگام شروع",
+    "Backup && restore": "پشتیبان‌گیری و بازیابی",
+    "A backup file contains your server passwords in plain text — "
+    "store and share it carefully.":
+        "فایل پشتیبان شامل رمزهای عبور سرورهای شماست به‌صورت متن ساده — "
+        "آن را با احتیاط نگه‌داری و به اشتراک بگذارید.",
+    "Back up…": "پشتیبان‌گیری…",
+    "Restore…": "بازیابی…",
+    "Anti-filter": "ضدفیلتر",
+    "Enabled": "فعال",
+    "Packets": "بسته‌ها",
+    "Length": "طول",
+    "Interval": "فاصله زمانی",
+    "Max split": "حداکثر تقسیم",
+    "Multiplexing": "چندگانه‌سازی (Multiplexing)",
+    "Concurrency": "هم‌روندی",
+    "Sniffing": "شناسایی ترافیک (Sniffing)",
+    "Route only": "فقط مسیریابی",
+    "Local proxy": "پروکسی محلی",
+    "User": "کاربر",
+    "LAN sharing is on with no password — anyone on your network can use this proxy.":
+        "اشتراک‌گذاری در شبکه محلی بدون رمز عبور فعال است — هرکسی در شبکه شما می‌تواند "
+        "از این پروکسی استفاده کند.",
+    "Default TLS fingerprint": "اثر انگشت پیش‌فرض TLS",
+    "(off)": "(خاموش)",
+    "Never updated": "هرگز به‌روزرسانی نشده",
+    "Updated {n}m ago": "{n} دقیقه پیش به‌روزرسانی شد",
+    "Updated {n}h ago": "{n} ساعت پیش به‌روزرسانی شد",
+    "Updating…": "در حال به‌روزرسانی…",
+    "Back up sushTun": "پشتیبان‌گیری از sushTun",
+    "Backup failed": "پشتیبان‌گیری ناموفق بود",
+    "Backup complete": "پشتیبان‌گیری کامل شد",
+    "Saved to {path}": "در {path} ذخیره شد",
+    "Restore sushTun backup": "بازیابی پشتیبان sushTun",
+    "Restore backup": "بازیابی پشتیبان",
+    "This replaces your current servers and settings with the backup's. Continue?":
+        "این کار سرورها و تنظیمات فعلی شما را با نسخه پشتیبان جایگزین می‌کند. ادامه می‌دهید؟",
+    "Restore failed": "بازیابی ناموفق بود",
+    "Restore complete": "بازیابی کامل شد",
+    "Restored. sushTun will reload your settings and servers.":
+        "بازیابی شد. sushTun تنظیمات و سرورهای شما را دوباره بارگذاری می‌کند.",
+    "Settings invalid": "تنظیمات نامعتبر است",
+    "Startup setting failed": "تنظیم راه‌اندازی ناموفق بود",
+    "Not supported on macOS yet.": "هنوز در macOS پشتیبانی نمی‌شود.",
+    "Install the .deb package to start sushTun at login.":
+        "برای اجرای sushTun هنگام ورود، بسته .deb را نصب کنید.",
+    "Can't tell which user to start sushTun for.":
+        "مشخص نیست sushTun باید برای کدام کاربر اجرا شود.",
+
+    # -- dialogs.py: SubscriptionEditDialog ----------------------------------
+    "Edit subscription": "ویرایش اشتراک",
+    "0 (default)": "0 (پیش‌فرض)",
+    "Only keep servers whose name matches (regex)": "فقط سرورهایی که نامشان مطابقت دارد (regex)",
+    "Name filter": "فیلتر نام",
+    "Missing URL": "URL موجود نیست",
+    "Subscription URL is required.": "URL اشتراک الزامی است.",
+    "Invalid name filter": "فیلتر نام نامعتبر است",
 }

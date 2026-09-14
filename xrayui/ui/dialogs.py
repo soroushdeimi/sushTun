@@ -214,12 +214,12 @@ class ProfileEditDialog(QDialog):
         self.f_hy2_ports.setPlaceholderText("20000-30000")
         self.f_hy2_hop_interval = QSpinBox()
         self.f_hy2_hop_interval.setRange(0, 3600)
-        self.f_hy2_hop_interval.setSpecialValueText("Default")
+        self.f_hy2_hop_interval.setSpecialValueText(tr("Default"))
         self.f_hy2_hop_interval.setToolTip(
-            "0 lets Xray pick its own default. Otherwise 5-3600 seconds.")
+            tr("0 lets Xray pick its own default. Otherwise 5-3600 seconds."))
         self.f_hy2_hop_interval.setValue(
             int(p.hy2_hop_interval) if p.hy2_hop_interval.isdigit() else 0)
-        _hy2_mbps_tip = "Leave 0 to let the congestion control pick (BBR)."
+        _hy2_mbps_tip = tr("Leave 0 to let the congestion control pick (BBR).")
         self.f_hy2_up_mbps = QSpinBox()
         self.f_hy2_up_mbps.setRange(0, 100000)
         self.f_hy2_up_mbps.setValue(int(p.hy2_up_mbps) if p.hy2_up_mbps else 0)
@@ -522,7 +522,7 @@ class ProfileEditDialog(QDialog):
 class SettingsDialog(QDialog):
     def __init__(self, settings: dict, parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Settings")
+        self.setWindowTitle(tr("Settings"))
         outer = QVBoxLayout(self)
 
         content = QWidget()
@@ -531,30 +531,31 @@ class SettingsDialog(QDialog):
         layout.addLayout(form)
 
         self.ping_target = QLineEdit(str(settings.get("ping_target", "1.1.1.1")))
+        self.ping_target.setLayoutDirection(Qt.LeftToRight)
         self.sample_seconds = QSpinBox()
         self.sample_seconds.setRange(1, 60)
         self.sample_seconds.setValue(int(settings.get("sample_seconds", 5)))
         self.tun_mtu = QSpinBox()
         self.tun_mtu.setRange(576, 9000)
         self.tun_mtu.setValue(int(settings.get("tun_mtu", 1420)))
-        self.tun_mtu.setToolTip(
+        self.tun_mtu.setToolTip(tr(
             "Tunnel MTU. Lower leaves more headroom for encapsulation; "
             "higher reduces per-packet overhead. 1420 is a safe default."
-        )
+        ))
         self.log_level = QComboBox()
         self.log_level.addItems(app_settings.LOG_LEVELS)
         current = str(settings.get("log_level", "warning"))
         if current in app_settings.LOG_LEVELS:
             self.log_level.setCurrentText(current)
 
-        self.check_updates = QCheckBox("Check for updates")
+        self.check_updates = QCheckBox(tr("Check for updates"))
         self.check_updates.setChecked(bool((settings.get("updates") or {}).get("check", True)))
         self._updates_extra = dict(settings.get("updates") or {})
 
-        form.addRow("Ping target", self.ping_target)
-        form.addRow("Throughput sample (s)", self.sample_seconds)
-        form.addRow("Tunnel MTU", self.tun_mtu)
-        form.addRow("Xray log level", self.log_level)
+        form.addRow(tr("Ping target"), self.ping_target)
+        form.addRow(tr("Throughput sample (s)"), self.sample_seconds)
+        form.addRow(tr("Tunnel MTU"), self.tun_mtu)
+        form.addRow(tr("Xray log level"), self.log_level)
         form.addRow(self.check_updates)
 
         # -- Geo data ---------------------------------------------------
@@ -565,7 +566,7 @@ class SettingsDialog(QDialog):
         self.pool = QThreadPool.globalInstance()
         self._workers: set = set()
 
-        geo_group = QGroupBox("Geo data")
+        geo_group = QGroupBox(tr("Geo data"))
         geo_form = QFormLayout(geo_group)
 
         self.geo_source = QComboBox()
@@ -573,10 +574,10 @@ class SettingsDialog(QDialog):
         current_source = str(geo_cfg.get("source", ""))
         if current_source in geo_mod.SOURCES:
             self.geo_source.setCurrentText(current_source)
-        geo_form.addRow("Source", self.geo_source)
+        geo_form.addRow(tr("Source"), self.geo_source)
 
         update_row = QHBoxLayout()
-        self.btn_geo_update = QPushButton("Update now")
+        self.btn_geo_update = QPushButton(tr("Update now"))
         self.btn_geo_update.clicked.connect(self._update_geo_now)
         self.geo_status = QLabel(self._format_last_update())
         self.geo_status.setObjectName("Muted")
@@ -588,44 +589,47 @@ class SettingsDialog(QDialog):
         self.geo_auto_hours = QSpinBox()
         self.geo_auto_hours.setRange(0, 168)
         self.geo_auto_hours.setValue(int(geo_cfg.get("auto_update_hours", 0)))
-        self.geo_auto_hours.setSpecialValueText("Off")
-        geo_form.addRow("Auto-update every (hours)", self.geo_auto_hours)
+        self.geo_auto_hours.setSpecialValueText(tr("Off"))
+        geo_form.addRow(tr("Auto-update every (hours)"), self.geo_auto_hours)
 
         layout.addWidget(geo_group)
 
         # -- Startup ------------------------------------------------------
         startup_cfg = settings.get("startup") or {}
-        startup_group = QGroupBox("Startup")
+        startup_group = QGroupBox(tr("Startup"))
         startup_form = QFormLayout(startup_group)
         self._autostart_ok, autostart_reason = autostart.is_supported()
-        self.start_on_login = QCheckBox("Start sushTun when I log in")
+        self.start_on_login = QCheckBox(tr("Start sushTun when I log in"))
         self.start_on_login.setChecked(bool(startup_cfg.get("start_on_login")))
         self.start_on_login.setEnabled(self._autostart_ok)
         if not self._autostart_ok:
-            self.start_on_login.setToolTip(autostart_reason)
+            # core.autostart.is_supported() returns one of a small fixed set
+            # of English reasons; tr() translates it when known, else falls
+            # back to the English text unchanged.
+            self.start_on_login.setToolTip(tr(autostart_reason))
         startup_form.addRow(self.start_on_login)
-        self.start_minimized = QCheckBox("Start minimized to the tray")
+        self.start_minimized = QCheckBox(tr("Start minimized to the tray"))
         self.start_minimized.setChecked(bool(startup_cfg.get("start_minimized")))
         startup_form.addRow(self.start_minimized)
-        self.auto_connect = QCheckBox("Connect automatically on start")
+        self.auto_connect = QCheckBox(tr("Connect automatically on start"))
         self.auto_connect.setChecked(bool(startup_cfg.get("auto_connect")))
         startup_form.addRow(self.auto_connect)
         layout.addWidget(startup_group)
         self._start_on_login_was = self.start_on_login.isChecked()
 
         # -- Backup & restore ----------------------------------------------
-        backup_group = QGroupBox("Backup && restore")
+        backup_group = QGroupBox(tr("Backup && restore"))
         backup_layout = QVBoxLayout(backup_group)
-        backup_warning = QLabel(
+        backup_warning = QLabel(tr(
             "A backup file contains your server passwords in plain text — "
-            "store and share it carefully.")
+            "store and share it carefully."))
         backup_warning.setObjectName("Muted")
         backup_warning.setWordWrap(True)
         backup_layout.addWidget(backup_warning)
         backup_row = QHBoxLayout()
-        self.btn_backup = QPushButton("Back up…")
+        self.btn_backup = QPushButton(tr("Back up…"))
         self.btn_backup.clicked.connect(self._backup_now)
-        self.btn_restore = QPushButton("Restore…")
+        self.btn_restore = QPushButton(tr("Restore…"))
         self.btn_restore.clicked.connect(self._restore_now)
         backup_row.addWidget(self.btn_backup)
         backup_row.addWidget(self.btn_restore)
@@ -644,36 +648,39 @@ class SettingsDialog(QDialog):
         adv_layout = QVBoxLayout(adv_widget)
         adv_layout.setContentsMargins(0, 4, 0, 0)
 
-        frag_group = QGroupBox("Anti-filter")
+        frag_group = QGroupBox(tr("Anti-filter"))
         frag_form = QFormLayout(frag_group)
-        self.frag_enabled = QCheckBox("Enabled")
+        self.frag_enabled = QCheckBox(tr("Enabled"))
         self.frag_enabled.setChecked(bool(frag_cfg.get("enabled")))
         frag_form.addRow(self.frag_enabled)
         self.frag_packets = QLineEdit(str(frag_cfg.get("packets") or "tlshello"))
-        frag_form.addRow("Packets", self.frag_packets)
+        self.frag_packets.setLayoutDirection(Qt.LeftToRight)
+        frag_form.addRow(tr("Packets"), self.frag_packets)
         self.frag_length = QLineEdit(str(frag_cfg.get("length") or "100-200"))
-        frag_form.addRow("Length", self.frag_length)
+        self.frag_length.setLayoutDirection(Qt.LeftToRight)
+        frag_form.addRow(tr("Length"), self.frag_length)
         self.frag_interval = QLineEdit(str(frag_cfg.get("interval") or "10-20"))
-        frag_form.addRow("Interval", self.frag_interval)
+        self.frag_interval.setLayoutDirection(Qt.LeftToRight)
+        frag_form.addRow(tr("Interval"), self.frag_interval)
         self.frag_max_split = QSpinBox()
         self.frag_max_split.setRange(0, 10000)
         self.frag_max_split.setValue(int(frag_cfg.get("max_split") or 0))
-        frag_form.addRow("Max split", self.frag_max_split)
+        frag_form.addRow(tr("Max split"), self.frag_max_split)
         adv_layout.addWidget(frag_group)
 
-        mux_group = QGroupBox("Multiplexing")
+        mux_group = QGroupBox(tr("Multiplexing"))
         mux_form = QFormLayout(mux_group)
-        self.mux_enabled = QCheckBox("Enabled")
+        self.mux_enabled = QCheckBox(tr("Enabled"))
         self.mux_enabled.setChecked(bool(mux_cfg.get("enabled")))
         mux_form.addRow(self.mux_enabled)
         self.mux_concurrency = QSpinBox()
         self.mux_concurrency.setRange(1, 1024)
         self.mux_concurrency.setValue(int(mux_cfg.get("concurrency") or 8))
-        mux_form.addRow("Concurrency", self.mux_concurrency)
+        mux_form.addRow(tr("Concurrency"), self.mux_concurrency)
         self.mux_xudp_concurrency = QSpinBox()
         self.mux_xudp_concurrency.setRange(1, 1024)
         self.mux_xudp_concurrency.setValue(int(mux_cfg.get("xudp_concurrency") or 16))
-        mux_form.addRow("XUDP concurrency", self.mux_xudp_concurrency)
+        mux_form.addRow(tr("XUDP concurrency"), self.mux_xudp_concurrency)
         self.mux_xudp_udp443 = QComboBox()
         self.mux_xudp_udp443.addItems(list(coreopts.XUDP_UDP443_CHOICES))
         current_udp443 = str(mux_cfg.get("xudp_proxy_udp443") or "reject")
@@ -682,32 +689,34 @@ class SettingsDialog(QDialog):
         mux_form.addRow("XUDP UDP443", self.mux_xudp_udp443)
         adv_layout.addWidget(mux_group)
 
-        sniff_group = QGroupBox("Sniffing")
+        sniff_group = QGroupBox(tr("Sniffing"))
         sniff_form = QFormLayout(sniff_group)
-        self.sniff_enabled = QCheckBox("Enabled")
+        self.sniff_enabled = QCheckBox(tr("Enabled"))
         self.sniff_enabled.setChecked(bool(sniff_cfg.get("enabled", True)))
         sniff_form.addRow(self.sniff_enabled)
-        self.sniff_route_only = QCheckBox("Route only")
+        self.sniff_route_only = QCheckBox(tr("Route only"))
         self.sniff_route_only.setChecked(bool(sniff_cfg.get("route_only")))
         sniff_form.addRow(self.sniff_route_only)
         adv_layout.addWidget(sniff_group)
 
-        proxy_group = QGroupBox("Local proxy")
+        proxy_group = QGroupBox(tr("Local proxy"))
         proxy_form = QFormLayout(proxy_group)
         self.socks_port = QSpinBox()
         self.socks_port.setRange(1024, 65535)
         self.socks_port.setValue(coreopts.valid_socks_port(core_cfg.get("socks_port")))
-        proxy_form.addRow("Port", self.socks_port)
-        self.allow_lan = QCheckBox("Allow other devices on your network")
+        proxy_form.addRow(tr("Port"), self.socks_port)
+        self.allow_lan = QCheckBox(tr("Allow other devices on your network"))
         self.allow_lan.setChecked(bool(core_cfg.get("allow_lan")))
         proxy_form.addRow(self.allow_lan)
         self.lan_user = QLineEdit(str(core_cfg.get("lan_user") or ""))
-        proxy_form.addRow("User", self.lan_user)
+        self.lan_user.setLayoutDirection(Qt.LeftToRight)
+        proxy_form.addRow(tr("User"), self.lan_user)
         self.lan_pass = QLineEdit(str(core_cfg.get("lan_pass") or ""))
         self.lan_pass.setEchoMode(QLineEdit.Password)
-        proxy_form.addRow("Password", self.lan_pass)
-        self.lan_warning = QLabel(
-            "LAN sharing is on with no password — anyone on your network can use this proxy.")
+        self.lan_pass.setLayoutDirection(Qt.LeftToRight)
+        proxy_form.addRow(tr("Password"), self.lan_pass)
+        self.lan_warning = QLabel(tr(
+            "LAN sharing is on with no password — anyone on your network can use this proxy."))
         self.lan_warning.setObjectName("Muted")
         self.lan_warning.setWordWrap(True)
         proxy_form.addRow(self.lan_warning)
@@ -716,18 +725,18 @@ class SettingsDialog(QDialog):
         self.lan_pass.textChanged.connect(self._sync_lan_warning)
         adv_layout.addWidget(proxy_group)
 
-        fp_group = QGroupBox("Default TLS fingerprint")
+        fp_group = QGroupBox(tr("Default TLS fingerprint"))
         fp_form = QFormLayout(fp_group)
         self.default_fp = QComboBox()
-        self.default_fp.addItem("(off)", "")
+        self.default_fp.addItem(tr("(off)"), "")
         for name in coreopts.DEFAULT_FP_CHOICES:
             self.default_fp.addItem(name, name)
         current_fp = str(core_cfg.get("default_fp") or "")
         self.default_fp.setCurrentIndex(max(0, self.default_fp.findData(current_fp)))
-        fp_form.addRow("Fingerprint", self.default_fp)
+        fp_form.addRow(tr("Fingerprint"), self.default_fp)
         adv_layout.addWidget(fp_group)
 
-        layout.addWidget(CollapsibleSection("Advanced", adv_widget))
+        layout.addWidget(CollapsibleSection(tr("Advanced"), adv_widget))
         self._sync_lan_warning()
 
         scroll = QScrollArea()
@@ -764,11 +773,11 @@ class SettingsDialog(QDialog):
 
     def _format_last_update(self) -> str:
         if not self._last_update:
-            return "Never updated"
+            return tr("Never updated")
         age_hours = (time.time() - self._last_update) / 3600
         if age_hours < 1:
-            return f"Updated {max(1, round(age_hours * 60))}m ago"
-        return f"Updated {round(age_hours)}h ago"
+            return tr("Updated {n}m ago", n=max(1, round(age_hours * 60)))
+        return tr("Updated {n}h ago", n=round(age_hours))
 
     def _run_async(self, fn, done) -> None:
         worker = Worker(fn)
@@ -787,13 +796,15 @@ class SettingsDialog(QDialog):
             return
         self._geo_busy = True
         self.btn_geo_update.setEnabled(False)
-        self.geo_status.setText("Updating…")
+        self.geo_status.setText(tr("Updating…"))
         source = self.geo_source.currentText()
 
         def done(result=None, error=None):
             self._geo_busy = False
             self.btn_geo_update.setEnabled(True)
             if error:
+                # geo.update()'s own error (a rejected download, a bad
+                # archive) -- stays in English, same as any raw error.
                 self.geo_status.setText(str(error))
                 return
             self._last_update = time.time()
@@ -873,7 +884,7 @@ class SettingsDialog(QDialog):
         if self._backup_busy:
             return
         default_name = f"sushTun-backup-{time.strftime('%Y%m%d')}.zip"
-        path, _ = QFileDialog.getSaveFileName(self, "Back up sushTun", default_name,
+        path, _ = QFileDialog.getSaveFileName(self, tr("Back up sushTun"), default_name,
                                               "Zip archives (*.zip)")
         if not path:
             return
@@ -884,9 +895,9 @@ class SettingsDialog(QDialog):
             self._backup_busy = False
             self.btn_backup.setEnabled(True)
             if error:
-                QMessageBox.warning(self, "Backup failed", str(error))
+                QMessageBox.warning(self, tr("Backup failed"), str(error))
                 return
-            QMessageBox.information(self, "Backup complete", f"Saved to {path}")
+            QMessageBox.information(self, tr("Backup complete"), tr("Saved to {path}", path=path))
 
         # When elevated, backup() writes the finished zip through
         # core.userfs, which spawns a few short-lived subprocesses (each
@@ -895,30 +906,32 @@ class SettingsDialog(QDialog):
         self._run_async(lambda: backup_mod.backup(Path(path)), done)
 
     def _restore_now(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Restore sushTun backup", "",
+        path, _ = QFileDialog.getOpenFileName(self, tr("Restore sushTun backup"), "",
                                               "Zip archives (*.zip)")
         if not path:
             return
         if QMessageBox.question(
-            self, "Restore backup",
-            "This replaces your current servers and settings with the backup's. Continue?",
+            self, tr("Restore backup"),
+            tr("This replaces your current servers and settings with the backup's. Continue?"),
         ) != QMessageBox.Yes:
             return
         try:
             backup_mod.restore(Path(path))
         except (ValueError, OSError) as exc:
-            QMessageBox.warning(self, "Restore failed", str(exc))
+            # backup.restore()'s own message names the exact offending file
+            # or JSON error -- stays in English, same as any raw error.
+            QMessageBox.warning(self, tr("Restore failed"), str(exc))
             return
         self._restored = True
-        QMessageBox.information(self, "Restore complete",
-                                "Restored. sushTun will reload your settings and servers.")
+        QMessageBox.information(self, tr("Restore complete"),
+                                tr("Restored. sushTun will reload your settings and servers."))
 
     def _save(self) -> None:
         if self._busy:
             return
         self._busy = True
         self.btn_save.setEnabled(False)
-        self.status_label.setText("Validating…")
+        self.status_label.setText(tr("Validating…"))
         core_cfg = self._core_values()
         toggle_login = self.start_on_login.isChecked() != self._start_on_login_was
         want_login = self.start_on_login.isChecked()
@@ -942,14 +955,18 @@ class SettingsDialog(QDialog):
             self.btn_save.setEnabled(True)
             self.status_label.setText("")
             if error:
-                QMessageBox.warning(self, "Validation failed", str(error))
+                QMessageBox.warning(self, tr("Validation failed"), str(error))
                 return
             check_result, startup_error = result
             if check_result:
-                QMessageBox.warning(self, "Settings invalid", check_result)
+                # xraycheck.check_config's own text is Xray's raw parser
+                # output -- stays in English.
+                QMessageBox.warning(self, tr("Settings invalid"), check_result)
                 return
             if startup_error:
-                QMessageBox.warning(self, "Startup setting failed", startup_error)
+                # core.autostart.enable/disable's own raised message --
+                # stays in English, same as any other raw error.
+                QMessageBox.warning(self, tr("Startup setting failed"), startup_error)
                 return
             self._start_on_login_was = want_login
             self.accept()
@@ -960,7 +977,7 @@ class SettingsDialog(QDialog):
 class SubscriptionEditDialog(QDialog):
     def __init__(self, sub: Subscription, parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Edit subscription")
+        self.setWindowTitle(tr("Edit subscription"))
         self.resize(420, 0)
         self._sub = sub
         # Auto-fill Name from the URL's host, same as the old bare "paste a
@@ -974,22 +991,25 @@ class SubscriptionEditDialog(QDialog):
         layout.addLayout(form)
 
         self.f_name = QLineEdit(sub.name)
-        form.addRow("Name", self.f_name)
+        form.addRow(tr("Name"), self.f_name)
         self.f_url = QLineEdit(sub.url)
+        self.f_url.setLayoutDirection(Qt.LeftToRight)
         form.addRow("URL", self.f_url)
-        self.f_enabled = QCheckBox("Enabled")
+        self.f_enabled = QCheckBox(tr("Enabled"))
         self.f_enabled.setChecked(sub.enabled)
         form.addRow(self.f_enabled)
         self.f_auto_hours = QSpinBox()
         self.f_auto_hours.setRange(0, 168)
-        self.f_auto_hours.setSpecialValueText("0 (default)")
+        self.f_auto_hours.setSpecialValueText(tr("0 (default)"))
         self.f_auto_hours.setValue(int(sub.auto_update_hours))
-        form.addRow("Auto-update every (hours)", self.f_auto_hours)
+        form.addRow(tr("Auto-update every (hours)"), self.f_auto_hours)
         self.f_name_filter = QLineEdit(sub.name_filter)
-        self.f_name_filter.setPlaceholderText("Only keep servers whose name matches (regex)")
-        form.addRow("Name filter", self.f_name_filter)
+        self.f_name_filter.setPlaceholderText(tr("Only keep servers whose name matches (regex)"))
+        self.f_name_filter.setLayoutDirection(Qt.LeftToRight)
+        form.addRow(tr("Name filter"), self.f_name_filter)
         self.f_user_agent = QLineEdit(sub.user_agent)
         self.f_user_agent.setPlaceholderText(DEFAULT_USER_AGENT)
+        self.f_user_agent.setLayoutDirection(Qt.LeftToRight)
         form.addRow("User-Agent", self.f_user_agent)
 
         self.f_url.textEdited.connect(self._maybe_autofill_name)
@@ -1014,14 +1034,15 @@ class SubscriptionEditDialog(QDialog):
     def _save(self) -> None:
         url = self.f_url.text().strip()
         if not url:
-            QMessageBox.warning(self, "Missing URL", "Subscription URL is required.")
+            QMessageBox.warning(self, tr("Missing URL"), tr("Subscription URL is required."))
             return
         name_filter = self.f_name_filter.text().strip()
         if name_filter:
             try:
                 re.compile(name_filter)
             except re.error as exc:
-                QMessageBox.warning(self, "Invalid name filter", str(exc))
+                # Python's own regex error message -- stays in English.
+                QMessageBox.warning(self, tr("Invalid name filter"), str(exc))
                 return
         self._sub.name = self.f_name.text().strip() or url
         self._sub.url = url
