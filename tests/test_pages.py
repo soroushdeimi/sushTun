@@ -4,6 +4,7 @@ Apply / Discard / Cancel; a refused apply keeps the user on the page.
 from __future__ import annotations
 
 import os
+import time
 
 import pytest
 
@@ -111,3 +112,17 @@ def test_a_refused_apply_keeps_you_on_the_page(qapp, box, monkeypatch):
     assert pages_mod.confirm_leave(page) is False
     assert page.is_dirty()
     assert page.status_label.text() == "Simple: bad rule"
+
+
+def test_wait_for_apply_times_out_instead_of_looping_forever(qapp, monkeypatch):
+    def slow_check(rules, asset_dir=None):
+        time.sleep(1.0)
+        return None
+
+    monkeypatch.setattr(xraycheck, "check_rules", slow_check)
+    page = RoutingPage(DEFAULTS["routing"])
+    page.domains.setPlainText("example.com")
+    page.apply()
+    started = time.monotonic()
+    assert pages_mod._wait_for_apply(page, timeout_ms=50) is False
+    assert time.monotonic() - started < 0.5  # quit from the timer, not the check
