@@ -54,7 +54,7 @@ TRANSLATIONS_FA: dict[str, str] = {
     # -- server_table.py --------------------------------------------------
     "Name": "نام",
     "Delay": "تأخیر",
-    "Transport": "انتقال",
+    "Transport": "نوع انتقال",
     "Subscription": "اشتراک",
     "Type": "نوع",
     "n/a": "نامشخص",
@@ -81,13 +81,13 @@ TRANSLATIONS_FA: dict[str, str] = {
     "Used only for domains your active routing sends direct.":
         "فقط برای دامنه‌هایی که مسیریابی فعال شما مستقیم می‌فرستد استفاده می‌شود.",
     "Off": "خاموش",
-    "Resolve other sites through the tunnel": "سایر سایت‌ها را از طریق تونل حل کن",
+    "Resolve other sites through the tunnel": "پرس‌وجوی DNS سایر سایت‌ها از طریق تونل",
     "Recommended if your ISP blocks or tampers with DNS.":
         "در صورتی که ISP شما DNS را مسدود یا دستکاری می‌کند توصیه می‌شود.",
     "DNS queries for other sites go through the tunnel; "
     "the proxy and any resolver hostname still resolve directly.":
         "پرس‌وجوهای DNS برای سایر سایت‌ها از طریق تونل انجام می‌شود؛ "
-        "پروکسی و هر نام میزبان سرور DNS همچنان مستقیم حل می‌شوند.",
+        "پروکسی و هر نام میزبان سرور DNS همچنان مستقیم پرس‌وجو می‌شوند.",
     "DNS queries leave over your normal connection, not the tunnel.":
         "پرس‌وجوهای DNS از اتصال عادی شما خارج می‌شوند، نه از تونل.",
     "Parallel query": "پرس‌وجوی موازی",
@@ -118,7 +118,7 @@ TRANSLATIONS_FA: dict[str, str] = {
 
     # -- widgets.py ---------------------------------------------------------
     "Connection": "اتصال",
-    "DISCONNECTED": "قطع",
+    "DISCONNECTED": "قطع شده",
     "CONNECTED": "متصل",
     "Relay": "رله",
     "Xray process": "پردازه Xray",
@@ -141,7 +141,7 @@ TRANSLATIONS_FA: dict[str, str] = {
     "No share link for this server type.": "برای این نوع سرور لینک اشتراکی وجود ندارد.",
     "Set active": "تنظیم به‌عنوان فعال",
     "Edit": "ویرایش",
-    "Clone": "شبیه‌سازی",
+    "Clone": "تکثیر",
     "Test real delay": "تست تأخیر واقعی",
     "Copy share link": "کپی لینک اشتراک",
     "Show QR": "نمایش QR",
