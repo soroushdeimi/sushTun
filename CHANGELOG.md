@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.2.0
 
 ### Fixed: 0.1.13 crashed on start whenever a subscription existed
 The server list loaded every `*.json` file in the profiles folder as a server,
