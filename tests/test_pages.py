@@ -19,8 +19,8 @@ from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
 from xrayui.core import xraycheck  # noqa: E402
 from xrayui.core.settings import DEFAULTS  # noqa: E402
 from xrayui.i18n import tr  # noqa: E402
-from xrayui.ui import pages as pages_mod  # noqa: E402
-from xrayui.ui.routing_page import RoutingPage  # noqa: E402
+from xrayui.ui.pages import leave as pages_mod  # noqa: E402
+from xrayui.ui.pages.routing_page import RoutingPage  # noqa: E402
 
 
 @pytest.fixture(scope="module")

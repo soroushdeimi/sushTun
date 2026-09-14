@@ -43,12 +43,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..core import routing as routing_mod
-from ..core import routing_io, xraycheck
-from ..i18n import tr
-from .rule_editor import CollapsibleSection, RuleEditorDialog, default_rule
-from .theme import ACCENT, ERR, OK
-from .workers import Worker
+from ...core import routing as routing_mod
+from ...core import routing_io, xraycheck
+from ...i18n import tr
+from ..rule_editor import CollapsibleSection, RuleEditorDialog, default_rule
+from ..theme import ACCENT, ERR, OK
+from ..workers import Worker
 
 CHOCOLATE4U_URL = (
     "https://raw.githubusercontent.com/Chocolate4U/Iran-v2ray-rules/main/v2rayN/template.json"

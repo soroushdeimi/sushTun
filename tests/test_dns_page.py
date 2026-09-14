@@ -24,7 +24,7 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from xrayui.core import xraycheck  # noqa: E402
 from xrayui.core.settings import DEFAULTS  # noqa: E402
-from xrayui.ui.dns_page import DnsPage  # noqa: E402
+from xrayui.ui.pages.dns_page import DnsPage  # noqa: E402
 
 
 @pytest.fixture(scope="module")

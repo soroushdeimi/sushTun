@@ -10,8 +10,8 @@ from PySide6.QtWidgets import QApplication, QHBoxLayout, QWidget
 from xrayui.core.settings import DEFAULTS
 from xrayui.i18n import set_language
 from xrayui.ui import theme
-from xrayui.ui.dns_page import DnsPage
-from xrayui.ui.routing_page import RoutingPage
+from xrayui.ui.pages.dns_page import DnsPage
+from xrayui.ui.pages.routing_page import RoutingPage
 
 _FA_FONTS = '"Vazirmatn", "Noto Sans Arabic", "Segoe UI", "Tahoma", "Geeza Pro"'
 

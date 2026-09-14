@@ -27,13 +27,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..core import dns as dns_mod
-from ..core import render, xraycheck
-from ..core import routing as routing_mod
-from ..core.profiles import Profile
-from ..i18n import tr
-from .rule_editor import CollapsibleSection
-from .workers import Worker
+from ...core import dns as dns_mod
+from ...core import render, xraycheck
+from ...core import routing as routing_mod
+from ...core.profiles import Profile
+from ...i18n import tr
+from ..rule_editor import CollapsibleSection
+from ..workers import Worker
 
 _CHECK_PROFILE = Profile(
     name="dns check", protocol="vless", address="203.0.113.1", port=443,

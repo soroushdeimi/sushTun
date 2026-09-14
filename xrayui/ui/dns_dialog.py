@@ -10,7 +10,7 @@ from PySide6.QtWidgets import QDialog, QDialogButtonBox, QVBoxLayout
 
 from ..core import xraycheck  # noqa: F401 -- tests monkeypatch dialogs_mod.xraycheck.check_config
 from ..i18n import tr
-from .dns_page import DnsPage
+from .pages.dns_page import DnsPage
 
 
 class DnsDialog(QDialog):

@@ -10,7 +10,10 @@ from PySide6.QtWidgets import QDialog, QDialogButtonBox, QVBoxLayout
 
 from ..core import xraycheck  # noqa: F401 -- tests monkeypatch rd.xraycheck.check_rules
 from ..i18n import tr
-from .routing_page import _RULE_COLS, RoutingPage  # noqa: F401 (i18n coverage reads the name here)
+from .pages.routing_page import (  # noqa: F401 (i18n coverage reads the name here)
+    _RULE_COLS,
+    RoutingPage,
+)
 
 
 class RoutingDialog(QDialog):

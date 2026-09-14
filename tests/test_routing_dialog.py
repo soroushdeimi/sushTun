@@ -144,7 +144,7 @@ def test_rule_editor_accepts_a_rule_with_a_domain(qapp):
 
 # -- dialog wrapper ---------------------------------------------------------
 def test_dialog_is_a_thin_pages_wrapper(dlg):
-    from xrayui.ui.routing_page import RoutingPage
+    from xrayui.ui.pages.routing_page import RoutingPage
     assert isinstance(dlg.page, RoutingPage)
     # Attributes the tests touch resolve onto the page; _save guards the
     # busy state before delegating an apply.

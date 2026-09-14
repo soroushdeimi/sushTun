@@ -32,9 +32,9 @@ def _placeholder_names(template: str) -> set[str]:
 
 def _tr_literal_calls() -> list[tuple[str, set[str], str, int]]:
     """(text, keyword-arg names, filename, lineno) for every tr("literal", ...)
-    call across xrayui/ui/*.py."""
+    call across xrayui/ui/*.py (pages/ included)."""
     found = []
-    for path in sorted(UI_DIR.glob("*.py")):
+    for path in sorted(UI_DIR.rglob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
             if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)

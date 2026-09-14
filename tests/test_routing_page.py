@@ -23,7 +23,7 @@ from PySide6.QtWidgets import QApplication, QToolButton  # noqa: E402
 
 from xrayui.core import xraycheck  # noqa: E402
 from xrayui.core.settings import DEFAULTS  # noqa: E402
-from xrayui.ui.routing_page import RoutingPage, _ltr, _match_summary  # noqa: E402
+from xrayui.ui.pages.routing_page import RoutingPage, _ltr, _match_summary  # noqa: E402
 
 
 @pytest.fixture(scope="module")

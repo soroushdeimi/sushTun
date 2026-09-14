@@ -4,36 +4,37 @@ need from the outside is asked-permission-to-leave with unsaved changes.
 """
 from __future__ import annotations
 
-import time
+from PySide6.QtCore import QEventLoop, QTimer
+from PySide6.QtWidgets import QMessageBox, QWidget
 
-from PySide6.QtWidgets import QApplication, QMessageBox, QWidget
-
-from ..i18n import tr
+from ...i18n import tr
 
 
-def _wait_for_apply(page: QWidget) -> bool:
-    """Block the caller's event loop until the page's async apply settles,
-    on either side (applied or refused). Returns whether it applied."""
-    result = {"value": False, "done": False}
+def _wait_for_apply(page: QWidget, timeout_ms: int = 30_000) -> bool:
+    """Wait for the page's async apply to settle, on either side (applied or
+    refused). Returns whether it applied. A synchronous refusal also settles
+    inside apply() itself, so nothing is left to wait for here."""
+    if not getattr(page, "_busy", True):
+        return False
+    result = {"value": False}
+    loop = QEventLoop()
 
     def on_applied(_cfg) -> None:
         result["value"] = True
-        result["done"] = True
-
-    def on_finished(_applied: bool) -> None:
-        result["done"] = True
+        loop.quit()
 
     page.applied.connect(on_applied)
-    page.applyFinished.connect(on_finished)
-    try:
-        deadline = time.time() + 30.0
-        while not result["done"] and time.time() < deadline:
-            QApplication.processEvents()
-            time.sleep(0.01)
-        return result["value"]
-    finally:
-        page.applied.disconnect(on_applied)
-        page.applyFinished.disconnect(on_finished)
+    page.applyFinished.connect(loop.quit)
+    timer = QTimer(loop)
+    timer.setSingleShot(True)
+    timer.setInterval(timeout_ms)
+    timer.timeout.connect(loop.quit)
+    timer.start()
+    loop.exec()
+    timer.stop()
+    page.applied.disconnect(on_applied)
+    page.applyFinished.disconnect(loop.quit)
+    return result["value"]
 
 
 def confirm_leave(page: QWidget, parent: QWidget | None = None) -> bool:
@@ -59,7 +60,7 @@ def confirm_leave(page: QWidget, parent: QWidget | None = None) -> bool:
         return True
     if clicked is not btn_apply:
         return False  # Cancel or Escape
-    if page.is_dirty():
-        page.apply()
-        return _wait_for_apply(page)
-    return True
+    if not page.is_dirty():
+        return True
+    page.apply()
+    return _wait_for_apply(page)
