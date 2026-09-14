@@ -379,7 +379,9 @@ TRANSLATIONS_FA: dict[str, str] = {
         "دست‌دهی TLS را به تکه‌های کوچک تقسیم می‌کند تا فیلترینگ نتواند آن را بخواند — "
         "اگر سرورها متصل می‌شوند ولی سایت‌ها باز نمی‌شوند این را امتحان کنید.",
     "Routing…": "مسیریابی…",
-    "Which routing rules are active.": "کدام قوانین مسیریابی فعال است.",
+    "Routing:": "مسیریابی:",
+    "Simple = the bypass checkboxes in Routing…; your own rule sets appear here too.":
+        "ساده = چک‌باکس‌های دور زدن در پنجره مسیریابی…؛ مجموعه قوانین شما هم اینجا نشان داده می‌شود.",
     "Choose which resolvers the tunnel uses.": "انتخاب کنید تونل از کدام سرورهای DNS استفاده کند.",
     "Share via hotspot": "اشتراک با هات‌اسپات",
     "Not available on this platform yet.": "هنوز روی این پلتفرم در دسترس نیست.",
