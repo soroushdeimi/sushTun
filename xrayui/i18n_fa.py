@@ -502,4 +502,9 @@ TRANSLATIONS_FA: dict[str, str] = {
     "Down / Up": "دانلود / آپلود",
     "This session": "این نشست",
     "More connection actions": "گزینه‌های بیشتر اتصال",
+
+    # -- ui/a-foundation: reconnect-notice wording ------------------------
+    # Technical acronyms that stay Latin inside the Persian sentence, so
+    # the coverage test sees them mapped.
+    "MTU": "MTU",
 }
