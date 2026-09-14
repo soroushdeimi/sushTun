@@ -199,4 +199,75 @@ TRANSLATIONS_FA: dict[str, str] = {
     "Export rule set": "خروجی گرفتن از مجموعه قوانین",
     "Export failed": "خروجی گرفتن ناموفق بود",
     "Routing invalid": "مسیریابی نامعتبر است",
+
+    # -- dialogs.py: ImportDialog ------------------------------------------
+    "Import profiles": "وارد کردن سرورها",
+    "Paste vless:// or wireguard:// links, a WireGuard .conf, or a base64 subscription…":
+        "لینک‌های vless:// یا wireguard://، یک فایل WireGuard .conf یا یک اشتراک base64 را جای‌گذاری کنید…",
+    "Paste a full Xray config, a WireGuard .conf, or a profile JSON…":
+        "یک پیکربندی کامل Xray، فایل WireGuard .conf یا JSON یک سرور را جای‌گذاری کنید…",
+    "Link / Subscription": "لینک / اشتراک",
+    "QR image": "تصویر QR",
+    "Choose image…": "انتخاب تصویر…",
+    "Decode a vless:// or wireguard:// link from a QR code image.":
+        "یک لینک vless:// یا wireguard:// را از تصویر کد QR بخوان.",
+    "No valid profiles found.": "هیچ سرور معتبری یافت نشد.",
+
+    # -- dialogs.py: ProfileEditDialog --------------------------------------
+    "Edit profile": "ویرایش سرور",
+    "Form": "فرم",
+    "Raw JSON": "JSON خام",
+    "Address": "آدرس",
+    "UUID / private key": "UUID / کلید خصوصی",
+    "Peer / Reality public key": "کلید عمومی Peer / Reality",
+    "VMess security": "امنیت VMess",
+    "Method": "روش",
+    "Encryption": "رمزگذاری",
+    "Flow": "جریان (Flow)",
+    "Security": "امنیت",
+    "Fingerprint": "اثر انگشت TLS",
+    "Reality sid": "شناسه کوتاه (sid) در Reality",
+    "Reality spiderX": "spiderX در Reality",
+    "Path": "مسیر",
+    "Host": "میزبان",
+    "gRPC service": "سرویس gRPC",
+    "Pinned cert SHA-256": "SHA-256 گواهی پین‌شده",
+    "Obfuscation password": "رمز عبور مبهم‌سازی",
+    "Local address": "آدرس محلی",
+    "Preshared key": "کلید از‌پیش‌مشترک",
+    "Reserved": "رزرو شده",
+    "Keepalive (s)": "Keepalive (ثانیه)",
+    "Header type": "نوع هدر",
+    "xhttp extra (JSON)": "xhttp extra (JSON)",
+    "ECH config list": "فهرست تنظیمات ECH",
+    "Verify cert name": "تأیید نام گواهی",
+    "Port-hopping range": "بازه پورت‌پرشی",
+    "Hop interval (s)": "فاصله پرش (ثانیه)",
+    "This server's link asks to skip certificate checks. This Xray "
+    "version no longer allows that — pin the certificate's SHA-256 "
+    "instead.":
+        "لینک این سرور درخواست نادیده گرفتن بررسی گواهی را دارد. این نسخه از Xray دیگر "
+        "این کار را مجاز نمی‌داند — به‌جای آن SHA-256 گواهی را پین کنید.",
+    "Private key": "کلید خصوصی",
+    "Password": "رمز عبور",
+    "Peer public key": "کلید عمومی Peer",
+    "Reality public key": "کلید عمومی Reality",
+    "Invalid JSON": "JSON نامعتبر",
+    "Invalid xhttp extra": "xhttp extra نامعتبر",
+    "xhttp extra must be a JSON object, e.g. {\"headers\": {\"X-Extra\": \"1\"}}.":
+        "xhttp extra باید یک شیء JSON باشد، مثلاً {\"headers\": {\"X-Extra\": \"1\"}}.",
+    "Invalid port range": "بازه پورت نامعتبر",
+    "Port-hopping range must look like 20000-30000 "
+    "(or a comma-separated list of ranges/ports), "
+    "with every port 1-65535.":
+        "بازه پورت‌پرشی باید مانند 20000-30000 باشد (یا فهرستی از بازه‌ها/پورت‌ها با کاما جدا شده)، "
+        "با هر پورت بین 1 تا 65535.",
+    "Invalid pinned certificate": "گواهی پین‌شده نامعتبر",
+    "Pinned cert SHA-256 must be 64 hex characters "
+    "(colons and spaces are fine and will be removed).":
+        "SHA-256 گواهی پین‌شده باید 64 کاراکتر هگز باشد "
+        "(دونقطه و فاصله مشکلی ندارد و حذف خواهد شد).",
+    "Missing fields": "فیلدهای ناقص",
+    "Address and UUID / private key are required.": "آدرس و UUID / کلید خصوصی الزامی هستند.",
+    "WireGuard peer public key is required.": "کلید عمومی Peer در WireGuard الزامی است.",
 }
