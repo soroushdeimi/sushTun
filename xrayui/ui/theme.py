@@ -188,6 +188,28 @@ QToolTip {{
     border-radius: 6px; padding: 4px 8px;
 }}
 
+/* -- mac.py widgets that Qt paints for us ------------------------------ */
+QFrame#InsetGroup {{
+    background: {SURFACE};
+    border: 1px solid {LINE};
+    border-radius: 10px;
+}}
+QWidget#InsetGroupRow {{ background: transparent; }}
+QFrame#InsetGroupSeparator {{ background: {GROUP_SEP}; border: none; }}
+QLabel#GroupRowLabel {{ color: {TEXT}; font-weight: 500; background: transparent; }}
+QLabel#GroupRowFootnote {{ color: {MUTED}; font-size: 11.5px; background: transparent; }}
+QLabel#SidebarSection {{ font-size: 11px; font-weight: 600; color: #7c7c82; background: transparent; }}
+QToolButton#IconButton {{
+    border: none; border-radius: 6px; background: transparent;
+}}
+QToolButton#IconButton:hover {{
+    background: rgba(255,255,255,0.08);
+}}
+QToolButton#IconButton:pressed {{
+    background: rgba(255,255,255,0.12);
+}}
+QToolButton#IconButton:disabled {{ background: transparent; }}
+
 QMenu {{
     background: #2c2c2e; border: 1px solid #45454a; border-radius: 8px; padding: 5px;
 }}
