@@ -351,4 +351,94 @@ TRANSLATIONS_FA: dict[str, str] = {
     "Missing URL": "URL موجود نیست",
     "Subscription URL is required.": "URL اشتراک الزامی است.",
     "Invalid name filter": "فیلتر نام نامعتبر است",
+
+    # -- core/alerts.py (value+template, see ui/main_window.py._check_alerts) -
+    "Critical: only {amount} data left": "هشدار جدی: فقط {amount} داده باقی مانده",
+    "Low data: {amount} left ({percent})": "داده کم: {amount} باقی مانده ({percent})",
+    "Subscription expires in {n} days": "اشتراک تا {n} روز دیگر منقضی می‌شود",
+
+    # -- main_window.py -------------------------------------------------
+    "Restored leftover network settings from a previous session.":
+        "تنظیمات شبکه باقی‌مانده از نشست قبلی بازگردانی شد.",
+    "Could not restore leftover network settings: {error}":
+        "بازگردانی تنظیمات شبکه باقی‌مانده ممکن نشد: {error}",
+    "Could not refresh the login task: {error}": "به‌روزرسانی وظیفه ورود ممکن نشد: {error}",
+    "Auto-connect skipped: no server selected.": "اتصال خودکار نادیده گرفته شد: سروری انتخاب نشده.",
+    "Auto-connect: waiting for network to reach {name}…":
+        "اتصال خودکار: در انتظار شبکه برای رسیدن به {name}…",
+    "Auto-connect failed: {error}": "اتصال خودکار ناموفق بود: {error}",
+    "no active internet interface": "هیچ رابط اینترنتی فعالی وجود ندارد",
+    "Test failed: {error}": "تست ناموفق بود: {error}",
+    "Test finished.": "تست تمام شد.",
+    "Connect": "اتصال",
+    "Disconnect": "قطع اتصال",
+    "Restore network": "بازگردانی شبکه",
+    "Low usage": "مصرف کم",
+    "Splits the TLS handshake into small pieces so filtering can't read it — "
+    "try this if servers connect but sites won't load.":
+        "دست‌دهی TLS را به تکه‌های کوچک تقسیم می‌کند تا فیلترینگ نتواند آن را بخواند — "
+        "اگر سرورها متصل می‌شوند ولی سایت‌ها باز نمی‌شوند این را امتحان کنید.",
+    "Routing…": "مسیریابی…",
+    "Which routing rules are active.": "کدام قوانین مسیریابی فعال است.",
+    "Choose which resolvers the tunnel uses.": "انتخاب کنید تونل از کدام سرورهای DNS استفاده کند.",
+    "Share via hotspot": "اشتراک با هات‌اسپات",
+    "Not available on this platform yet.": "هنوز روی این پلتفرم در دسترس نیست.",
+    "Route devices on this PC's Windows hotspot through the tunnel, "
+    "so phones need no setup of their own.":
+        "دستگاه‌های متصل به هات‌اسپات ویندوز این رایانه را از طریق تونل عبور بده، "
+        "تا گوشی‌ها نیازی به تنظیم جداگانه نداشته باشند.",
+    "Start a Wi-Fi hotspot whose devices use the tunnel, so phones need "
+    "no setup of their own. Its name and password appear in the log.":
+        "یک هات‌اسپات Wi-Fi راه‌اندازی کن که دستگاه‌هایش از تونل استفاده کنند، تا گوشی‌ها نیازی "
+        "به تنظیم جداگانه نداشته باشند. نام و رمز آن در گزارش نمایش داده می‌شود.",
+    "Reconnect now": "اتصال دوباره",
+    "Live log": "گزارش زنده",
+    "Tools": "ابزارها",
+    "Not running as administrator — connecting will fail.":
+        "به‌عنوان مدیر اجرا نشده — اتصال با خطا مواجه خواهد شد.",
+    "Show": "نمایش",
+    "Quit": "خروج",
+    "Delete {n} server(s)?": "{n} سرور حذف شود؟",
+    "Active server changed": "سرور فعال تغییر کرد",
+    "Clipboard has no importable server link.": "کلیپ‌بورد شامل لینک قابل‌وارد‌کردنی نیست.",
+    "Imported {n} server(s).": "{n} سرور وارد شد.",
+    "Active server set to {name}": "سرور فعال روی {name} تنظیم شد",
+    "Active server set to {name}.": "سرور فعال روی {name} تنظیم شد.",
+    "Remove {n} failed server(s)?": "{n} سرور ناموفق حذف شود؟",
+    "No failed servers to remove.": "سرور ناموفقی برای حذف وجود ندارد.",
+    "Remove {n} duplicate server(s)?": "{n} سرور تکراری حذف شود؟",
+    "No duplicate servers to remove.": "سرور تکراری‌ای برای حذف وجود ندارد.",
+    "Refreshing {name}…": "در حال به‌روزرسانی {name}…",
+    "Subscription refresh failed: {error}": "به‌روزرسانی اشتراک ناموفق بود: {error}",
+    "Subscription updated.": "اشتراک به‌روزرسانی شد.",
+    "Delete subscription and its profiles?": "اشتراک و سرورهای آن حذف شود؟",
+    "No enabled subscriptions to update.": "اشتراک فعالی برای به‌روزرسانی وجود ندارد.",
+    "Updating 0 of {n} subscriptions…": "در حال به‌روزرسانی 0 از {n} اشتراک…",
+    "Update all failed: {error}": "به‌روزرسانی همه ناموفق بود: {error}",
+    "Updated {n} of {total} subscriptions.": "{n} از {total} اشتراک به‌روزرسانی شد.",
+    "First error: {error}": "اولین خطا: {error}",
+    "sushTun {tag} is available": "نسخه {tag} از sushTun در دسترس است",
+    "No profile": "بدون سرور",
+    "Import or select a profile first.": "ابتدا یک سرور وارد کنید یا انتخاب کنید.",
+    "Working…": "در حال انجام…",
+    "RUNNING": "در حال اجرا",
+    "STOPPED": "متوقف شده",
+    "{items} changed": "{items} تغییر کرد",
+    "Log level": "سطح لاگ",
+    "Core options": "گزینه‌های هسته",
+    "Geo data updated": "داده‌های جغرافیایی به‌روزرسانی شد",
+    "Settings restored from backup": "تنظیمات از نسخه پشتیبان بازیابی شد",
+    "Routing saved": "مسیریابی ذخیره شد",
+    "DNS saved": "DNS ذخیره شد",
+    "Low usage on": "مصرف کم روشن",
+    "Low usage off": "مصرف کم خاموش",
+    "Anti-filter on": "ضدفیلتر روشن",
+    "Anti-filter off": "ضدفیلتر خاموش",
+    "Routing changed": "مسیریابی تغییر کرد",
+    "Geo data updated.": "داده‌های جغرافیایی به‌روزرسانی شد.",
+    "Hotspot sharing off.": "اشتراک‌گذاری هات‌اسپات خاموش شد.",
+    "Hotspot sharing on — applies on next connect.":
+        "اشتراک‌گذاری هات‌اسپات روشن شد — در اتصال بعدی اعمال می‌شود.",
+    "Still running here. Quit from this icon's menu, or press Ctrl+Q.":
+        "همچنان در حال اجراست. از منوی این آیکون خارج شوید یا Ctrl+Q را بزنید.",
 }

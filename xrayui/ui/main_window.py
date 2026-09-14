@@ -35,6 +35,7 @@ from ..core.alerts import human_bytes
 from ..core.connection import Connection, _resolve
 from ..core.profiles import Profile, ProfileStore
 from ..core.xray import is_xray_running
+from ..i18n import tr
 from .dialogs import ImportDialog, ProfileEditDialog, SettingsDialog, SubscriptionEditDialog
 from .dns_dialog import DnsDialog
 from .log_tailer import LogTailer
@@ -137,9 +138,11 @@ class MainWindow(QMainWindow):
         self._check_alerts()
         try:
             if self.conn.recover_if_stale(dns_retries=3):
-                self._on_step("Restored leftover network settings from a previous session.")
+                self._on_step(tr("Restored leftover network settings from a previous session."))
         except Exception as exc:
-            self._on_step(f"Could not restore leftover network settings: {exc}")
+            # `exc` is a raw error from the network/DNS repair machinery --
+            # stays in English, same as any other underlying-system error.
+            self._on_step(tr("Could not restore leftover network settings: {error}", error=exc))
         self._refresh_status()
         self._reregister_autostart_if_enabled()
         self._auto_connect_on_startup()
@@ -156,16 +159,16 @@ class MainWindow(QMainWindow):
         try:
             autostart_mod.enable()
         except Exception as exc:
-            self._on_step(f"Could not refresh the login task: {exc}")
+            self._on_step(tr("Could not refresh the login task: {error}", error=exc))
 
     def _auto_connect_on_startup(self) -> None:
         if not self.settings.get("startup", {}).get("auto_connect"):
             return
         profile = self._active_profile()
         if not profile:
-            self._on_step("Auto-connect skipped: no server selected.")
+            self._on_step(tr("Auto-connect skipped: no server selected."))
             return
-        self._on_step(f"Auto-connect: waiting for network to reach {profile.name}…")
+        self._on_step(tr("Auto-connect: waiting for network to reach {name}…", name=profile.name))
         self._set_busy(True)
 
         def work():
@@ -179,7 +182,7 @@ class MainWindow(QMainWindow):
         def done(result=None, error=None):
             self._set_busy(False)
             if error:
-                self._on_step(f"Auto-connect failed: {error}")
+                self._on_step(tr("Auto-connect failed: {error}", error=error))
                 return
             self.btn_reconnect.setVisible(False)
             self._refresh_status()
@@ -193,13 +196,14 @@ class MainWindow(QMainWindow):
         self.subs_panel = SubscriptionPanel()
         self.tools = ToolsPanel()
         self.log = LogView()
+        self.log.setLayoutDirection(Qt.LeftToRight)  # diagnostics stay English/LTR
         self.alert_banner = AlertBanner()
 
-        self.btn_connect = QPushButton("Connect")
+        self.btn_connect = QPushButton(tr("Connect"))
         self.btn_connect.setObjectName("Primary")
-        self.btn_disconnect = QPushButton("Disconnect")
+        self.btn_disconnect = QPushButton(tr("Disconnect"))
         self.btn_disconnect.setObjectName("Danger")
-        self.btn_cleanup = QPushButton("Restore network")
+        self.btn_cleanup = QPushButton(tr("Restore network"))
         self.btn_connect.clicked.connect(self._connect)
         self.btn_disconnect.clicked.connect(self._disconnect)
         self.btn_cleanup.clicked.connect(self._cleanup)
@@ -209,38 +213,38 @@ class MainWindow(QMainWindow):
         actions.addWidget(self.btn_disconnect, 1)
         actions.addWidget(self.btn_cleanup, 1)
 
-        self.btn_low = QPushButton("Low usage")
+        self.btn_low = QPushButton(tr("Low usage"))
         self.btn_low.setCheckable(True)
         self.btn_low.setChecked(self.settings["routing"]["low_usage"])
         self.btn_low.toggled.connect(self._toggle_low_usage)
-        self.btn_fragment = QPushButton("Anti-filter")
+        self.btn_fragment = QPushButton(tr("Anti-filter"))
         self.btn_fragment.setCheckable(True)
         self.btn_fragment.setChecked(self.settings["core"]["fragment"]["enabled"])
-        self.btn_fragment.setToolTip(
+        self.btn_fragment.setToolTip(tr(
             "Splits the TLS handshake into small pieces so filtering can't read it — "
             "try this if servers connect but sites won't load."
-        )
+        ))
         self.btn_fragment.toggled.connect(self._toggle_fragment)
-        self.btn_routing = QPushButton("Routing…")
+        self.btn_routing = QPushButton(tr("Routing…"))
         self.btn_routing.clicked.connect(self._open_routing)
         self.routing_combo = QComboBox()
-        self.routing_combo.setToolTip("Which routing rules are active.")
+        self.routing_combo.setToolTip(tr("Which routing rules are active."))
         self.routing_combo.currentIndexChanged.connect(self._on_routing_combo_changed)
         self.btn_dns = QPushButton("DNS…")
-        self.btn_dns.setToolTip("Choose which resolvers the tunnel uses.")
+        self.btn_dns.setToolTip(tr("Choose which resolvers the tunnel uses."))
         self.btn_dns.clicked.connect(self._open_dns)
-        self.btn_settings = QPushButton("Settings")
+        self.btn_settings = QPushButton(tr("Settings"))
         self.btn_settings.clicked.connect(self._open_settings)
-        self.btn_gateway = QPushButton("Share via hotspot")
+        self.btn_gateway = QPushButton(tr("Share via hotspot"))
         self.btn_gateway.setCheckable(True)
         if not hotspot.supported():
-            tip = "Not available on this platform yet."
+            tip = tr("Not available on this platform yet.")
         elif hotspot.IS_WIN:
-            tip = ("Route devices on this PC's Windows hotspot through the tunnel, "
-                   "so phones need no setup of their own.")
+            tip = tr("Route devices on this PC's Windows hotspot through the tunnel, "
+                    "so phones need no setup of their own.")
         else:
-            tip = ("Start a Wi-Fi hotspot whose devices use the tunnel, so phones need "
-                   "no setup of their own. Its name and password appear in the log.")
+            tip = tr("Start a Wi-Fi hotspot whose devices use the tunnel, so phones need "
+                    "no setup of their own. Its name and password appear in the log.")
         self.btn_gateway.setToolTip(tip)
         self.btn_gateway.setEnabled(hotspot.supported())
         self.btn_gateway.setChecked(self.settings["gateway"]["enabled"])
@@ -257,7 +261,7 @@ class MainWindow(QMainWindow):
 
         self.step_label = QLabel("")
         self.step_label.setObjectName("Muted")
-        self.btn_reconnect = QPushButton("Reconnect now")
+        self.btn_reconnect = QPushButton(tr("Reconnect now"))
         self.btn_reconnect.setObjectName("Primary")
         self.btn_reconnect.clicked.connect(self._reconnect_now)
         self.btn_reconnect.setVisible(False)
@@ -266,8 +270,8 @@ class MainWindow(QMainWindow):
         step_row.addWidget(self.btn_reconnect)
 
         tabs = QTabWidget()
-        tabs.addTab(self.log, "Live log")
-        tabs.addTab(self.tools, "Tools")
+        tabs.addTab(self.log, tr("Live log"))
+        tabs.addTab(self.tools, tr("Tools"))
 
         right = QWidget()
         rl = QVBoxLayout(right)
@@ -279,7 +283,7 @@ class MainWindow(QMainWindow):
         rl.addLayout(step_row)
         rl.addWidget(tabs, 1)
         if not elevated:
-            warn = QLabel("Not running as administrator — connecting will fail.")
+            warn = QLabel(tr("Not running as administrator — connecting will fail."))
             warn.setStyleSheet("color:#ff6b6b;")
             rl.insertWidget(0, warn)
 
@@ -367,14 +371,14 @@ class MainWindow(QMainWindow):
         self.tray = QSystemTrayIcon(icon, self)
         self.tray.setToolTip("sushTun")
         menu = QMenu()
-        menu.addAction("Show", self._show_window)
-        menu.addAction("Connect", self._connect)
-        menu.addAction("Disconnect", self._disconnect)
+        menu.addAction(tr("Show"), self._show_window)
+        menu.addAction(tr("Connect"), self._connect)
+        menu.addAction(tr("Disconnect"), self._disconnect)
         menu.addSeparator()
-        self.servers_menu = menu.addMenu("Servers")
-        self.routing_menu = menu.addMenu("Routing")
+        self.servers_menu = menu.addMenu(tr("Servers"))
+        self.routing_menu = menu.addMenu(tr("Routing"))
         menu.addSeparator()
-        menu.addAction("Quit", self._quit)
+        menu.addAction(tr("Quit"), self._quit)
         self.tray.setContextMenu(menu)
         self.tray.activated.connect(
             lambda reason: self._show_window()
@@ -447,13 +451,15 @@ class MainWindow(QMainWindow):
         profile = self.store.get(uid)
         if not profile:
             return
-        if QMessageBox.question(self, "Delete", f"Delete '{profile.name}'?") == \
+        if QMessageBox.question(self, tr("Delete"),
+                                tr("Delete '{name}'?", name=profile.name)) == \
                 QMessageBox.Yes:
             self.store.delete(uid)
             self._reload_profiles()
 
     def _delete_many(self, uids: list) -> None:
-        if QMessageBox.question(self, "Delete", f"Delete {len(uids)} server(s)?") == \
+        if QMessageBox.question(self, tr("Delete"),
+                                tr("Delete {n} server(s)?", n=len(uids))) == \
                 QMessageBox.Yes:
             for uid in uids:
                 self.store.delete(uid)
@@ -471,7 +477,7 @@ class MainWindow(QMainWindow):
     def _activate_from_tray(self, uid: str) -> None:
         self._set_active(uid)
         if self.conn.is_connected():
-            self._needs_reconnect("Active server changed")
+            self._needs_reconnect(tr("Active server changed"))
 
     def _paste_import(self) -> None:
         text = QApplication.clipboard().text()
@@ -479,14 +485,14 @@ class MainWindow(QMainWindow):
             return
         profiles = importer.parse_share_text(text)
         if not profiles:
-            self.step_label.setText("Clipboard has no importable server link.")
+            self.step_label.setText(tr("Clipboard has no importable server link."))
             return
         for p in profiles:
             self.store.save(p)
         if not self.store.active_uid():
             self.store.set_active(profiles[0].uid)
         self._reload_profiles()
-        self.step_label.setText(f"Imported {len(profiles)} server(s).")
+        self.step_label.setText(tr("Imported {n} server(s).", n=len(profiles)))
 
     # Speed test --------------------------------------------------------------
     def _start_test(self, uids: list, real: bool) -> None:
@@ -504,7 +510,7 @@ class MainWindow(QMainWindow):
             if real:
                 iface = network.detect_interface()
                 if iface is None:
-                    raise ValueError("no active internet interface")
+                    raise ValueError(tr("no active internet interface"))
                 speedtest.real_delay_all(
                     profiles, self._emit_test_result, cancel,
                     url=cfg.get("url", "https://www.google.com/generate_204"),
@@ -519,7 +525,8 @@ class MainWindow(QMainWindow):
         def done(result=None, error=None):
             self._test_cancel = None
             self.profiles.set_testing(False)
-            self.step_label.setText(f"Test failed: {error}" if error else "Test finished.")
+            self.step_label.setText(
+                tr("Test failed: {error}", error=error) if error else tr("Test finished."))
 
         self._run_async(work, done)
 
@@ -544,9 +551,9 @@ class MainWindow(QMainWindow):
         self._reload_profiles()
         name = profile.name if profile else ""
         if self.conn.is_connected():
-            self._needs_reconnect(f"Active server set to {name}")
+            self._needs_reconnect(tr("Active server set to {name}", name=name))
         else:
-            self.step_label.setText(f"Active server set to {name}.")
+            self.step_label.setText(tr("Active server set to {name}.", name=name))
 
     def _remove_failed(self) -> None:
         active = self.store.active_uid()
@@ -560,10 +567,10 @@ class MainWindow(QMainWindow):
             if r.get("error") and not r.get("skipped"):
                 failed.append(p)
         if not failed:
-            self.step_label.setText("No failed servers to remove.")
+            self.step_label.setText(tr("No failed servers to remove."))
             return
         if QMessageBox.question(
-            self, "Remove failed", f"Remove {len(failed)} failed server(s)?"
+            self, tr("Remove failed"), tr("Remove {n} failed server(s)?", n=len(failed))
         ) == QMessageBox.Yes:
             for p in failed:
                 self.store.delete(p.uid)
@@ -587,10 +594,11 @@ class MainWindow(QMainWindow):
             else:
                 to_delete.append(p.uid)
         if not to_delete:
-            self.step_label.setText("No duplicate servers to remove.")
+            self.step_label.setText(tr("No duplicate servers to remove."))
             return
         if QMessageBox.question(
-            self, "Remove duplicates", f"Remove {len(to_delete)} duplicate server(s)?"
+            self, tr("Remove duplicates"),
+            tr("Remove {n} duplicate server(s)?", n=len(to_delete))
         ) == QMessageBox.Yes:
             for uid in to_delete:
                 self.store.delete(uid)
@@ -622,13 +630,13 @@ class MainWindow(QMainWindow):
         sub = next((s for s in self.subs.list() if s.uid == uid), None)
         if not sub:
             return
-        self.step_label.setText(f"Refreshing {sub.name}…")
+        self.step_label.setText(tr("Refreshing {name}…", name=sub.name))
 
         def done(result=None, error=None):
             if error:
-                self.step_label.setText(f"Subscription refresh failed: {error}")
+                self.step_label.setText(tr("Subscription refresh failed: {error}", error=error))
             else:
-                self.step_label.setText("Subscription updated.")
+                self.step_label.setText(tr("Subscription updated."))
             self._reload_subs()
             self._reload_profiles()
             self._check_alerts()
@@ -636,7 +644,8 @@ class MainWindow(QMainWindow):
         self._run_async(lambda: sub_mod.refresh(sub, self.store, self.subs), done)
 
     def _delete_sub(self, uid: str) -> None:
-        if QMessageBox.question(self, "Delete", "Delete subscription and its profiles?") == \
+        if QMessageBox.question(self, tr("Delete"),
+                                tr("Delete subscription and its profiles?")) == \
                 QMessageBox.Yes:
             self.subs.delete(uid, self.store)
             self._reload_subs()
@@ -645,9 +654,9 @@ class MainWindow(QMainWindow):
     def _update_all_subs(self) -> None:
         subs = [s for s in self.subs.list() if s.enabled]
         if not subs:
-            self.step_label.setText("No enabled subscriptions to update.")
+            self.step_label.setText(tr("No enabled subscriptions to update."))
             return
-        self.step_label.setText(f"Updating 0 of {len(subs)} subscriptions…")
+        self.step_label.setText(tr("Updating 0 of {n} subscriptions…", n=len(subs)))
 
         def work():
             # Sequential, not N parallel fetches: subscription hosts are
@@ -666,12 +675,12 @@ class MainWindow(QMainWindow):
 
         def done(result=None, error=None):
             if error:
-                self.step_label.setText(f"Update all failed: {error}")
+                self.step_label.setText(tr("Update all failed: {error}", error=error))
             else:
                 updated, total, first_error = result
-                msg = f"Updated {updated} of {total} subscriptions."
+                msg = tr("Updated {n} of {total} subscriptions.", n=updated, total=total)
                 if first_error:
-                    msg += f" First error: {first_error}"
+                    msg += " " + tr("First error: {error}", error=first_error)
                 self.step_label.setText(msg)
             self._reload_subs()
             self._reload_profiles()
@@ -697,7 +706,8 @@ class MainWindow(QMainWindow):
         if not triggered:
             return
         level = "critical" if any(a.level == "critical" for a in triggered) else "warning"
-        message = "  •  ".join(a.message for a in triggered)
+        message = "  •  ".join(tr(a.template, **a.params) if a.template else a.message
+                               for a in triggered)
         self.alert_banner.show_alert(level, message)
         if self.tray:
             icon = QSystemTrayIcon.Critical if level == "critical" else QSystemTrayIcon.Warning
@@ -721,14 +731,14 @@ class MainWindow(QMainWindow):
         if not updates_mod.is_newer(tag, __version__):
             return
         self.alert_banner.show_alert(
-            "warning", f"sushTun {tag} is available",
-            action_label="Copy download link",
+            "warning", tr("sushTun {tag} is available", tag=tag),
+            action_label=tr("Copy download link"),
             action=lambda: QApplication.clipboard().setText(url),
         )
         # A tray toast is a one-time nudge, not shown again for this version
         # even across restarts -- the banner itself stays until dismissed.
         if self.tray and self.settings["updates"].get("notified_version") != tag:
-            self.tray.showMessage("sushTun", f"sushTun {tag} is available",
+            self.tray.showMessage("sushTun", tr("sushTun {tag} is available", tag=tag),
                                   QSystemTrayIcon.Information, 8000)
             self.settings["updates"]["notified_version"] = tag
             app_settings.save(self.settings)
@@ -739,10 +749,11 @@ class MainWindow(QMainWindow):
             return
         profile = self._active_profile()
         if not profile:
-            QMessageBox.information(self, "No profile", "Import or select a profile first.")
+            QMessageBox.information(self, tr("No profile"), tr("Import or select a profile first."))
             return
         self.store.set_active(profile.uid)
         self._set_busy(True)
+        # Diagnostic log: stays English, same as the rest of the live log.
         self.log.append_line(f"Connecting to {profile.name} ({profile.endpoint})…")
         self._run_async(lambda: self.conn.connect(profile), self._on_conn_done)
 
@@ -761,15 +772,21 @@ class MainWindow(QMainWindow):
     def _on_conn_done(self, result=None, error: str | None = None) -> None:
         self._set_busy(False)
         if error:
+            # `error` is core.connection's own raw failure text (Xray/OS
+            # level) -- stays in English, same as any other raw error.
             self.step_label.setText(error)
-            QMessageBox.warning(self, "Connection", error)
+            QMessageBox.warning(self, tr("Connection"), error)
         # Covers Connect, Disconnect and Reconnect now (which shares this
         # callback): whatever just happened, there's nothing left pending.
         self.btn_reconnect.setVisible(False)
         self._refresh_status()
 
     def _on_step(self, msg: str) -> None:
-        self.step_label.setText(msg)
+        # core.connection's on_step callback emits a small, fixed set of
+        # English step strings (core/ stays i18n-free); tr() translates the
+        # ones in the fa table and falls back to English for the rest.
+        self.step_label.setText(tr(msg))
+        # The live log stays English regardless -- it's a diagnostic feed.
         self.log.append_line(f">> {msg}")
 
     # Tools -----------------------------------------------------------------
@@ -777,7 +794,7 @@ class MainWindow(QMainWindow):
         if self._busy:
             return
         self.tools.set_busy(True)
-        self.tools.set_result("Working…")
+        self.tools.set_result(tr("Working…"))
 
         def done(result=None, error=None):
             self.tools.set_busy(False)
@@ -846,7 +863,7 @@ class MainWindow(QMainWindow):
         self.status_card.set_connected(connected)
         profile = self._active_profile()
         self.status_card.set("endpoint", profile.endpoint if profile else "—")
-        self.status_card.set("process", "RUNNING" if is_xray_running() else "STOPPED")
+        self.status_card.set("process", tr("RUNNING") if is_xray_running() else tr("STOPPED"))
         st = self.conn.state
         self.status_card.set("iface", st.alias or "—")
         self.status_card.set("ip", st.ipv4 or "—")
@@ -901,7 +918,7 @@ class MainWindow(QMainWindow):
     def _needs_reconnect(self, what: str) -> None:
         """Common wording for every "this applies on the next connect" spot.
         Only actually connected does a reconnect mean anything to offer."""
-        self.step_label.setText(f"{what} — reconnect to apply.")
+        self.step_label.setText(tr("{what} — reconnect to apply.", what=what))
         if self.conn.is_connected():
             self.btn_reconnect.setVisible(True)
 
@@ -931,13 +948,13 @@ class MainWindow(QMainWindow):
             self.btn_fragment.setChecked(self.settings["core"]["fragment"]["enabled"])
             changed = [label for label, old, new in (
                 ("MTU", old_mtu, values["tun_mtu"]),
-                ("Log level", old_log, values["log_level"]),
-                ("Core options", old_core, values["core"]),
+                (tr("Log level"), old_log, values["log_level"]),
+                (tr("Core options"), old_core, values["core"]),
             ) if old != new]
             if changed:
-                self._needs_reconnect(", ".join(changed) + " changed")
+                self._needs_reconnect(tr("{items} changed", items=", ".join(changed)))
             elif dlg.geo_updated():
-                self._needs_reconnect("Geo data updated")
+                self._needs_reconnect(tr("Geo data updated"))
         # A restore replaces files on disk the moment it happens, whether or
         # not the dialog is later accepted or cancelled -- so this is
         # checked unconditionally, not only in the dlg.exec() branch above.
@@ -947,7 +964,7 @@ class MainWindow(QMainWindow):
             self._reload_subs()
             self._refresh_routing_combo()
             if self.conn.is_connected():
-                self._needs_reconnect("Settings restored from backup")
+                self._needs_reconnect(tr("Settings restored from backup"))
 
     def _open_routing(self) -> None:
         dlg = RoutingDialog(self.settings["routing"], self)
@@ -956,24 +973,24 @@ class MainWindow(QMainWindow):
             app_settings.save(self.settings)
             self.btn_low.setChecked(self.settings["routing"]["low_usage"])
             self._refresh_routing_combo()
-            self._needs_reconnect("Routing saved")
+            self._needs_reconnect(tr("Routing saved"))
 
     def _open_dns(self) -> None:
         dlg = DnsDialog(self.settings["dns"], self.settings["routing"], self)
         if dlg.exec():
             self.settings["dns"] = dlg.result_dns()
             app_settings.save(self.settings)
-            self._needs_reconnect("DNS saved")
+            self._needs_reconnect(tr("DNS saved"))
 
     def _toggle_low_usage(self, checked: bool) -> None:
         self.settings["routing"]["low_usage"] = checked
         app_settings.save(self.settings)
-        self._needs_reconnect(f"Low usage {'on' if checked else 'off'}")
+        self._needs_reconnect(tr("Low usage on") if checked else tr("Low usage off"))
 
     def _toggle_fragment(self, checked: bool) -> None:
         self.settings["core"]["fragment"]["enabled"] = checked
         app_settings.save(self.settings)
-        self._needs_reconnect(f"Anti-filter {'on' if checked else 'off'}")
+        self._needs_reconnect(tr("Anti-filter on") if checked else tr("Anti-filter off"))
 
     # Routing mode: main-window combo, and the tray's checkable submenu -----
     def _refresh_routing_combo(self) -> None:
@@ -981,9 +998,9 @@ class MainWindow(QMainWindow):
         mode = routing_cfg.get("mode") or "simple"
         self.routing_combo.blockSignals(True)
         self.routing_combo.clear()
-        self.routing_combo.addItem("Simple", "simple")
+        self.routing_combo.addItem(tr("Simple"), "simple")
         for s in routing_cfg.get("sets") or []:
-            self.routing_combo.addItem(s.get("name") or "Unnamed", s.get("id"))
+            self.routing_combo.addItem(s.get("name") or tr("Unnamed"), s.get("id"))
         idx = self.routing_combo.findData(mode)
         self.routing_combo.setCurrentIndex(idx if idx >= 0 else 0)
         self.routing_combo.blockSignals(False)
@@ -1022,8 +1039,8 @@ class MainWindow(QMainWindow):
         self.routing_menu.clear()
         routing_cfg = self.settings.get("routing", {})
         mode = routing_cfg.get("mode") or "simple"
-        items = [("Simple", "simple")] + [
-            (s.get("name") or "Unnamed", s.get("id")) for s in routing_cfg.get("sets") or []
+        items = [(tr("Simple"), "simple")] + [
+            (s.get("name") or tr("Unnamed"), s.get("id")) for s in routing_cfg.get("sets") or []
         ]
         group = QActionGroup(self.routing_menu)
         group.setExclusive(True)
@@ -1045,7 +1062,7 @@ class MainWindow(QMainWindow):
         self.routing_combo.setCurrentIndex(idx if idx >= 0 else 0)
         self.routing_combo.blockSignals(False)
         self._rebuild_routing_tray_menu()
-        self._needs_reconnect("Routing changed")
+        self._needs_reconnect(tr("Routing changed"))
 
     # Geo data ----------------------------------------------------------
     def _maybe_auto_update_geo(self) -> None:
@@ -1068,8 +1085,8 @@ class MainWindow(QMainWindow):
                 return
             self.settings["geo"]["last_update"] = time.time()
             app_settings.save(self.settings)
-            self._needs_reconnect("Geo data updated") if self.conn.is_connected() \
-                else self.step_label.setText("Geo data updated.")
+            self._needs_reconnect(tr("Geo data updated")) if self.conn.is_connected() \
+                else self.step_label.setText(tr("Geo data updated."))
 
         self._run_async(lambda: geo_mod.update(source), done)
 
@@ -1078,11 +1095,11 @@ class MainWindow(QMainWindow):
         app_settings.save(self.settings)
         if not checked and self.conn.is_connected():
             self._run_async(self.conn.stop_gateway, lambda result=None, error=None: None)
-            self.step_label.setText("Hotspot sharing off.")
+            self.step_label.setText(tr("Hotspot sharing off."))
             return
         self.step_label.setText(
-            "Hotspot sharing on — applies on next connect."
-            if checked else "Hotspot sharing off."
+            tr("Hotspot sharing on — applies on next connect.")
+            if checked else tr("Hotspot sharing off.")
         )
 
     # Worker plumbing -------------------------------------------------------
@@ -1170,7 +1187,7 @@ class MainWindow(QMainWindow):
                 self._told_about_tray = True
                 self.tray.showMessage(
                     "sushTun",
-                    "Still running here. Quit from this icon's menu, or press Ctrl+Q.",
+                    tr("Still running here. Quit from this icon's menu, or press Ctrl+Q."),
                     QSystemTrayIcon.Information, 5000,
                 )
             return
