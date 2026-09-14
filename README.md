@@ -23,18 +23,24 @@ dependencies.
 
 ## Features
 
-- **Servers** — import from `vless://` links, base64 subscriptions, raw JSON, or
-  a QR code; edit, duplicate, and switch between profiles.
+- **Servers** — VLESS, VMess, Trojan, Shadowsocks, Hysteria2, and WireGuard, with
+  certificate pinning and ECH. Import from links, base64 subscriptions, a
+  WireGuard `.conf`, raw JSON, or a QR code; test real delay or TCP ping (one
+  server or a whole selection), switch to the fastest, and copy a share
+  link/QR straight from the table.
 - **Subscriptions** — tracks your plan's data quota and expiry with a live usage
-  bar, refreshed automatically in the background.
+  bar; each one refreshes on its own schedule, with an optional name filter and
+  custom User-Agent, or refresh them all at once.
 - **Smart alerts** — a tray notification and in-app banner when data runs low or
   a plan is about to expire, throttled to once per day per threshold.
-- **Split routing** — choose what skips the tunnel: Iran, Russia, and China
-  (via geosite/geoip), ad and tracker blocking, the local network, or your own
-  domains and IPs.
-- **Custom DNS** — pick your resolvers (DoH, DoT, plain, or a one-click preset
-  for Cloudflare, Google, Quad9, or AdGuard), choose the query strategy, and pin
-  individual domains to fixed addresses.
+- **Split routing** — Simple toggles for Iran, Russia, China, ad/tracker
+  blocking, and your own domains and IPs, or build named custom rule sets with
+  v2rayN-compatible import/export and their own geo-data updater.
+- **Custom DNS** — pick your resolvers (DoH, DoT, plain, or a one-click preset),
+  a separate domestic resolver for domains your routing sends direct, resolving
+  the rest through the tunnel, and advanced overrides when you need them.
+- **Core tuning** — anti-filter TLS fragmentation, multiplexing, traffic
+  sniffing, and a local proxy you can share with other devices on your network.
 - **Low-usage mode** — a single toggle sends OS telemetry and update traffic
   direct so it never eats your quota, while everything else stays tunneled.
 - **Share via hotspot** *(Windows, Linux)* — put the tunnel behind a Wi-Fi hotspot
@@ -42,15 +48,21 @@ dependencies.
   configure on the device itself. On Linux sushTun starts the hotspot through
   NetworkManager (named "sushTun"; the password is shown in the log), alongside the
   Wi-Fi you are connected to when the card supports it.
+- **Startup and backup** — start sushTun at login (Windows, and the `.deb` on
+  Linux) with optional auto-connect, back up and restore your servers and
+  settings as a zip, and get a banner when a new release is out.
+- **Persian interface** — a full right-to-left فارسی translation, switchable in
+  Settings.
 - **Live metrics** — real-time throughput and total data used this session,
   plus ping, TCP-delay, and diagnostics tools alongside a colorized live log.
 
 ## Download
 
 Grab the latest build for your platform from the
-**[Releases page](https://github.com/soroushdeimi/sushTun/releases/latest)**.
-Each release ships ready-to-run binaries for Windows, macOS, and Linux — no
-Python or dependencies required.
+**[Releases page](https://github.com/soroushdeimi/sushTun/releases/latest)**:
+`sushTun-windows.exe`, `sushTun-linux`, or `sushTun-macos`. Each is a single
+ready-to-run binary — no Python or dependencies required. The portable build
+keeps its settings and profiles next to the file itself.
 
 On Debian/Ubuntu you can install it instead of running the portable binary:
 the `sushtun_<version>_amd64.deb` asset adds sushTun to the app menu with its
