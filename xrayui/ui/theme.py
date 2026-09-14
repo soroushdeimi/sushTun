@@ -1,4 +1,7 @@
 """Dark theme palette and stylesheet, modelled on macOS dark mode."""
+from __future__ import annotations
+
+from pathlib import Path
 
 ACCENT = "#0a84ff"
 OK = "#30d158"
@@ -11,6 +14,18 @@ BG = "#1e1e20"
 SURFACE = "#2a2a2d"
 SUNKEN = "#18181a"
 LINE = "#38383c"
+
+# macOS sidebar / inset-group tokens (direction A mockup).
+SIDEBAR = "#252528"
+SIDEBAR_EDGE = "#1a1a1c"
+HAIRLINE = "#2e2e31"
+GROUP_SEP = "#333336"
+ZEBRA = "rgba(255,255,255,0.025)"
+
+# The white check painted over the accent fill of a checked box/radio.  It
+# has to live on disk (not a data URI): Qt stylesheets resolve image URLs
+# through QImageReader, which has no data: scheme handler.
+_CHECK_IMAGE = Path(__file__).with_name("_check.svg").resolve().as_posix()
 
 _FONT = '"-apple-system", "SF Pro Text", "Inter", "Segoe UI", "Ubuntu", "Cantarell", sans-serif'
 _MONO = '"SF Mono", "JetBrains Mono", "Cascadia Code", "Ubuntu Mono", "Consolas", monospace'
@@ -108,6 +123,31 @@ QListWidget::item {{ padding: 8px 10px; border-radius: 6px; }}
 QListWidget::item:selected {{ background: {ACCENT}; color: white; }}
 QListWidget::item:hover:!selected {{ background: #343437; }}
 
+/* macOS-style check boxes and radios: the Qt default indicator is nearly
+   invisible against the dark window -- an accessibility bug -- so it is
+   replaced with a visible square/circle: 14px, #6e6e73 border, #18181a
+   fill, accent fill when checked with a white check glyph over it. */
+QCheckBox, QRadioButton {{ spacing: 8px; }}
+QCheckBox::indicator, QRadioButton::indicator {{
+    width: 14px; height: 14px;
+    border: 1px solid #6e6e73; background: #18181a;
+}}
+QCheckBox::indicator {{ border-radius: 4px; }}
+QRadioButton::indicator {{ border-radius: 7px; }}
+QCheckBox::indicator:hover:!checked, QRadioButton::indicator:hover:!checked {{
+    border-color: #9a9aa0;
+}}
+QCheckBox::indicator:checked, QRadioButton::indicator:checked {{
+    background: {ACCENT}; border-color: {ACCENT};
+    image: url("{_CHECK_IMAGE}");
+}}
+QCheckBox::indicator:disabled, QRadioButton::indicator:disabled {{
+    background: #2f2f32; border-color: #3a3a3d;
+}}
+QCheckBox::indicator:focus, QRadioButton::indicator:focus {{
+    border: 1px solid {ACCENT};
+}}
+
 QTextEdit, QPlainTextEdit, QLineEdit, QComboBox, QSpinBox {{
     background: {SUNKEN}; border: 1px solid {LINE}; border-radius: 7px; padding: 6px;
     selection-background-color: {ACCENT};
@@ -147,6 +187,45 @@ QToolTip {{
     background: #2c2c2e; color: {TEXT}; border: 1px solid #45454a;
     border-radius: 6px; padding: 4px 8px;
 }}
+
+/* -- mac.py widgets that Qt paints for us ------------------------------ */
+QFrame#InsetGroup {{
+    background: {SURFACE};
+    border: 1px solid {LINE};
+    border-radius: 10px;
+}}
+QWidget#InsetGroupRow {{ background: transparent; }}
+QFrame#InsetGroupSeparator {{ background: {GROUP_SEP}; border: none; }}
+QLabel#GroupRowLabel {{ color: {TEXT}; font-weight: 500; background: transparent; }}
+QLabel#GroupRowFootnote {{ color: {MUTED}; font-size: 11.5px; background: transparent; }}
+QLabel#SidebarSection {{ font-size: 11px; font-weight: 600; color: #7c7c82; background: transparent; }}
+QToolButton#IconButton {{
+    border: none; border-radius: 6px; background: transparent;
+    padding: 0; margin: 0;
+}}
+QToolButton#IconButton:hover {{
+    background: #3a3a3d;
+}}
+QToolButton#IconButton:pressed {{
+    background: #444448;
+}}
+QToolButton#IconButton:disabled {{ background: transparent; }}
+QToolButton#IconButton::menu-indicator {{ image: none; width: 0px; }}
+QPushButton#HeaderAction {{
+    background: #3a3a3d; border: 1px solid #48484c; color: {TEXT};
+    font-weight: 600; padding: 9px 20px; border-radius: 8px;
+}}
+QPushButton#HeaderAction:hover {{ background: #444448; }}
+QPushButton#HeaderAction:pressed {{ background: #303033; }}
+QPushButton#HeaderAction:disabled {{ background: #28282b; color: #5c5c61; border-color: #313134; }}
+/* The PopupButton is fully self-painted; keep the generic tool-button box
+   (padding/border/background) from bleeding into its custom surface. */
+QToolButton#PopupButton {{
+    background: transparent; border: none; padding: 0; margin: 0;
+}}
+/* The header card's inner container must not repaint the global BG: #1e1e20
+   over the card's SURFACE (#2a2a2d). */
+QFrame#Card QWidget#HeaderStats {{ background: transparent; }}
 
 QMenu {{
     background: #2c2c2e; border: 1px solid #45454a; border-radius: 8px; padding: 5px;

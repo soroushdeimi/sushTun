@@ -950,7 +950,7 @@ class MainWindow(QMainWindow):
             app_settings.save(self.settings)
             self.btn_fragment.setChecked(self.settings["core"]["fragment"]["enabled"])
             changed = [label for label, old, new in (
-                ("MTU", old_mtu, values["tun_mtu"]),
+                (tr("MTU"), old_mtu, values["tun_mtu"]),
                 (tr("Log level"), old_log, values["log_level"]),
                 (tr("Core options"), old_core, values["core"]),
             ) if old != new]
