@@ -75,10 +75,16 @@ def _save_and_wait(dlg) -> None:
 
 @pytest.fixture
 def dns_check_state(tmp_path, monkeypatch):
-    """Save renders a real config and shells out to `xray run -test`; point
-    its throwaway config file at tmp_path instead of the real state dir,
-    which may be owned by a previous elevated run and not writable here."""
+    """Save renders a real config and validates it; point the throwaway
+    config file at tmp_path instead of the real state dir (may be owned by
+    a previous elevated run and not writable here), and stub out the real
+    `xray run -test` call so these Save round-trips don't depend on a
+    bundled xray binary being present (CI doesn't run fetch_deps -- see
+    tests/test_xraycheck.py for real-binary coverage of check_config
+    itself, skip-guarded there). A test that specifically needs Save to
+    fail overrides this stub locally, after requesting the fixture."""
     monkeypatch.setattr(paths, "state_dir", lambda: tmp_path / "state")
+    monkeypatch.setattr(dialogs_mod.xraycheck, "check_config", lambda *a, **k: None)
     return tmp_path
 
 
@@ -186,11 +192,16 @@ def test_dns_dialog_advanced_and_domestic_fields_round_trip(qapp, defaults, warn
 
 
 def test_dns_dialog_a_check_failure_leaves_settings_unchanged(qapp, defaults, warnings,
-                                                               dns_check_state):
+                                                               dns_check_state, monkeypatch):
     original = copy.deepcopy(defaults["dns"])
     # A routing config xray -test will reject: passes every save-time check
     # in the DNS dialog itself (it only validates DNS fields), so this only
     # fails once the real render+validate round trip actually runs xray.
+    # dns_check_state stubs check_config to succeed by default (so the other
+    # Save tests don't need a bundled binary); override that locally here to
+    # simulate the real rejection this test is actually about.
+    monkeypatch.setattr(dialogs_mod.xraycheck, "check_config",
+                        lambda *a, **k: "unknown geosite category: not-a-real-category-xyz")
     bad_routing = copy.deepcopy(defaults["routing"])
     bad_routing["bypass_domains"] = ["geosite:not-a-real-category-xyz"]
     dlg = DnsDialog(defaults["dns"], bad_routing)
