@@ -11,8 +11,8 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QSize, Qt  # noqa: E402
-from PySide6.QtGui import QPixmap  # noqa: E402
+from PySide6.QtCore import QPoint, QSize, Qt  # noqa: E402
+from PySide6.QtGui import QColor, QPixmap  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import (  # noqa: E402
     QAbstractButton,
@@ -39,7 +39,11 @@ from xrayui.ui.mac import (  # noqa: E402
 
 @pytest.fixture(scope="module")
 def qapp():
-    return QApplication.instance() or QApplication([])
+    app = QApplication.instance() or QApplication([])
+    # The real theme: without it, widgets render with Qt's light default
+    # palette and pixel checks (visible icons, card surfaces) lie.
+    app.setStyleSheet(theme.build_stylesheet())
+    return app
 
 
 @pytest.fixture(autouse=True)
@@ -510,3 +514,85 @@ def test_fa_reconnect_notice_keeps_only_technical_terms_latin(qapp):
     assert latin <= {"DNS"}, f"unexpected English in fa notice: {sorted(latin)}"
     h.hide()
     i18n.set_language("en")
+
+
+# -- round-2 review gate: real pixels, not just layout ---------------------
+def _bright_pixels(widget, x0=0, y0=0, x1=0, y1=0) -> int:
+    """Count pixels with luminance > 180 in *widget*'s grab (or its rect)."""
+    img = widget.grab().toImage()
+    x1 = x1 or img.width()
+    y1 = y1 or img.height()
+    return sum(
+        1 for x in range(x0, x1) for y in range(y0, y1)
+        if QColor(img.pixel(x, y)).lightness() > 180)
+
+
+def test_connection_header_ellipsis_button_icon_is_visible(qapp):
+    # The ⋯ must actually paint: the button rect over the card surface must
+    # hold >= 8 pixels clearly brighter than #2a2a2d (the icon is #f5f5f7).
+    h = ConnectionHeader()
+    h.resize(800, 160)
+    h.show()
+    qapp.processEvents()
+    r = h.btn_more.geometry()
+    assert _bright_pixels(h, r.x(), r.y(), r.x() + r.width(),
+                          r.y() + r.height()) >= 8
+    h.hide()
+
+
+@pytest.mark.parametrize("icon_name", [
+    "settings", "refresh", "close", "check", "ellipsis",
+])
+def test_every_icon_button_draws_a_visible_icon(qapp, icon_name):
+    btn = IconButton(icon_name, "Tip")
+    btn.resize(28, 28)
+    btn.show()
+    qapp.processEvents()
+    assert _bright_pixels(btn) >= 8, icon_name
+    btn.hide()
+
+
+def test_connection_header_stats_area_is_the_card_surface(qapp):
+    # Round 2 caught a dark #1e1e20 box behind the stats: the inner
+    # container was repainting the global BG over the card surface. The
+    # majority of the stats box interior must now be SURFACE (#2a2a2d).
+    h = ConnectionHeader()
+    h.set("throughput", "↓ 4.2 ↑ 0.3 Mbit/s")
+    h.set("used", "18.6 GB")
+    h.set_connected(True)
+    h.resize(800, 160)
+    h.show()
+    qapp.processEvents()
+    img = h.grab().toImage()
+    sx, sy = h._stats_box.mapTo(h, QPoint(0, 0)).toTuple()
+    target = (int(theme.SURFACE[1:3], 16), int(theme.SURFACE[3:5], 16),
+              int(theme.SURFACE[5:7], 16))
+    hits = total = 0
+    for x in range(sx, sx + h._stats_box.width()):
+        for y in range(sy, sy + h._stats_box.height()):
+            c = QColor(img.pixel(x, y))
+            total += 1
+            if all(abs(v - t) <= 6 for v, t in ((c.red(), target[0]),
+                                                (c.green(), target[1]),
+                                                (c.blue(), target[2]))):
+                hits += 1
+    assert hits >= 0.5 * total, (
+        f"only {hits}/{total} stats pixels match the card surface")
+    h.hide()
+
+
+def test_inset_group_long_label_wraps_instead_of_clipping(qapp):
+    # When label + trailing widget cannot share one line, the label wraps
+    # (and the row grows); it never truncates its text.
+    grp = InsetGroup()
+    grp.add_row("Routing rules applied on every connect", Switch())
+    grp.resize(300, 120)
+    grp.show()
+    qapp.processEvents()
+    for row in grp.findChildren(QWidget, "InsetGroupRow"):
+        lbl = row.findChild(QLabel, "GroupRowLabel")
+        assert lbl.wordWrap()
+        assert lbl.width() > 0
+        assert lbl.height() >= lbl.heightForWidth(lbl.width())
+        assert lbl.height() > lbl.fontMetrics().height()  # on more than one line
+    grp.hide()
