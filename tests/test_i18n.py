@@ -58,3 +58,21 @@ def test_tr_never_raises_when_params_are_missing_entirely(monkeypatch):
     # Called with no params at all even though the template has a
     # placeholder -- no .format() call happens, so nothing to raise on.
     assert i18n.tr("Updated {n}h ago") == "به‌روزرسانی {n} ساعت پیش"
+
+
+def test_ltr_wraps_a_technical_run():
+    wrapped = i18n.ltr("650 ms")
+    assert wrapped == "\u2066650 ms\u2069"
+    assert wrapped.startswith("\u2066") and wrapped.endswith("\u2069")
+    # The inner text stays whole and in order.
+    assert wrapped[1:-1] == "650 ms"
+
+
+def test_ltr_leaves_empty_text_alone():
+    assert i18n.ltr("") == ""
+
+
+def test_ltr_wraps_units_arrows_and_addresses():
+    for sample in ("18.6 GB", "↓ 4.2 Mbit/s", "de.example.com:443"):
+        assert i18n.ltr(sample).startswith("\u2066")
+        assert i18n.ltr(sample).endswith("\u2069")

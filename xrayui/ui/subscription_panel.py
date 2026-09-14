@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
 
 from ..core.alerts import human_bytes
 from ..core.subscription import Subscription
-from ..i18n import tr
+from ..i18n import ltr, tr
 from .theme import ERR, OK, WARN
 
 
@@ -93,13 +93,15 @@ class SubscriptionRow(QFrame):
         if not sub.enabled:
             parts.append(tr("disabled"))
         if u.total:
-            parts.append(f"{human_bytes(u.used)} / {human_bytes(u.total)}")
-            parts.append(tr("{amount} left", amount=human_bytes(u.remaining)))
+            # Numbers tied to Latin units must stay in order inside the RTL
+            # (fa) line, not get scrambled into "GB 18.6 / 46.6".
+            parts.append(ltr(f"{human_bytes(u.used)} / {human_bytes(u.total)}"))
+            parts.append(ltr(tr("{amount} left", amount=human_bytes(u.remaining))))
         else:
             parts.append(tr("usage unknown"))
         if u.days_left is not None:
-            parts.append(tr("expires in {n}d", n=f"{max(u.days_left, 0):.0f}"))
-        parts.append(tr("updated {ago}", ago=_ago(sub.updated)))
+            parts.append(ltr(tr("expires in {n}d", n=f"{max(u.days_left, 0):.0f}")))
+        parts.append(ltr(tr("updated {ago}", ago=_ago(sub.updated))))
         meta = QLabel("  •  ".join(parts))
         meta.setObjectName("Muted")
         layout.addWidget(meta)
