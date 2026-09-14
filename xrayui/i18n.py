@@ -45,3 +45,18 @@ def tr(text: str, **params) -> str:
             return text.format(**params)
         except (KeyError, IndexError, ValueError):
             return text
+
+
+# U+2066 LEFT-TO-RIGHT ISOLATE ... U+2069 POP DIRECTIONAL ISOLATE.  Bidi
+# isolates keep a technical run ("650 ms", "18.6 GB", "↓ 4.2 Mbit/s", an
+# address) reading left-to-right even when it sits inside RTL (fa) text;
+# without them the digits and units get reordered ("ms 650").
+_LRI = "\u2066"
+_PDI = "\u2069"
+
+
+def ltr(text: str) -> str:
+    """Wrap *text* as an LTR isolate so it keeps its order inside RTL text.
+    Empty text stays empty (an empty isolate would do nothing anyway and an
+    all-spaces-isolated cell would stop aligning like its neighbours)."""
+    return f"{_LRI}{text}{_PDI}" if text else text

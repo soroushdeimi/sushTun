@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
 
 from ..core import share as share_mod
 from ..core.profiles import Profile
-from ..i18n import tr
+from ..i18n import ltr, tr
 from .server_table import (
     COL_ACTIVE,
     COL_DELAY,
@@ -131,7 +131,9 @@ class StatusCard(QFrame):
 
     def set(self, key: str, value: str) -> None:
         if key in self._vals:
-            self._vals[key].setText(value or "—")
+            # Throughput/usage figures ("↓ 4.2 ↑ 0.3 Mbit/s" in fa) hold
+            # numbers with Latin units; an LTR isolate keeps them ordered.
+            self._vals[key].setText(ltr(value or "—"))
 
     def set_connected(self, connected: bool) -> None:
         self.pill.setText(tr("CONNECTED") if connected else tr("DISCONNECTED"))

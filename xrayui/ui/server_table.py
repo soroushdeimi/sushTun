@@ -13,7 +13,7 @@ from PySide6.QtGui import QColor, QPixmap
 from PySide6.QtWidgets import QApplication, QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
 
 from ..core.profiles import Profile
-from ..i18n import tr
+from ..i18n import ltr, tr
 from .theme import ERR, MUTED, OK, WARN
 
 COLUMNS = ["", "Name", "Delay", "Transport", "Subscription", "Type"]
@@ -151,7 +151,9 @@ class ProfileTableModel(QAbstractTableModel):
             if col == COL_DELAY:
                 delay = self._delay_value(p.uid)
                 if delay is not None:
-                    return f"{round(delay)} ms"
+                    # Never let the bidi algorithm reorder "84 ms" into
+                    # "ms 84" when the app runs in fa (RTL).
+                    return ltr(f"{round(delay)} ms")
                 if result.get("skipped"):
                     return tr("n/a")
                 return tr("Failed") if result.get("error") else "—"

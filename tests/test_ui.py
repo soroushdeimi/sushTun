@@ -38,6 +38,7 @@ from xrayui.core import speedtest as speedtest_mod  # noqa: E402
 from xrayui.core import updates as updates_mod  # noqa: E402
 from xrayui.core.profiles import Profile  # noqa: E402
 from xrayui.core.subscription import Subscription  # noqa: E402
+from xrayui.i18n import ltr  # noqa: E402
 from xrayui.ui import dialogs as dialogs_mod  # noqa: E402
 from xrayui.ui.dialogs import (  # noqa: E402
     ProfileEditDialog,
@@ -865,7 +866,7 @@ def test_test_result_from_a_background_thread_updates_the_right_row(window):
     assert window.results.get(profile.uid) == {"delay_ms": 77.0, "error": None, "skipped": False}
     row = window.profiles.model.row_of_uid(profile.uid)
     idx = window.profiles.model.index(row, COL_DELAY)
-    assert window.profiles.model.data(idx) == "77 ms"
+    assert window.profiles.model.data(idx) == ltr("77 ms")
 
 
 # -- Routing combo / Reconnect now / tray submenu (Phase 2c) -----------------

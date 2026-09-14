@@ -1,5 +1,5 @@
 """Stroke-style SVG icons for the sidebar UI, rendered via QtSvg and tinted
-to the palette. Path data is copied from the mockup at 16x16, stroke-width
+to the palette.  Path data is copied from the mockup at 16×16, stroke-width
 1.6, round caps/joins -- the same look as the mockup's inline <svg> glyphs.
 """
 from __future__ import annotations
@@ -8,7 +8,9 @@ from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QIcon, QPainter, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 
-# Each entry is the <svg> body (paths/shapes only, no wrapper) at a 16x16
+from .theme import TEXT
+
+# Each entry is the <svg> body (paths/shapes only, no wrapper) at a 16×16
 # viewBox, taken from the mockup verbatim.
 _PATHS: dict[str, str] = {
     "servers": (
@@ -35,24 +37,43 @@ _PATHS: dict[str, str] = {
         '<path d="M8 1.8v1.6M8 12.6v1.6M1.8 8h1.6M12.6 8h1.6'
         'M3.6 3.6l1.1 1.1M11.3 11.3l1.1 1.1M3.6 12.4l1.1-1.1M11.3 4.7l1.1-1.1"/>'
     ),
-    "chevron-down": '<path d="M5 6.5 8 9.5l3-3"/>',
-    "chevron-right": '<path d="m6 4 4 4-4 4"/>',
-    "search": '<circle cx="7" cy="7" r="4.2"/><path d="m10.2 10.2 3 3"/>',
-    "anti-filter": '<path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>',
-    "low-usage": '<path d="M3 13c0-6 4-9 10-10-.5 6-3.5 10-10 10zM3 13l5-5"/>',
-    "connected": (
+    "shield-check": (
         '<path d="M8 1.8 13 3.6v4c0 3.1-2.1 5.4-5 6.6C5.1 13 3 10.7 3 7.6v-4z"/>'
         '<path d="m5.8 8 1.6 1.6L10.4 6.4"/>'
     ),
-    "edit": '<path d="M11 2.5 13.5 5 5.5 13H3v-2.5z"/>',
+    "bolt": '<path d="M9 2 4 9h4l-1 5 5-7H8z"/>',
+    "leaf": '<path d="M3 13c0-6 4-9 10-10-.5 6-3.5 10-10 10zM3 13l5-5"/>',
+    "anti-filter": '<path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>',
+    "search": (
+        '<circle cx="7" cy="7" r="4.2"/>'
+        '<path d="m10.2 10.2 3 3"/>'
+    ),
+    "chevron-down": '<path d="M5 6.5 8 9.5l3-3"/>',
+    "chevron-right": '<path d="m6 4 4 4-4 4"/>',
+    "ellipsis": (
+        '<circle cx="3" cy="8" r="1.2"/><circle cx="8" cy="8" r="1.2"/>'
+        '<circle cx="13" cy="8" r="1.2"/>'
+    ),
+    "close": '<path d="M4 4l8 8M12 4l-8 8"/>',
     "refresh": (
         '<path d="M13 8A5 5 0 1 1 11.5 4.3M13 2v3.5h-3.5"/>'
     ),
-    "close": '<path d="M4 4l8 8M12 4l-8 8"/>',
-    "up": '<path d="M4 10l4-4 4 4"/>',
-    "down": '<path d="M4 6l4 4 4-4"/>',
-    "test": '<path d="M9 2 4 9h4l-1 5 5-7H8z"/>',
+    "pencil": '<path d="M11 2.5 13.5 5 5.5 13H3v-2.5z"/>',
+    "arrow-up": '<path d="M4 10l4-4 4 4"/>',
+    "arrow-down": '<path d="M4 6l4 4 4-4"/>',
+    "plus": '<path d="M8 3v10M3 8h10"/>',
     "check": '<path d="M3.5 8.5 6.5 11.5 12.5 5.5"/>',
+}
+
+# Backward-compat aliases so existing callers (e.g. connection_header.py)
+# keep working after the rename.
+_ALIASES: dict[str, str] = {
+    "connected": "shield-check",
+    "edit": "pencil",
+    "up": "arrow-up",
+    "down": "arrow-down",
+    "low-usage": "leaf",
+    "test": "bolt",
 }
 
 _cache: dict[tuple[str, str, int], QIcon] = {}
@@ -67,13 +88,19 @@ def _svg(name: str, color: str) -> str:
     )
 
 
-def icon(name: str, color: str = "#f5f5f7", size: int = 16) -> QIcon:
-    """A tinted QIcon for `name` (see _PATHS), cached by (name, color, size)."""
-    key = (name, color, size)
+def icon(name: str, color: str | None = None, size: int = 16) -> QIcon:
+    """A tinted QIcon for *name* (see ``_PATHS``), cached by (name, color, size).
+    Raises ``KeyError`` for unknown icon names."""
+    resolved = _ALIASES.get(name, name)
+    if resolved not in _PATHS:
+        raise KeyError(f"unknown icon {name!r}")
+    if color is None:
+        color = TEXT
+    key = (resolved, color, size)
     cached = _cache.get(key)
     if cached is not None:
         return cached
-    renderer = QSvgRenderer(_svg(name, color).encode("utf-8"))
+    renderer = QSvgRenderer(_svg(resolved, color).encode("utf-8"))
     pixmap = QPixmap(QSize(size, size))
     pixmap.fill(Qt.transparent)
     painter = QPainter(pixmap)

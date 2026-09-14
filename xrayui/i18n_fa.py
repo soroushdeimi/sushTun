@@ -491,7 +491,7 @@ TRANSLATIONS_FA: dict[str, str] = {
     "{what} — reconnect to apply.": "{what} — برای اعمال، دوباره متصل شوید.",
     "Copy download link": "کپی لینک دانلود",
 
-    # -- ui/mac-a: connection header ----------------------------------------
+    # -- ui/a-foundation: connection header ----------------------------------
     "Connected": "متصل",
     "Disconnected": "قطع شده",
     "Down / Up": "دانلود / آپلود",
@@ -507,4 +507,9 @@ TRANSLATIONS_FA: dict[str, str] = {
     "Apply changes?": "اعمال تغییرات؟",
     "Discard": "نادیده‌گرفتن",
     "You have unsaved changes.": "تغییرات ذخیره‌نشده دارید.",
+
+    # -- ui/a-foundation: reconnect-notice wording ------------------------
+    # Technical acronyms that stay Latin inside the Persian sentence, so
+    # the coverage test sees them mapped.
+    "MTU": "MTU",
 }
