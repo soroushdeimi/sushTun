@@ -17,6 +17,7 @@ from PySide6.QtGui import QColor  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from xrayui.core.profiles import Profile  # noqa: E402
+from xrayui.i18n import ltr  # noqa: E402
 from xrayui.ui.server_table import (  # noqa: E402
     COL_DELAY,
     COL_NAME,
@@ -65,7 +66,8 @@ def test_model_rows_and_columns(qapp):
     assert model.data(idx(1, COL_TRANSPORT), Qt.DisplayRole) == "wg"  # wireguard
     assert model.data(idx(0, COL_SUB), Qt.DisplayRole) == "My Sub"
     assert model.data(idx(1, COL_SUB), Qt.DisplayRole) == "—"
-    assert model.data(idx(0, COL_DELAY), Qt.DisplayRole) == "42 ms"
+    # The delay is an isolated LTR run so "42 ms" can't reorder inside RTL.
+    assert model.data(idx(0, COL_DELAY), Qt.DisplayRole) == ltr("42 ms")
     # A failure shows a short word in the cell; the full error is the tooltip.
     assert model.data(idx(1, COL_DELAY), Qt.DisplayRole) == "Failed"
     assert model.data(idx(1, COL_DELAY), Qt.ToolTipRole) == "unreachable"
@@ -114,7 +116,7 @@ def test_set_results_and_set_sub_names_do_not_reset_the_model(qapp):
     model.set_sub_names({"s1": "My Sub"})
 
     assert resets == []
-    assert model.data(model.index(0, COL_DELAY), Qt.DisplayRole) == "12 ms"
+    assert model.data(model.index(0, COL_DELAY), Qt.DisplayRole) == ltr("12 ms")
     assert model.data(model.index(0, COL_SUB), Qt.DisplayRole) == "My Sub"
 
 
@@ -162,7 +164,7 @@ def test_update_result_changes_just_that_row(qapp):
     model.update_result("b", 15.0, None)
 
     assert seen == [(1, 1)]
-    assert model.data(model.index(1, COL_DELAY), Qt.DisplayRole) == "15 ms"
+    assert model.data(model.index(1, COL_DELAY), Qt.DisplayRole) == ltr("15 ms")
     assert model.data(model.index(0, COL_DELAY), Qt.DisplayRole) == "—"
 
 
