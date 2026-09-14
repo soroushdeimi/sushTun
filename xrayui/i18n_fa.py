@@ -502,4 +502,11 @@ TRANSLATIONS_FA: dict[str, str] = {
     "Down / Up": "دانلود / آپلود",
     "This session": "این نشست",
     "More connection actions": "گزینه‌های بیشتر اتصال",
+
+    # -- ui/a-pages: embeddable routing/dns pages ----------------------------
+    "Apply": "اعمال",
+    "Revert": "بازگردانی",
+    "Move rule up": "انتقال قانون به بالا",
+    "Move rule down": "انتقال قانون به پایین",
+    "New set": "مجموعه جدید",
 }
