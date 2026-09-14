@@ -83,7 +83,7 @@ class _PageSubscriptionRow(QFrame):
         if u.days_left is not None:
             parts.append(ltr(tr("expires in {n}d", n=f"{max(u.days_left, 0):.0f}")))
         parts.append(ltr(tr("updated {ago}", ago=_ago(sub.updated))))
-        meta = QLabel("  •  ".join(parts))
+        meta = QLabel(ltr("  •  ".join(parts)))
         meta.setObjectName("Muted")
         layout.addWidget(meta)
 
