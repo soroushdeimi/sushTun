@@ -38,6 +38,7 @@ from PySide6.QtWidgets import (
 
 from ..core import routing as routing_mod
 from ..core import routing_io, xraycheck
+from ..i18n import tr
 from .rule_editor import CollapsibleSection, RuleEditorDialog, default_rule
 from .theme import ACCENT, ERR, OK
 from .workers import Worker
@@ -51,7 +52,6 @@ COL_ENABLED, COL_REMARKS, COL_ACTION, COL_MATCH = range(4)
 _ACTION_COLORS = {"proxy": ACCENT, "direct": OK, "block": ERR}
 _ACTION_LABELS = {"proxy": "Proxy", "direct": "Direct", "block": "Block"}
 
-_DOMAIN_STRATEGIES = [("Inherit", "")] + [(s, s) for s in routing_mod.DOMAIN_STRATEGIES]
 _ROOT = QModelIndex()  # a fresh QModelIndex() per call is a ruff B008 default-arg smell
 
 
@@ -63,18 +63,18 @@ def _match_summary(rule: dict) -> str:
         parts.append(f"{dips[0]} +{extra}" if extra > 0 else dips[0])
     extras = []
     if rule.get("port") and rule.get("network"):
-        extras.append(f"port {rule['port']}/{rule['network']}")
+        extras.append(tr("port {port}/{network}", port=rule["port"], network=rule["network"]))
     elif rule.get("port"):
-        extras.append(f"port {rule['port']}")
+        extras.append(tr("port {port}", port=rule["port"]))
     elif rule.get("network"):
         extras.append(rule["network"])
     if rule.get("protocol"):
         extras.append(",".join(rule["protocol"]))
     if rule.get("process"):
-        extras.append(f"{len(rule['process'])} process(es)")
+        extras.append(tr("{n} process(es)", n=len(rule["process"])))
     if extras:
         parts.append(" ".join(extras))
-    return " · ".join(parts) if parts else "(matches everything)"
+    return " · ".join(parts) if parts else tr("(matches everything)")
 
 
 def _lan_direct_rule() -> dict:
@@ -173,7 +173,7 @@ class RuleTableModel(QAbstractTableModel):
 
     def headerData(self, section, orientation, role=Qt.DisplayRole):
         if orientation == Qt.Horizontal and role == Qt.DisplayRole:
-            return _RULE_COLS[section]
+            return tr(_RULE_COLS[section])
         return None
 
     def flags(self, index):
@@ -191,9 +191,9 @@ class RuleTableModel(QAbstractTableModel):
             return Qt.Checked if rule.get("enabled", True) else Qt.Unchecked
         if role == Qt.DisplayRole:
             if col == COL_REMARKS:
-                return rule.get("remarks") or "(no remarks)"
+                return rule.get("remarks") or tr("(no remarks)")
             if col == COL_ACTION:
-                return _ACTION_LABELS.get(rule.get("outbound", "proxy"), "Proxy")
+                return tr(_ACTION_LABELS.get(rule.get("outbound", "proxy"), "Proxy"))
             if col == COL_MATCH:
                 return _match_summary(rule)
             return None
@@ -212,7 +212,7 @@ class RuleTableModel(QAbstractTableModel):
 class RoutingDialog(QDialog):
     def __init__(self, routing_cfg: dict, parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Bypass & routing")
+        self.setWindowTitle(tr("Bypass & routing"))
         self.resize(820, 660)
         self._routing = dict(routing_cfg)
         self._sets: list[dict] = copy.deepcopy(self._routing.get("sets") or [])
@@ -223,14 +223,14 @@ class RoutingDialog(QDialog):
         layout = QVBoxLayout(self)
 
         mode_row = QHBoxLayout()
-        mode_row.addWidget(QLabel("Active routing:"))
+        mode_row.addWidget(QLabel(tr("Active routing:")))
         self.mode_combo = QComboBox()
         mode_row.addWidget(self.mode_combo, 1)
         layout.addLayout(mode_row)
 
         self.tabs = QTabWidget()
-        self.tabs.addTab(self._build_simple_tab(routing_cfg), "Simple")
-        self.tabs.addTab(self._build_sets_tab(), "Rule sets")
+        self.tabs.addTab(self._build_simple_tab(routing_cfg), tr("Simple"))
+        self.tabs.addTab(self._build_sets_tab(), tr("Rule sets"))
         layout.addWidget(self.tabs, 1)
 
         self.status_label = QLabel("")
@@ -251,14 +251,14 @@ class RoutingDialog(QDialog):
         w = QWidget()
         layout = QVBoxLayout(w)
 
-        toggles = QGroupBox("Bypass the tunnel (go direct)")
+        toggles = QGroupBox(tr("Bypass the tunnel (go direct)"))
         tg = QGridLayout(toggles)
-        self.cb_low = QCheckBox("Low usage — bypass Windows telemetry/update chatter")
-        self.cb_ads = QCheckBox("Block ads && trackers")
-        self.cb_private = QCheckBox("Local network / private IPs direct")
-        self.cb_iran = QCheckBox("Iran sites && IPs direct")
-        self.cb_russia = QCheckBox("Russia sites && IPs direct")
-        self.cb_china = QCheckBox("China sites && IPs direct")
+        self.cb_low = QCheckBox(tr("Low usage — bypass Windows telemetry/update chatter"))
+        self.cb_ads = QCheckBox(tr("Block ads && trackers"))
+        self.cb_private = QCheckBox(tr("Local network / private IPs direct"))
+        self.cb_iran = QCheckBox(tr("Iran sites && IPs direct"))
+        self.cb_russia = QCheckBox(tr("Russia sites && IPs direct"))
+        self.cb_china = QCheckBox(tr("China sites && IPs direct"))
         self.cb_low.setChecked(routing.get("low_usage", False))
         self.cb_ads.setChecked(routing.get("block_ads", True))
         self.cb_private.setChecked(routing.get("direct_private", True))
@@ -271,18 +271,21 @@ class RoutingDialog(QDialog):
             tg.addWidget(cb, i // 2, i % 2)
         layout.addWidget(toggles)
 
-        layout.addWidget(QLabel("Bypass domains (one per line — direct):"))
+        layout.addWidget(QLabel(tr("Bypass domains (one per line — direct):")))
         self.domains = QPlainTextEdit("\n".join(routing.get("bypass_domains", [])))
         self.domains.setPlaceholderText("example.com\ngeosite:google")
+        self.domains.setLayoutDirection(Qt.LeftToRight)
         layout.addWidget(self.domains)
 
-        layout.addWidget(QLabel("Bypass IPs / CIDRs (one per line — direct):"))
+        layout.addWidget(QLabel(tr("Bypass IPs / CIDRs (one per line — direct):")))
         self.ips = QPlainTextEdit("\n".join(routing.get("bypass_ips", [])))
         self.ips.setPlaceholderText("10.0.0.0/8\ngeoip:ir")
+        self.ips.setLayoutDirection(Qt.LeftToRight)
         layout.addWidget(self.ips)
 
-        layout.addWidget(QLabel("Force through tunnel (one per line — proxy):"))
+        layout.addWidget(QLabel(tr("Force through tunnel (one per line — proxy):")))
         self.proxy = QPlainTextEdit("\n".join(routing.get("proxy_domains", [])))
+        self.proxy.setLayoutDirection(Qt.LeftToRight)
         layout.addWidget(self.proxy)
         return w
 
@@ -302,17 +305,17 @@ class RoutingDialog(QDialog):
 
         set_btns = QHBoxLayout()
         self.btn_add_set = QToolButton()
-        self.btn_add_set.setText("Add")
+        self.btn_add_set.setText(tr("Add"))
         self.btn_add_set.setPopupMode(QToolButton.InstantPopup)
         add_menu = QMenu(self.btn_add_set)
-        add_menu.addAction("Empty", lambda: self._add_set("empty"))
-        add_menu.addAction("Global", lambda: self._add_set("global"))
-        add_menu.addAction("Like Simple", lambda: self._add_set("like_simple"))
-        add_menu.addAction("Chocolate4U Iran rules", lambda: self._add_set("chocolate4u"))
+        add_menu.addAction(tr("Empty"), lambda: self._add_set("empty"))
+        add_menu.addAction(tr("Global"), lambda: self._add_set("global"))
+        add_menu.addAction(tr("Like Simple"), lambda: self._add_set("like_simple"))
+        add_menu.addAction(tr("Chocolate4U Iran rules"), lambda: self._add_set("chocolate4u"))
         self.btn_add_set.setMenu(add_menu)
-        btn_dup = QPushButton("Duplicate")
+        btn_dup = QPushButton(tr("Duplicate"))
         btn_dup.clicked.connect(self._duplicate_set)
-        btn_del = QPushButton("Delete")
+        btn_del = QPushButton(tr("Delete"))
         btn_del.clicked.connect(self._delete_set)
         for b in (self.btn_add_set, btn_dup, btn_del):
             set_btns.addWidget(b)
@@ -320,19 +323,19 @@ class RoutingDialog(QDialog):
 
         io_btns = QHBoxLayout()
         btn_import = QToolButton()
-        btn_import.setText("Import")
+        btn_import.setText(tr("Import"))
         btn_import.setPopupMode(QToolButton.InstantPopup)
         import_menu = QMenu(btn_import)
-        import_menu.addAction("From file…", self._import_from_file)
-        import_menu.addAction("From clipboard", self._import_from_clipboard)
-        import_menu.addAction("From URL…", self._import_from_url)
+        import_menu.addAction(tr("From file…"), self._import_from_file)
+        import_menu.addAction(tr("From clipboard"), self._import_from_clipboard)
+        import_menu.addAction(tr("From URL…"), self._import_from_url)
         btn_import.setMenu(import_menu)
         btn_export = QToolButton()
-        btn_export.setText("Export")
+        btn_export.setText(tr("Export"))
         btn_export.setPopupMode(QToolButton.InstantPopup)
         export_menu = QMenu(btn_export)
-        export_menu.addAction("To file…", lambda: self._export_current(to_file=True))
-        export_menu.addAction("Copy to clipboard", lambda: self._export_current(to_file=False))
+        export_menu.addAction(tr("To file…"), lambda: self._export_current(to_file=True))
+        export_menu.addAction(tr("Copy to clipboard"), lambda: self._export_current(to_file=False))
         btn_export.setMenu(export_menu)
         io_btns.addWidget(btn_import)
         io_btns.addWidget(btn_export)
@@ -341,7 +344,7 @@ class RoutingDialog(QDialog):
 
         right = QVBoxLayout()
         name_row = QHBoxLayout()
-        name_row.addWidget(QLabel("Name:"))
+        name_row.addWidget(QLabel(tr("Name:")))
         self.set_name = QLineEdit()
         self.set_name.textEdited.connect(self._on_name_edited)
         name_row.addWidget(self.set_name, 1)
@@ -359,11 +362,11 @@ class RoutingDialog(QDialog):
         right.addWidget(self.rules_table, 1)
 
         rule_btns = QHBoxLayout()
-        btn_add_rule = QPushButton("Add")
+        btn_add_rule = QPushButton(tr("Add"))
         btn_add_rule.clicked.connect(self._add_rule)
-        btn_edit_rule = QPushButton("Edit")
+        btn_edit_rule = QPushButton(tr("Edit"))
         btn_edit_rule.clicked.connect(self._edit_rule)
-        btn_del_rule = QPushButton("Delete")
+        btn_del_rule = QPushButton(tr("Delete"))
         btn_del_rule.clicked.connect(self._delete_rule)
         btn_up = QPushButton("↑")
         btn_up.clicked.connect(lambda: self._move_rule(-1))
@@ -376,13 +379,14 @@ class RoutingDialog(QDialog):
         adv = QWidget()
         adv_row = QHBoxLayout(adv)
         adv_row.setContentsMargins(0, 0, 0, 0)
-        adv_row.addWidget(QLabel("Domain strategy:"))
+        adv_row.addWidget(QLabel(tr("Domain strategy:")))
         self.domain_strategy_combo = QComboBox()
-        for label, value in _DOMAIN_STRATEGIES:
+        domain_strategies = [(tr("Inherit"), "")] + [(s, s) for s in routing_mod.DOMAIN_STRATEGIES]
+        for label, value in domain_strategies:
             self.domain_strategy_combo.addItem(label, value)
         self.domain_strategy_combo.currentIndexChanged.connect(self._on_domain_strategy_changed)
         adv_row.addWidget(self.domain_strategy_combo, 1)
-        right.addWidget(CollapsibleSection("Advanced", adv))
+        right.addWidget(CollapsibleSection(tr("Advanced"), adv))
 
         row.addLayout(right, 2)
         self._set_right_enabled(False)
@@ -404,7 +408,7 @@ class RoutingDialog(QDialog):
         self.sets_list.blockSignals(True)
         self.sets_list.clear()
         for s in self._sets:
-            item = QListWidgetItem(s.get("name") or "Unnamed")
+            item = QListWidgetItem(s.get("name") or tr("Unnamed"))
             item.setData(Qt.UserRole, s["id"])
             self.sets_list.addItem(item)
         self.sets_list.blockSignals(False)
@@ -447,7 +451,7 @@ class RoutingDialog(QDialog):
             s["name"] = text
             item = self.sets_list.item(self.sets_list.currentRow())
             if item is not None:
-                item.setText(text or "Unnamed")
+                item.setText(text or tr("Unnamed"))
             self._refresh_mode_combo()
 
     def _on_domain_strategy_changed(self, _index: int) -> None:
@@ -487,18 +491,18 @@ class RoutingDialog(QDialog):
         if self._busy:
             return
         self._set_busy(True)
-        self.status_label.setText("Fetching Chocolate4U Iran rules…")
+        self.status_label.setText(tr("Fetching Chocolate4U Iran rules…"))
         self._run_async(lambda: routing_io.import_url(CHOCOLATE4U_URL), self._on_chocolate4u_done)
 
     def _on_chocolate4u_done(self, result=None, error=None) -> None:
         self._set_busy(False)
         if error:
             self.status_label.setText("")
-            QMessageBox.warning(self, "Import failed", str(error))
+            QMessageBox.warning(self, tr("Import failed"), str(error))
             return
         sets, skipped = result
         if not sets:
-            self.status_label.setText("Nothing to import.")
+            self.status_label.setText(tr("Nothing to import."))
             return
         first_id = sets[0]["id"]
         for s in sets:
@@ -506,7 +510,8 @@ class RoutingDialog(QDialog):
             s["rules"] = _ensure_lan_direct(s.get("rules") or [])
             self._sets.append(s)
         self._refresh_sets_list(select_id=first_id)
-        self.status_label.setText(f"Imported {len(sets)} set(s), skipped {skipped} rule(s).")
+        self.status_label.setText(
+            tr("Imported {n} set(s), skipped {skipped} rule(s).", n=len(sets), skipped=skipped))
 
     def _duplicate_set(self) -> None:
         s = self._current_set()
@@ -522,8 +527,9 @@ class RoutingDialog(QDialog):
         row = self.sets_list.currentRow()
         if row < 0:
             return
-        if QMessageBox.question(self, "Delete set",
-                                f"Delete '{self._sets[row].get('name')}'?") != QMessageBox.Yes:
+        if QMessageBox.question(self, tr("Delete set"),
+                                tr("Delete '{name}'?", name=self._sets[row].get("name"))
+                                ) != QMessageBox.Yes:
             return
         del self._sets[row]
         self._refresh_sets_list()
@@ -559,23 +565,24 @@ class RoutingDialog(QDialog):
     # -- import / export ----------------------------------------------------
     def _apply_imported(self, sets: list[dict], skipped: int) -> None:
         if not sets:
-            self.status_label.setText("Nothing to import.")
+            self.status_label.setText(tr("Nothing to import."))
             return
         for s in sets:
             s["name"] = self._unique_name(s.get("name") or "Imported")
             self._sets.append(s)
         self._refresh_sets_list(select_id=sets[0]["id"])
-        self.status_label.setText(f"Imported {len(sets)} set(s), skipped {skipped} rule(s).")
+        self.status_label.setText(
+            tr("Imported {n} set(s), skipped {skipped} rule(s).", n=len(sets), skipped=skipped))
 
     def _import_from_file(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
-            self, "Import rule sets", "", "JSON (*.json);;All files (*)")
+            self, tr("Import rule sets"), "", "JSON (*.json);;All files (*)")
         if not path:
             return
         try:
             text = Path(path).read_text(encoding="utf-8")
         except OSError as exc:
-            QMessageBox.warning(self, "Import failed", str(exc))
+            QMessageBox.warning(self, tr("Import failed"), str(exc))
             return
         sets, skipped = routing_io.import_rules(text)
         self._apply_imported(sets, skipped)
@@ -588,18 +595,18 @@ class RoutingDialog(QDialog):
         self._apply_imported(sets, skipped)
 
     def _import_from_url(self) -> None:
-        url, ok = QInputDialog.getText(self, "Import from URL", "URL:")
+        url, ok = QInputDialog.getText(self, tr("Import from URL"), tr("URL:"))
         if not ok or not url.strip():
             return
         self._set_busy(True)
-        self.status_label.setText(f"Fetching {url.strip()}…")
+        self.status_label.setText(tr("Fetching {url}…", url=url.strip()))
         self._run_async(lambda: routing_io.import_url(url.strip()), self._on_url_import_done)
 
     def _on_url_import_done(self, result=None, error=None) -> None:
         self._set_busy(False)
         if error:
             self.status_label.setText("")
-            QMessageBox.warning(self, "Import failed", str(error))
+            QMessageBox.warning(self, tr("Import failed"), str(error))
             return
         sets, skipped = result
         self._apply_imported(sets, skipped)
@@ -612,25 +619,25 @@ class RoutingDialog(QDialog):
         text = json.dumps(data, indent=2, ensure_ascii=False)
         if not to_file:
             QApplication.clipboard().setText(text)
-            self.status_label.setText("Copied to clipboard.")
+            self.status_label.setText(tr("Copied to clipboard."))
             return
         path, _ = QFileDialog.getSaveFileName(
-            self, "Export rule set", f"{s.get('name', 'rules')}.json", "JSON (*.json)")
+            self, tr("Export rule set"), f"{s.get('name', 'rules')}.json", "JSON (*.json)")
         if not path:
             return
         try:
             Path(path).write_text(text, encoding="utf-8")
         except OSError as exc:
-            QMessageBox.warning(self, "Export failed", str(exc))
+            QMessageBox.warning(self, tr("Export failed"), str(exc))
 
     # -- mode combo -----------------------------------------------------
     def _refresh_mode_combo(self, keep_mode: str | None = None) -> None:
         current = keep_mode if keep_mode is not None else self.mode_combo.currentData()
         self.mode_combo.blockSignals(True)
         self.mode_combo.clear()
-        self.mode_combo.addItem("Simple", "simple")
+        self.mode_combo.addItem(tr("Simple"), "simple")
         for s in self._sets:
-            self.mode_combo.addItem(s.get("name") or "Unnamed", s["id"])
+            self.mode_combo.addItem(s.get("name") or tr("Unnamed"), s["id"])
         idx = self.mode_combo.findData(current)
         self.mode_combo.setCurrentIndex(idx if idx >= 0 else 0)
         self.mode_combo.blockSignals(False)
@@ -675,7 +682,7 @@ class RoutingDialog(QDialog):
         # geoip category the current geo data lacks is exactly as capable
         # of stopping Xray from starting as a bad custom rule is.
         self._set_busy(True)
-        self.status_label.setText("Validating…")
+        self.status_label.setText(tr("Validating…"))
         low_usage = candidate["low_usage"]
         sets = candidate["sets"]
 
@@ -696,13 +703,16 @@ class RoutingDialog(QDialog):
             self._set_busy(False)
             if error:
                 self.status_label.setText("")
-                QMessageBox.warning(self, "Validation failed", str(error))
+                # A raw failure from the validation plumbing itself, not a
+                # translated app message -- stays in English.
+                QMessageBox.warning(self, tr("Validation failed"), str(error))
                 return
             if result:
                 name, err = result
-                label = name if name == "Simple" else f"'{name}'"
+                label = tr("Simple") if name == "Simple" else f"'{name}'"
                 self.status_label.setText("")
-                QMessageBox.warning(self, "Routing invalid", f"{label}: {err}")
+                # `err` is Xray's own raw parser output -- stays in English.
+                QMessageBox.warning(self, tr("Routing invalid"), f"{label}: {err}")
                 return
             self.status_label.setText("")
             self._routing = candidate
