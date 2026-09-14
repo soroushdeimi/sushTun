@@ -169,7 +169,9 @@ class _ServerTableCore(QWidget):
             self._layout = QVBoxLayout(self)
         self._layout.setContentsMargins(0, 0, 0, 0)
 
-        self.filter_edit = QLineEdit()
+        # Widgets the consumer arranges itself; parenting them here stops
+        # a consumer that skips one from leaving it orphaned and top-level.
+        self.filter_edit = QLineEdit(self)
         self.filter_edit.setPlaceholderText(tr("Filter by name or address…"))
 
         self.model = ProfileTableModel()
@@ -208,11 +210,11 @@ class _ServerTableCore(QWidget):
 
         # Toolbar buttons, placed by the consumer's own layout.
         self._testing = False
-        self.btn_import = QPushButton(tr("Import"))
+        self.btn_import = QPushButton(tr("Import"), self)
         self.btn_import.setObjectName("Primary")
         self.btn_import.clicked.connect(self.importRequested)
 
-        self.btn_test = QToolButton()
+        self.btn_test = QToolButton(self)
         self.btn_test.setText(tr("Test"))
         self.btn_test.setPopupMode(QToolButton.MenuButtonPopup)
         self.btn_test.clicked.connect(lambda: self._start_test(real=True))
@@ -221,10 +223,10 @@ class _ServerTableCore(QWidget):
         test_menu.addAction(tr("TCP ping"), lambda: self._start_test(real=False))
         self.btn_test.setMenu(test_menu)
 
-        self.btn_fastest = QPushButton(tr("Use fastest"))
+        self.btn_fastest = QPushButton(tr("Use fastest"), self)
         self.btn_fastest.clicked.connect(self._use_fastest)
 
-        self.btn_more = QToolButton()
+        self.btn_more = QToolButton(self)
         self.btn_more.setText("⋯")
         self.btn_more.setPopupMode(QToolButton.InstantPopup)
         more_menu = QMenu(self.btn_more)
