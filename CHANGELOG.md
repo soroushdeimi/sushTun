@@ -2,6 +2,96 @@
 
 ## Unreleased
 
+### Fixed: 0.1.13 crashed on start whenever a subscription existed
+The server list loaded every `*.json` file in the profiles folder as a server,
+including `subscriptions.json` — the per-subscription settings file subscriptions
+themselves are stored in. Parsing that as a server profile crashed the app on
+startup for anyone with even one subscription configured. The server list now
+skips it explicitly.
+
+### Fixed: subscriptions
+- **The active server, and its test history, could be lost on every refresh.**
+  Refreshing a subscription deleted every one of its old servers and saved the
+  newly parsed ones under fresh IDs, so the active pointer (and anything Test
+  had recorded) reset each time, even when nothing about the server actually
+  changed. A refresh now matches old and new servers by protocol/address/port/ID
+  and reuses the old ID when a server reappears, so both survive a normal refresh.
+- **A refresh that failed to parse anything deleted the whole server list**
+  instead of leaving it alone. An empty or unparseable response no longer
+  touches the servers already saved.
+
+### Fixed: importing
+- **Importing a raw Xray JSON config lost the WebSocket path/host and the gRPC
+  service name**, since the importer never read `wsSettings`/`httpSettings`/
+  `grpcSettings`. Both round-trip correctly now.
+- **A corrupted `settings.json` (valid JSON, but not an object) stopped the app
+  from starting at all.** It's now treated the same as a missing or unreadable
+  file: sushTun falls back to defaults instead of failing to launch.
+
+### New: every major Xray protocol and transport
+VMess, Trojan, Shadowsocks, and Hysteria2 join VLESS and WireGuard, each with
+its own settings (ciphers, obfuscation, port-hopping, and more). Streams also
+gained the xhttp and httpupgrade transports, TLS certificate pinning (SHA-256),
+and ECH.
+
+### New: a real server table
+Sortable columns for delay, transport, subscription, and type, with a name/
+address filter. Real-delay and TCP-ping tests run one server or a whole
+selection at once, "Use fastest" switches to the quickest responder, share
+links and QR codes can be copied straight from the table, and Ctrl+V imports
+whatever's on the clipboard.
+
+### New: custom routing rule sets
+A "Rule sets" tab alongside the existing Simple bypass toggles: build named
+rule sets from domain/IP/port/network/protocol/process conditions, import and
+export them in a v2rayN-compatible format (file, clipboard, or a URL —
+including a one-click import of Chocolate4U's Iran rule set), and pick the
+active set from the main window or the tray's "Routing" submenu. A "Reconnect
+now" button appears whenever a change needs one. The bundled geo data
+(geosite/geoip) that rules like `geosite:category-ads-all` depend on now has
+its own updater, with a source picker and an optional auto-update interval.
+
+### New: DNS control
+Route domains your routing sends direct through a separate domestic DNS
+resolver, resolve everything else through the tunnel instead of your normal
+connection, and reach for parallel queries, serve-stale, or a raw DNS block
+override when you need them.
+
+### New: core tuning
+Anti-filter splits the TLS handshake into pieces small enough that filtering
+can't read it. Multiplexing and traffic sniffing are now configurable, the
+local SOCKS proxy's port can be changed and shared with other devices on your
+network (with a password), and outbounds can be given a default TLS
+fingerprint.
+
+### New: subscriptions, your way
+Each subscription now has its own auto-update interval, a name filter (regex)
+to keep only the servers you want, and a custom User-Agent — plus an "Update
+all" button that refreshes every enabled subscription in one go.
+
+### New: tray, startup, and backup
+- A "Servers" submenu on the tray icon switches your active server without
+  opening the window.
+- sushTun can start automatically at login (Windows, and the `.deb` package
+  on Linux) and optionally connect right away, with a delay while the network
+  comes up.
+- Settings, servers, and subscriptions can be backed up to a zip and restored
+  from one.
+- sushTun checks for new releases in the background and shows a banner with a
+  one-click "copy download link" — it never opens a browser itself, since it
+  runs elevated.
+
+### New: a Persian (فارسی) interface
+A full right-to-left translation, switchable in Settings. Technical values —
+addresses, keys, JSON, anything you'd type exactly — always stay left-to-right
+and untranslated, wherever they appear.
+
+### Changed: "Allow insecure" is gone
+The bundled Xray build now refuses to start with `allowInsecure` set at all,
+so the toggle could only ever produce a server that fails to connect. Pin the
+server's certificate (SHA-256) instead, in the profile editor's Advanced
+section — the field that "Allow insecure" configs already carried over.
+
 ### Changed: portable download names
 Downloads are now named `sushTun-windows.exe` / `sushTun-linux` / `sushTun-macos`
 instead of `XrayPortable-*`. The portable build keeps settings and profiles next to
