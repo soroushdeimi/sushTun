@@ -89,13 +89,24 @@ class ImportDialog(QDialog):
         # overridden explicitly instead.
         buttons.button(QDialogButtonBox.Ok).setText(tr("OK"))
         buttons.button(QDialogButtonBox.Cancel).setText(tr("Cancel"))
-        buttons.button(QDialogButtonBox.Ok).setDefault(True)
+        ok_btn = buttons.button(QDialogButtonBox.Ok)
+        ok_btn.setDefault(True)
+        ok_btn.setAutoDefault(True)
+        buttons.button(QDialogButtonBox.Cancel).setAutoDefault(False)
         buttons.accepted.connect(self._accept)
         buttons.rejected.connect(self.reject)
 
         layout = QVBoxLayout(self)
         layout.addWidget(self.tabs)
         layout.addWidget(buttons)
+
+        # Qt falls back to the first autoDefault button in tab order when a
+        # dialog is shown and focus lands elsewhere (e.g. the QR tab's Choose
+        # image button -- this fails before reaching the QLineEdit as well);
+        # keep OK the single autoDefault so Enter always means "OK".
+        for btn in self.findChildren(QPushButton):
+            if btn is not ok_btn:
+                btn.setAutoDefault(False)
 
     def _qr_tab(self) -> QWidget:
         w = QWidget()

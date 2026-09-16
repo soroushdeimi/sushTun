@@ -14,10 +14,10 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QItemSelectionModel, Qt  # noqa: E402
 from PySide6.QtGui import QColor  # noqa: E402
-from PySide6.QtWidgets import QApplication  # noqa: E402
+from PySide6.QtWidgets import QApplication, QPushButton  # noqa: E402
 
 from xrayui.core.profiles import Profile  # noqa: E402
-from xrayui.i18n import ltr  # noqa: E402
+from xrayui.i18n import ltr, tr  # noqa: E402
 from xrayui.ui.server_table import (  # noqa: E402
     COL_DELAY,
     COL_NAME,
@@ -183,6 +183,19 @@ def test_fastest_uid_ignores_failures_untested_and_skipped(qapp):
 def test_qr_dialog_opens_with_a_non_null_pixmap(qapp):
     dlg = QrDialog("Alpha", "vless://uuid@a.example.com:443?type=ws#Alpha")
     assert not dlg.image_label.pixmap().isNull()
+
+
+def test_qr_dialog_close_is_the_only_default_button(qapp):
+    dlg = QrDialog("Alpha", "vless://uuid@a.example.com:443?type=ws#Alpha")
+    defaults = [b.text() for b in dlg.findChildren(QPushButton) if b.isDefault()]
+    assert defaults == [tr("Close")]
+    # Showing the dialog must not let Qt re-assert another button as default.
+    dlg.show()
+    qapp.processEvents()
+    shown = [b.text() for b in dlg.findChildren(QPushButton)
+             if b.isVisible() and b.isDefault()]
+    assert shown == [tr("Close")]
+    dlg.close()
 
 
 # -- ProfilePanel widget -----------------------------------------------------

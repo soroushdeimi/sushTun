@@ -517,4 +517,7 @@ TRANSLATIONS_FA: dict[str, str] = {
     "More server actions": "گزینه‌های بیشتر سرور",
     "Import…": "وارد کردن…",
     "Delete subscription": "حذف اشتراک",
+
+    # -- ui/a-dialogs --------------------------------------------------------
+    "Refresh": "بازخوانی",
 }

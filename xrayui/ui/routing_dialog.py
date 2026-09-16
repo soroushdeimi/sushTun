@@ -6,7 +6,7 @@ interface (window title, Save/Cancel) for today's users.
 """
 from __future__ import annotations
 
-from PySide6.QtWidgets import QDialog, QDialogButtonBox, QVBoxLayout
+from PySide6.QtWidgets import QDialog, QDialogButtonBox, QPushButton, QVBoxLayout
 
 from ..core import xraycheck  # noqa: F401 -- tests monkeypatch rd.xraycheck.check_rules
 from ..i18n import tr
@@ -31,10 +31,16 @@ class RoutingDialog(QDialog):
         self.btn_save = buttons.button(QDialogButtonBox.Save)
         self.btn_save.setText(tr("Save"))
         buttons.button(QDialogButtonBox.Cancel).setText(tr("Cancel"))
+        self.btn_save.setAutoDefault(True)
         self.btn_save.setDefault(True)
+        buttons.button(QDialogButtonBox.Cancel).setAutoDefault(False)
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+
+        for btn in self.findChildren(QPushButton):
+            if btn is not self.btn_save:
+                btn.setAutoDefault(False)
 
         self.page.applied.connect(lambda _cfg: self.accept())
 

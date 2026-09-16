@@ -60,8 +60,14 @@ class SubscriptionRow(QFrame):
         # only the name reads muted, rather than disabling the whole row.
         name.setObjectName("Muted" if not sub.enabled else "H1")
         edit = QPushButton("✎")
+        edit.setToolTip(tr("Edit"))
+        edit.setAccessibleName(tr("Edit"))
         refresh = QPushButton("↻")
+        refresh.setToolTip(tr("Refresh"))
+        refresh.setAccessibleName(tr("Refresh"))
         delete = QPushButton("✕")
+        delete.setToolTip(tr("Delete"))
+        delete.setAccessibleName(tr("Delete"))
         for b in (edit, refresh, delete):
             b.setFixedWidth(34)
         edit.clicked.connect(lambda: self.editRequested.emit(self.uid))

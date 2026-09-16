@@ -84,6 +84,22 @@ def test_import_dialog_builds_in_persian(fa, qapp):
         dlg.close()
 
 
+def test_import_dialog_ok_is_the_only_default_button(fa, qapp):
+    from PySide6.QtWidgets import QPushButton
+    dlg = ImportDialog()
+    try:
+        defaults = [b.text() for b in dlg.findChildren(QPushButton) if b.isDefault()]
+        assert defaults == ["تأیید"]  # tr("OK")
+        # The QR tab's Choose-image button must not steal the default on show.
+        dlg.show()
+        qapp.processEvents()
+        shown = [b.text() for b in dlg.findChildren(QPushButton)
+                 if b.isVisible() and b.isDefault()]
+        assert shown == ["تأیید"]
+    finally:
+        dlg.close()
+
+
 # Every ProfileEditDialog f_* text field is a technical value (address, key,
 # path, JSON, a port range...) except the freeform display name --
 # enumerated below instead of named one by one, so a new technical field
