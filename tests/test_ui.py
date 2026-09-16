@@ -450,7 +450,7 @@ def test_open_settings_reloads_profiles_and_tray_after_a_restore(window, monkeyp
         def restored(self):
             return True
 
-    monkeypatch.setattr("xrayui.ui.main_window.SettingsDialog", FakeDialog)
+    monkeypatch.setattr("xrayui.ui.main_window.SettingsWindow", FakeDialog)
     monkeypatch.setattr(window.store, "list", lambda: [])
     monkeypatch.setattr(window.store, "active_uid", lambda: None)
     monkeypatch.setattr(window.conn, "is_connected", lambda: True)

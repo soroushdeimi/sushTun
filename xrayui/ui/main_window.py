@@ -39,7 +39,7 @@ from ..core.connection import Connection, _resolve
 from ..core.profiles import Profile, ProfileStore
 from ..core.xray import is_xray_running
 from ..i18n import ltr, tr
-from .dialogs import ImportDialog, ProfileEditDialog, SettingsDialog, SubscriptionEditDialog
+from .dialogs import ImportDialog, ProfileEditDialog, SubscriptionEditDialog
 from .dns_dialog import DnsDialog
 from .icons import icon
 from .log_tailer import LogTailer
@@ -49,6 +49,7 @@ from .pages.leave import confirm_leave
 from .pages.routing_page import RoutingPage
 from .pages.servers_page import ServersPage
 from .routing_dialog import RoutingDialog
+from .settings_window import SettingsWindow
 from .sidebar import Sidebar
 from .subscription_panel import SubscriptionPanel
 from .theme import ERR, HAIRLINE, MUTED, TEXT
@@ -1125,7 +1126,7 @@ class MainWindow(QMainWindow):
         old_mtu = self.settings.get("tun_mtu")
         old_log = self.settings.get("log_level")
         old_core = copy.deepcopy(self.settings.get("core"))
-        dlg = SettingsDialog(self.settings, self)
+        dlg = SettingsWindow(self.settings, self)
         if dlg.exec():
             values = dlg.values()
             self.settings.update(values)

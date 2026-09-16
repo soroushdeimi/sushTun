@@ -125,3 +125,30 @@ def test_servers_page_is_the_finished_page(qapp, tmp_path, monkeypatch):
         assert win.servers_page.more_btn.toolTip()
     finally:
         win.close()
+
+
+def test_settings_item_opens_the_settings_window(qapp, tmp_path, monkeypatch):
+    from xrayui import paths
+    from xrayui.ui import main_window as mw
+    from xrayui.ui.settings_window import SettingsWindow
+    monkeypatch.setattr(paths, "base_dir", lambda: tmp_path)
+    monkeypatch.setattr(paths, "state_dir", lambda: tmp_path / "state")
+    monkeypatch.setattr(paths, "profiles_dir", lambda: tmp_path / "profiles")
+    paths.ensure_dirs()
+    opened = []
+
+    class Probe(SettingsWindow):
+        def exec(self):
+            opened.append(self)
+            self._pages["general"].tun_mtu.setValue(1380)
+            return 1
+
+    monkeypatch.setattr(mw, "SettingsWindow", Probe)
+    monkeypatch.setattr(mw.app_settings, "save", lambda settings: None)
+    win = mw.MainWindow(elevated=False)
+    try:
+        win.sidebar.settingsRequested.emit()
+        assert len(opened) == 1
+        assert win.settings["tun_mtu"] == 1380
+    finally:
+        win.close()
