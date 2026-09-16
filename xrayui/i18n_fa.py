@@ -520,4 +520,8 @@ TRANSLATIONS_FA: dict[str, str] = {
 
     # -- ui/a-dialogs --------------------------------------------------------
     "Refresh": "بازخوانی",
+    "0 uses the app-wide refresh interval.":
+        "۰ یعنی از بازه به‌روزرسانی کلی برنامه استفاده شود.",
+    "Regex. Only servers whose name matches are kept.":
+        "عبارت باقاعده (regex). فقط سرورهایی که نامشان جور باشد نگه داشته می‌شوند.",
 }

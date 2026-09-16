@@ -37,6 +37,7 @@ from ..core.outbounds.hysteria2 import normalize_ports
 from ..core.profiles import Profile, normalize_pcs, valid_pcs
 from ..core.subscription import DEFAULT_USER_AGENT, Subscription
 from ..i18n import tr
+from .mac import InsetGroup, Switch
 from .rule_editor import CollapsibleSection
 from .workers import Worker
 
@@ -1014,7 +1015,8 @@ class SubscriptionEditDialog(QDialog):
     def __init__(self, sub: Subscription, parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle(tr("Edit subscription"))
-        self.resize(420, 0)
+        # Wide enough for a label, its footnote and the field side by side.
+        self.resize(560, 0)
         self._sub = sub
         # Auto-fill Name from the URL's host, same as the old bare "paste a
         # URL" Add flow -- but only until the user actually types a name of
@@ -1023,30 +1025,43 @@ class SubscriptionEditDialog(QDialog):
         self._name_auto = sub.name in ("", "Subscription")
 
         layout = QVBoxLayout(self)
-        form = QFormLayout()
-        layout.addLayout(form)
+        layout.setSpacing(14)
 
         self.f_name = QLineEdit(sub.name)
-        form.addRow(tr("Name"), self.f_name)
         self.f_url = QLineEdit(sub.url)
         self.f_url.setLayoutDirection(Qt.LeftToRight)
-        form.addRow("URL", self.f_url)
-        self.f_enabled = QCheckBox(tr("Enabled"))
+        self.f_enabled = Switch()
         self.f_enabled.setChecked(sub.enabled)
-        form.addRow(self.f_enabled)
+        self.f_enabled.setAccessibleName(tr("Enabled"))
+        self.f_enabled.setToolTip(tr("Enabled"))
         self.f_auto_hours = QSpinBox()
         self.f_auto_hours.setRange(0, 168)
         self.f_auto_hours.setSpecialValueText(tr("0 (default)"))
         self.f_auto_hours.setValue(int(sub.auto_update_hours))
-        form.addRow(tr("Auto-update every (hours)"), self.f_auto_hours)
         self.f_name_filter = QLineEdit(sub.name_filter)
         self.f_name_filter.setPlaceholderText(tr("Only keep servers whose name matches (regex)"))
         self.f_name_filter.setLayoutDirection(Qt.LeftToRight)
-        form.addRow(tr("Name filter"), self.f_name_filter)
         self.f_user_agent = QLineEdit(sub.user_agent)
         self.f_user_agent.setPlaceholderText(DEFAULT_USER_AGENT)
         self.f_user_agent.setLayoutDirection(Qt.LeftToRight)
-        form.addRow("User-Agent", self.f_user_agent)
+
+        # Grouped like System Settings: what the subscription is, then how
+        # it is fetched. Footnotes explain the two fields people misread.
+        self.group_main = InsetGroup()
+        self.group_main.add_row(tr("Name"), self.f_name)
+        self.group_main.add_row("URL", self.f_url)
+        self.group_main.add_row(tr("Enabled"), self.f_enabled)
+        layout.addWidget(self.group_main)
+
+        self.group_fetch = InsetGroup()
+        self.group_fetch.add_row(
+            tr("Auto-update every (hours)"), self.f_auto_hours,
+            footnote=tr("0 uses the app-wide refresh interval."))
+        self.group_fetch.add_row(
+            tr("Name filter"), self.f_name_filter,
+            footnote=tr("Regex. Only servers whose name matches are kept."))
+        self.group_fetch.add_row("User-Agent", self.f_user_agent)
+        layout.addWidget(self.group_fetch)
 
         self.f_url.textEdited.connect(self._maybe_autofill_name)
         self.f_name.textEdited.connect(self._stop_autofill_name)
