@@ -55,6 +55,9 @@ class AlertBanner(QFrame):
         self._action_connected = False
         close = QPushButton("✕")
         close.setFixedWidth(28)
+        # A bare glyph means nothing to a screen reader or a hovering user.
+        close.setToolTip(tr("Close"))
+        close.setAccessibleName(tr("Close"))
         close.clicked.connect(lambda: self.setVisible(False))
         row.addWidget(self._label, 1)
         row.addWidget(self._action)
