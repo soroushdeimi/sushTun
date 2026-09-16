@@ -1386,3 +1386,144 @@ def test_update_check_does_nothing_on_fetch_failure(window):
     window._on_update_checked(result=None)
     assert window.alert_banner.isHidden()
     assert window.settings["updates"]["last_check"] > 0
+
+
+# -- Sidebar window shell (Direction A) --------------------------------------
+
+def test_sidebar_nav_switches_the_page_stack(window):
+    from xrayui.ui.main_window import PAGE_ACTIVITY, PAGE_DNS, PAGE_ROUTING
+    assert window._stack.currentIndex() == 0  # Servers
+    assert window.sidebar.item_servers.isChecked()
+    assert window.sidebar.item_dns.text().startswith("DNS")
+
+    window.sidebar.item_routing.click()
+    assert window._stack.currentIndex() == PAGE_ROUTING
+    assert window.sidebar.item_routing.isChecked()
+    assert not window.sidebar.item_servers.isChecked()
+    assert window.toolbar.title.text() == "Routing"
+
+    window.sidebar.item_dns.click()
+    assert window._stack.currentIndex() == PAGE_DNS
+    assert window.sidebar.item_dns.isChecked()
+
+    window.sidebar.item_activity.click()
+    assert window._stack.currentIndex() == PAGE_ACTIVITY
+    assert window.sidebar.item_activity.isChecked()
+
+
+def test_nav_item_only_switches_to_a_different_page(window):
+    from xrayui.ui.main_window import PAGE_ROUTING
+    window._show_page(PAGE_ROUTING)
+    # Clicking the already-active item must not reset anything or repaint the stack.
+    window.sidebar.item_routing.click()
+    assert window._stack.currentIndex() == PAGE_ROUTING
+
+
+def test_ctrl_number_shortcuts_switch_pages(window):
+    from PySide6.QtGui import QShortcut
+
+    from xrayui.ui.main_window import PAGE_ACTIVITY, PAGE_DNS, PAGE_SERVERS
+    by_key = {sc.key().toString(): sc for sc in window.findChildren(QShortcut)}
+    assert {"Ctrl+1", "Ctrl+2", "Ctrl+3", "Ctrl+4", "Ctrl+5"} <= set(by_key)
+
+    window._show_page(PAGE_SERVERS)
+    assert window._stack.currentIndex() == PAGE_SERVERS
+
+    by_key["Ctrl+4"].activated.emit()
+    assert window._stack.currentIndex() == PAGE_DNS
+    assert window.sidebar.item_dns.isChecked()
+
+    by_key["Ctrl+5"].activated.emit()
+    assert window._stack.currentIndex() == PAGE_ACTIVITY
+
+    by_key["Ctrl+1"].activated.emit()
+    assert window._stack.currentIndex() == PAGE_SERVERS
+
+
+def test_servers_filter_is_shown_only_on_the_servers_page(window):
+    from xrayui.ui.main_window import PAGE_ACTIVITY, PAGE_ROUTING
+    assert not window.toolbar.filter_edit.isHidden()  # Servers
+    window._show_page(PAGE_ROUTING)
+    assert window.toolbar.filter_edit.isHidden()
+    window._show_page(PAGE_ACTIVITY)
+    assert window.toolbar.filter_edit.isHidden()
+    window._show_page(0)
+    assert not window.toolbar.filter_edit.isHidden()
+
+
+def test_dirty_routing_page_blocks_switching_away(window, monkeypatch):
+    from xrayui.ui.main_window import PAGE_ROUTING, PAGE_SERVERS
+    window._show_page(PAGE_ROUTING)
+    window._routing_page.proxy.setPlainText("example.com")
+    assert window._routing_page.is_dirty()
+
+    monkeypatch.setattr("xrayui.ui.main_window.confirm_leave", lambda *a: False)
+    window._show_page(PAGE_SERVERS)
+    assert window._stack.currentIndex() == PAGE_ROUTING
+    assert window.sidebar.item_routing.isChecked()
+
+    monkeypatch.setattr("xrayui.ui.main_window.confirm_leave", lambda *a: True)
+    window._show_page(PAGE_SERVERS)
+    assert window._stack.currentIndex() == PAGE_SERVERS
+
+
+def test_dirty_dns_page_blocks_switching_away(window, monkeypatch):
+    from xrayui.ui.main_window import PAGE_DNS, PAGE_SERVERS
+    window._show_page(PAGE_DNS)
+    window._dns_page.servers.setPlainText("8.8.8.8")
+    assert window._dns_page.is_dirty()
+
+    monkeypatch.setattr("xrayui.ui.main_window.confirm_leave", lambda *a: False)
+    window._show_page(PAGE_SERVERS)
+    assert window._stack.currentIndex() == PAGE_DNS
+
+    monkeypatch.setattr("xrayui.ui.main_window.confirm_leave", lambda *a: True)
+    window._show_page(PAGE_SERVERS)
+    assert window._stack.currentIndex() == PAGE_SERVERS
+
+
+def test_routing_popup_button_syncs_with_the_combo(window):
+    window.settings["routing"]["sets"] = [{"id": "s1", "name": "MySet", "rules": []}]
+    window._refresh_routing_combo()
+    assert window.toolbar.btn_routing_popup.accessibleName() == "Routing: Simple"
+
+    # Switching via the hidden combo updates the popup label.
+    window.routing_combo.setCurrentIndex(window.routing_combo.findData("s1"))
+    assert window.toolbar.btn_routing_popup.accessibleName() == "Routing: MySet"
+    assert window.settings["routing"]["mode"] == "s1"
+
+    # And a fresh refresh keeps the popup in step with the combo.
+    window._refresh_routing_combo()
+    assert window.toolbar.btn_routing_popup.accessibleName() == "Routing: MySet"
+
+
+def test_routing_popup_menu_action_switches_the_mode(window):
+    window.settings["routing"]["sets"] = [{"id": "s1", "name": "MySet", "rules": []}]
+    window._refresh_routing_combo()
+    menu = window.toolbar.btn_routing_popup.menu()
+    assert menu is not None
+    labels = [a.text() for a in menu.actions()]
+    assert labels == ["Simple", "MySet"]
+
+
+def test_hotspot_switch_persists_and_shows_the_detail(window):
+    assert not window.settings["gateway"]["enabled"]
+    window.sidebar.btn_gateway.setChecked(True)
+    assert window.settings["gateway"]["enabled"] is True
+    assert app_settings.load()["gateway"]["enabled"] is True
+    assert not window.sidebar.hotspot_detail.isHidden()
+    assert window.sidebar.hotspot_detail.text().startswith("SSID:")
+
+    window.sidebar.btn_gateway.setChecked(False)
+    assert window.settings["gateway"]["enabled"] is False
+    assert window.sidebar.hotspot_detail.isHidden()
+    assert "Hotspot sharing off." in window.step_label.text()
+
+
+def test_subscription_count_reaches_the_sidebar(window):
+    from xrayui.core.subscription import Subscription
+    assert window.sidebar.item_subs._count is None
+    s = Subscription(name="s1", url="https://x.example.com/s")
+    window.subs.save(s)
+    window._reload_subs()
+    assert window.sidebar.item_subs._count == "1"

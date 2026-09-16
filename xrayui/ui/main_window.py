@@ -430,9 +430,9 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence("Ctrl+Q"), self, activated=self._quit)
         QShortcut(QKeySequence.Paste, self, activated=self._paste_import)
         QShortcut(QKeySequence("Ctrl+,"), self, activated=self._open_settings)
-        for i, seq in enumerate("12345", 1):
-            QShortcut(QKeySequence(f"Ctrl+{seq}"), self,
-                      activated=lambda idx=i: self._show_page(idx))
+        for _seq, idx in enumerate("12345"):
+            QShortcut(QKeySequence(f"Ctrl+{idx}"), self,
+                      activated=lambda _i=_seq: self._show_page(_i))
 
         # --- signal wiring -----------------------------------------------
         self.profiles.importRequested.connect(self._import)
@@ -465,7 +465,7 @@ class MainWindow(QMainWindow):
         self.status_card.restoreNetworkRequested.connect(self._cleanup)
         self.status_card.reconnectRequested.connect(self._reconnect_now)
 
-        self._refresh_status_subtitle()
+        self._update_page_ui(self._current_page)
 
     # ── tray ──────────────────────────────────────────────────────────────
 
@@ -518,6 +518,7 @@ class MainWindow(QMainWindow):
             return
         self._current_page = index
         self._stack.setCurrentIndex(index)
+        self.sidebar.set_current_page(index)
         self._update_page_ui(index)
 
     def _update_page_ui(self, index: int) -> None:
@@ -1198,7 +1199,7 @@ class MainWindow(QMainWindow):
     def _build_routing_popup_menu(self, routing_cfg: dict,
                                   current_mode: str) -> None:
         from PySide6.QtWidgets import QMenu
-        menu = QMenu()
+        menu = QMenu(self.toolbar.btn_routing_popup)
         items = [(tr("Simple"), "simple")] + [
             (s.get("name") or tr("Unnamed"), s.get("id"))
             for s in routing_cfg.get("sets") or []]
