@@ -63,6 +63,8 @@ _PATHS: dict[str, str] = {
     "arrow-down": '<path d="M4 6l4 4 4-4"/>',
     "plus": '<path d="M8 3v10M3 8h10"/>',
     "check": '<path d="M3.5 8.5 6.5 11.5 12.5 5.5"/>',
+    "archive": '<path d="M2.5 3.5h11v3h-11zM3.5 6.5v6h9v-6M6.5 9h3"/>',
+    "language": '<path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z"/>',
 }
 
 # Backward-compat aliases so existing callers (e.g. connection_header.py)

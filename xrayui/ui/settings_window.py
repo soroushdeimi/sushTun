@@ -51,10 +51,10 @@ TOPICS = [
     ("general", "General", "settings", "#8e8e93"),
     ("anti-filter", "Anti-filter", "anti-filter", "#bf5af2"),
     ("local-proxy", "Local proxy", "servers", "#30d158"),
-    ("geo-data", "Geo data", "refresh", "#0a84ff"),
+    ("geo-data", "Geo data", "routing", "#0a84ff"),
     ("startup", "Startup", "arrow-up", "#ff9f0a"),
-    ("backup", "Backup", "refresh", "#64d2ff"),
-    ("language", "Language", "search", "#ff375f"),
+    ("backup", "Backup", "archive", "#64d2ff"),
+    ("language", "Language", "language", "#ff375f"),
 ]
 
 
@@ -842,6 +842,8 @@ class SettingsWindow(QDialog):
         btn_cancel.clicked.connect(self.reject)
         buttons_row.addWidget(btn_cancel)
         self.btn_done = QPushButton(tr("Done"))
+        # The theme paints #Primary blue, marking the button Enter triggers.
+        self.btn_done.setObjectName("Primary")
         self.btn_done.setDefault(True)
         self.btn_done.setAutoDefault(True)
         self.btn_done.clicked.connect(self._on_done)

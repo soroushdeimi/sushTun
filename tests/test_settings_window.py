@@ -497,3 +497,19 @@ def test_sidebar_names_are_not_elided(qapp, defaults, lang):
     finally:
         qapp.setLayoutDirection(Qt.LeftToRight)
         set_language("en")
+
+def test_topic_icons_are_distinct_and_done_is_primary(qapp, defaults):
+    from xrayui.ui.icons import icon
+    from xrayui.ui.settings_window import TOPICS
+    names = [name for _key, _label, name, _color in TOPICS]
+    assert len(set(names)) == len(names), names
+    for name in names:
+        assert not icon(name).isNull()
+    from xrayui.ui.settings_window import SettingsWindow
+    win = SettingsWindow(defaults)
+    try:
+        assert win.btn_done.objectName() == "Primary"
+        assert win.btn_done.isDefault()
+    finally:
+        win.close()
+
