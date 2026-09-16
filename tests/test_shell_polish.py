@@ -84,12 +84,6 @@ def test_main_window_fits_820x560_on_every_page(qapp, tmp_path, monkeypatch, lan
         set_language("en")
 
 
-
-
-
-
-
-
 def test_dirty_routing_page_is_found_behind_its_scroll_area(qapp, tmp_path, monkeypatch):
     from xrayui import paths
     from xrayui.i18n import set_language
