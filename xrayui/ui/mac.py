@@ -314,6 +314,18 @@ class PopupButton(QToolButton):
         text = self._value
         return f"{self._label}: {text}" if self._label else text
 
+    @staticmethod
+    def _text_positions(width: int, head_w: int, tail_w: int,
+                        rtl: bool, pad: int = 10) -> tuple[float, float]:
+        """x of the label and of the value. The chevron takes the trailing
+        edge (right in LTR, left in RTL), so text starts at the leading edge
+        and the label always comes first in reading order."""
+        if rtl:
+            label_x = width - pad - head_w
+            return label_x, label_x - tail_w
+        return pad, pad + head_w
+
+
     def paintEvent(self, _event) -> None:
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
@@ -340,18 +352,14 @@ class PopupButton(QToolButton):
         if tail_w and head_w + tail_w > max_text:
             tail_w = max(max_text - head_w, 0)
             value = fm.elidedText(value, Qt.ElideRight, tail_w)
-        text_w = head_w + tail_w
 
         y = (h - fm.height()) / 2
-        if rtl:
-            x0 = w - pad - text_w
-        else:
-            x0 = pad + 12 + 6
+        label_x, value_x = self._text_positions(w, head_w, tail_w, rtl, pad)
         if label:
             p.setPen(QColor(MUTED))
-            p.drawText(QRectF(x0, y, head_w, fm.height()),
+            p.drawText(QRectF(label_x, y, head_w, fm.height()),
                        Qt.AlignLeft | Qt.AlignVCenter, label)
         if tail_w:
             p.setPen(QColor(TEXT))
-            p.drawText(QRectF(x0 + head_w, y, tail_w, fm.height()),
+            p.drawText(QRectF(value_x, y, tail_w, fm.height()),
                        Qt.AlignLeft | Qt.AlignVCenter, value)
