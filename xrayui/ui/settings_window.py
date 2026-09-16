@@ -833,18 +833,19 @@ class SettingsWindow(QDialog):
         self._pages["geo-data"].geo_updated.connect(self._on_geo_updated)
         self._pages["backup"].restored.connect(self._on_restored)
 
-        # Buttons: Done (default) + Cancel
+        # Buttons: Cancel, then Done (default) last, as on macOS
         buttons_row = QHBoxLayout()
         buttons_row.setContentsMargins(18, 10, 18, 14)
         buttons_row.addStretch(1)
+        btn_cancel = QPushButton(tr("Cancel"))
+        btn_cancel.setAutoDefault(False)
+        btn_cancel.clicked.connect(self.reject)
+        buttons_row.addWidget(btn_cancel)
         self.btn_done = QPushButton(tr("Done"))
         self.btn_done.setDefault(True)
         self.btn_done.setAutoDefault(True)
         self.btn_done.clicked.connect(self._on_done)
         buttons_row.addWidget(self.btn_done)
-        btn_cancel = QPushButton(tr("Cancel"))
-        btn_cancel.clicked.connect(self.reject)
-        buttons_row.addWidget(btn_cancel)
         right_col.addLayout(buttons_row)
 
         outer.addLayout(right_col, 1)
