@@ -230,8 +230,15 @@ class _ServerTableCore(QWidget):
         self.btn_more.setText("⋯")
         self.btn_more.setPopupMode(QToolButton.InstantPopup)
         more_menu = QMenu(self.btn_more)
-        more_menu.addAction(tr("Remove failed"), self.removeFailedRequested)
-        more_menu.addAction(tr("Remove duplicates"), self.removeDuplicatesRequested)
+        # addAction takes a callable; a SignalInstance is not one, so trigger
+        # it via a lambda or the menu action dies with "not callable".
+        more_menu.addAction(
+            tr("Remove failed"), lambda checked=False: self.removeFailedRequested.emit()
+        )
+        more_menu.addAction(
+            tr("Remove duplicates"),
+            lambda checked=False: self.removeDuplicatesRequested.emit(),
+        )
         self.btn_more.setMenu(more_menu)
 
         self.btn_import.setAccessibleName(tr("Import"))
