@@ -607,4 +607,3 @@ def test_connection_header_skips_unknown_meta_parts(qapp):
     h.set("iface", "—")
     assert "—" not in h._meta_full
     assert "de.example.com:443" in h._meta_full
-
