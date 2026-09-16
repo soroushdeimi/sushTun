@@ -58,6 +58,10 @@ class ServersPage(QWidget):
         self.more_btn = IconButton("ellipsis", tr("More server actions"))
         self.more_btn.setPopupMode(QToolButton.InstantPopup)
         self.more_btn.setMenu(self.core.btn_more.menu())
+        # The core's own ⋯ button is not placed in this layout; hide it so
+        # it can't float at (0,0) over the filter/table, and let the IconButton
+        # above be the page's only More control.
+        self.core.btn_more.hide()
         tool.addWidget(self.more_btn)
         tool.addStretch(1)
         outer.addLayout(tool)
@@ -120,6 +124,15 @@ class ServersPage(QWidget):
 
     def set_filter_text(self, text: str) -> None:
         self.core.set_filter_text(text)
+
+    def current_uid(self) -> str | None:
+        return self.core.current_uid()
+
+    def selected_uids(self) -> list[str]:
+        return self.core.selected_uids()
+
+    def visible_uids(self) -> list[str]:
+        return self.core.visible_uids()
 
     def set_connection(self, key: str, value: str) -> None:
         self.header.set(key, value)
