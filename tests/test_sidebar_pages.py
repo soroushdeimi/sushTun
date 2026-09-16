@@ -412,6 +412,10 @@ def test_activity_page_renders_each_segment(qapp):
     page.resize(796, 700)
     page.show()
     qapp.processEvents()
+    for seg in range(3):
+        page.tabs.setCurrentIndex(seg)
+        qapp.processEvents()
+        _render(page)
     page.close()
 
 
