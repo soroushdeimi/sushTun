@@ -528,4 +528,21 @@ TRANSLATIONS_FA: dict[str, str] = {
         "۰ یعنی از بازه به‌روزرسانی کلی برنامه استفاده شود.",
     "Regex. Only servers whose name matches are kept.":
         "عبارت باقاعده (regex). فقط سرورهایی که نامشان جور باشد نگه داشته می‌شوند.",
+
+    # -- ui/a-settings: System Settings style settings window ----------------
+    # New footnote for "Split the TLS handshake" Switch
+    "Try this if servers connect but sites won't load.": "اگر سرورها متصل می‌شوند اما سایت‌ها باز نمی‌شوند این را امتحان کنید.",
+    # Divider footnote under TLS fragment fields
+    "Applies to TLS and Reality servers over TCP. The speed test uses it too, so servers that only work with it don't show as failed.":
+        "برای سرورهای TLS و Reality برروی TCP اعمال می‌شود. تست سرعت هم از آن استفاده می‌کند، بنابراین سرورهایی که فقط با این کار می‌کنند به‌عنوان ناموفق نشان داده نمی‌شوند.",
+    # Parameterized validation messages (different from dialogs.py which uses QMessageBox)
+    "Validation failed: {err}": "بررسی ناموفق بود: {err}",
+    "Settings invalid: {err}": "تنظیمات نامعتبر است: {err}",
+    "Startup setting failed: {err}": "تنظیم راه‌اندازی ناموفق بود: {err}",
+    # Sidebar labels and titles new to the settings window
+    "General": "عمومی",
+    "Split the TLS handshake": "تقسیم دست‌دهی TLS",
+    "XUDP UDP443": "XUDP UDP443",
+    "Backup": "پشتیبان‌گیری",
+    "Done": "انجام",
 }

@@ -1,0 +1,515 @@
+"""SettingsWindow tests: sidebar topics, staged edits, off-thread validation.
+
+Mirrors the SettingsDialog coverage from test_ui.py so the new window keeps
+exactly the same behaviour and API (values()/geo_updated()/restored()) --
+leaving SettingsDialog itself untouched for now.
+
+Skipped when PySide6 is missing so a contributor without it still gets a
+green suite -- except under CI, where a skip must fail instead.
+"""
+from __future__ import annotations
+
+import copy
+import json
+import os
+import time
+
+import pytest
+
+if os.environ.get("CI"):
+    import PySide6  # noqa: F401
+else:
+    pytest.importorskip("PySide6")
+
+# Must be set before the first QApplication; there is no display on a CI runner.
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+from PySide6.QtCore import Qt  # noqa: E402
+from PySide6.QtTest import QTest  # noqa: E402
+from PySide6.QtWidgets import (  # noqa: E402
+    QAbstractButton,
+    QApplication,
+    QFileDialog,
+    QLabel,
+    QMessageBox,
+)
+
+from xrayui import paths  # noqa: E402
+from xrayui.core import settings as app_settings  # noqa: E402
+from xrayui.i18n import set_language, tr  # noqa: E402
+from xrayui.ui import settings_window as sw_mod  # noqa: E402
+from xrayui.ui.settings_window import SettingsWindow  # noqa: E402
+
+
+@pytest.fixture(scope="module")
+def qapp():
+    return QApplication.instance() or QApplication([])
+
+
+@pytest.fixture
+def defaults():
+    return copy.deepcopy(app_settings.DEFAULTS)
+
+
+@pytest.fixture(autouse=True)
+def _reset_language():
+    """Each parametrised case flips the app language; leave it English."""
+    yield
+    set_language("en")
+
+
+@pytest.fixture
+def check_ok(monkeypatch):
+    """Make Done's off-thread xray validation pass without an xray binary."""
+    monkeypatch.setattr(sw_mod.xraycheck, "check_config", lambda *a, **k: None)
+
+
+def _pump(condition, timeout=5.0) -> None:
+    deadline = time.time() + timeout
+    while not condition() and time.time() < deadline:
+        QApplication.processEvents()
+        time.sleep(0.01)
+
+
+def _done_and_wait(win) -> None:
+    win._on_done()
+    _pump(lambda: not win._busy)
+
+
+# -- Topics and layout -------------------------------------------------------
+def test_sidebar_covers_every_topic_with_a_tooltip_and_accessible_name(qapp, defaults):
+    win = SettingsWindow(defaults)
+    assert [k for k, *_ in sw_mod.TOPICS] == list(win._pages)
+    for item in win._sidebar_items:
+        assert item.text()
+        assert item.toolTip() == item.text()
+        assert item.accessibleName() == item.text()
+        assert item.isCheckable()
+
+
+def test_selecting_a_topic_shows_its_page_and_highlights_its_tile(qapp, defaults):
+    win = SettingsWindow(defaults)
+    keys = list(win._pages)
+    for key in keys:
+        win._select_topic(key)
+        assert win._stack.currentWidget() is win._pages[key]
+        selected = keys.index(key)
+        for i, item in enumerate(win._sidebar_items):
+            assert item.isChecked() is (i == selected)
+
+
+def test_opens_on_the_requested_topic(qapp, defaults):
+    win = SettingsWindow(defaults, topic="anti-filter")
+    assert win._stack.currentWidget() is win._pages["anti-filter"]
+
+
+def test_done_is_the_default_button(qapp, defaults):
+    win = SettingsWindow(defaults)
+    assert win.btn_done.isDefault()
+    assert win.btn_done.autoDefault()
+
+
+def test_values_exposes_the_settings_dialog_schema(qapp, defaults):
+    win = SettingsWindow(defaults)
+    assert set(win.values()) == {
+        "ping_target", "sample_seconds", "tun_mtu", "log_level",
+        "language", "geo", "core", "startup", "updates",
+    }
+
+
+def _problems(widget, where: str) -> list[str]:
+    problems: list[str] = []
+    for w in widget.findChildren(QLabel) + widget.findChildren(QAbstractButton):
+        if not w.isVisible() or not w.text().strip():
+            continue
+        hint = w.sizeHint().width()
+        if w.width() >= hint:
+            continue
+        if isinstance(w, QLabel):
+            if w.wordWrap():
+                if w.height() >= w.heightForWidth(w.width()):
+                    continue
+                problems.append(
+                    f"[{where}] QLabel {w.text()!r} {w.width()}x{w.height()} "
+                    f"shorter than the {w.heightForWidth(w.width())}px it wraps to")
+            elif w.toolTip():
+                continue
+            else:
+                problems.append(
+                    f"[{where}] QLabel {w.text()!r} {w.width()}px < sizeHint "
+                    f"{hint}px and no tooltip")
+        else:
+            problems.append(
+                f"[{where}] {type(w).__name__} {w.text()!r} {w.width()}px < sizeHint {hint}px")
+    return problems
+
+
+@pytest.mark.parametrize("lang", ("en", "fa"))
+@pytest.mark.parametrize("width,height", [(820, 560), (1040, 700)])
+@pytest.mark.parametrize("topic", ["general", "anti-filter", "local-proxy", "geo-data",
+                                   "startup", "backup", "language"])
+def test_settings_window_does_not_clip(qapp, defaults, width, height, topic, lang):
+    set_language(lang)
+    win = SettingsWindow(defaults, topic=topic)
+    win.resize(width, height)
+    win.show()
+    qapp.processEvents()
+    qapp.processEvents()
+    try:
+        problems = _problems(win, f"{lang} {width}x{height} {topic}")
+    finally:
+        win.close()
+    assert not problems, "Clipped widgets:\n" + "\n".join(problems)
+
+
+@pytest.mark.parametrize("width,height", [(820, 560), (1040, 700)])
+def test_window_is_not_larger_than_requested(qapp, defaults, width, height):
+    win = SettingsWindow(defaults)
+    win.resize(width, height)
+    win.show()
+    qapp.processEvents()
+    assert win.width() <= width
+    assert win.height() <= height
+    win.close()
+
+
+def test_settings_window_builds_in_persian(qapp, defaults):
+    set_language("fa")
+    win = SettingsWindow(defaults)
+    assert win.windowTitle() == tr("Settings")
+    assert win._sidebar_items[0].text() == tr("General")
+    assert win._sidebar_items[1].text() == tr("Anti-filter")
+    assert win._sidebar_items[3].text() == tr("Geo data")
+
+
+# -- Field round-trips -------------------------------------------------------
+def test_settings_window_round_trips_the_new_knobs(qapp, defaults):
+    win = SettingsWindow(defaults)
+    assert win.values()["tun_mtu"] == 1420
+    assert win.values()["log_level"] == "warning"
+
+    win._pages["general"].tun_mtu.setValue(1280)
+    win._pages["general"].log_level.setCurrentText("debug")
+    values = win.values()
+    assert values["tun_mtu"] == 1280
+    assert values["log_level"] == "debug"
+    assert values["ping_target"] == "1.1.1.1"
+
+
+def test_settings_window_offers_every_known_log_level(qapp, defaults):
+    win = SettingsWindow(defaults)
+    shown = [win._pages["general"].log_level.itemText(i)
+             for i in range(win._pages["general"].log_level.count())]
+    assert shown == list(app_settings.LOG_LEVELS)
+
+
+def test_settings_window_advanced_fields_persist(qapp, defaults, check_ok):
+    win = SettingsWindow(defaults)
+    win._pages["anti-filter"].frag_enabled.setChecked(True)
+    win._pages["anti-filter"].frag_packets.setText("1-3")
+    win._pages["anti-filter"].frag_length.setText("50-100")
+    win._pages["anti-filter"].frag_interval.setText("5-10")
+    win._pages["anti-filter"].frag_max_split.setValue(100)
+    win._pages["anti-filter"].mux_enabled.setChecked(True)
+    win._pages["anti-filter"].mux_concurrency.setValue(4)
+    win._pages["anti-filter"].mux_xudp_concurrency.setValue(32)
+    win._pages["anti-filter"].mux_xudp_udp443.setCurrentText("allow")
+    win._pages["local-proxy"].sniff_enabled.setChecked(False)
+    win._pages["local-proxy"].sniff_route_only.setChecked(True)
+    win._pages["local-proxy"].socks_port.setValue(23456)
+    win._pages["local-proxy"].allow_lan.setChecked(True)
+    win._pages["local-proxy"].lan_user.setText("u1")
+    win._pages["local-proxy"].lan_pass.setText("p1")
+    win._pages["local-proxy"].default_fp.setCurrentIndex(
+        win._pages["local-proxy"].default_fp.findData("chrome"))
+    win._pages["startup"].start_minimized.setChecked(True)
+    win._pages["startup"].auto_connect.setChecked(True)
+
+    core = win.values()["core"]
+    assert core["fragment"] == {"enabled": True, "packets": "1-3", "length": "50-100",
+                                "interval": "5-10", "max_split": 100}
+    assert core["mux"] == {"enabled": True, "concurrency": 4, "xudp_concurrency": 32,
+                           "xudp_proxy_udp443": "allow"}
+    assert core["sniffing"] == {"enabled": False, "route_only": True}
+    assert core["socks_port"] == 23456
+    assert core["allow_lan"] is True
+    assert core["lan_user"] == "u1" and core["lan_pass"] == "p1"
+    assert core["default_fp"] == "chrome"
+    assert win.values()["startup"] == {
+        "start_on_login": False, "start_minimized": True, "auto_connect": True,
+    }
+
+
+def test_settings_window_editing_never_touches_the_callers_settings(qapp, defaults):
+    win = SettingsWindow(defaults)
+    win._pages["general"].tun_mtu.setValue(1280)
+    win._pages["language"].language.setCurrentIndex(
+        win._pages["language"].language.findData("fa"))
+    # Nothing written until Done, and the caller's dict is never written at all.
+    assert defaults["tun_mtu"] == 1420
+    assert defaults.get("language") == "en"
+
+
+def test_settings_window_lan_warning_shows_only_without_a_password(qapp, defaults):
+    win = SettingsWindow(defaults)
+    page = win._pages["local-proxy"]
+    assert page.lan_warning.isHidden()
+    page.allow_lan.setChecked(True)
+    assert not page.lan_warning.isHidden()
+    page.lan_user.setText("u1")
+    page.lan_pass.setText("p1")
+    assert page.lan_warning.isHidden()
+    page.lan_pass.setText("")
+    assert not page.lan_warning.isHidden()
+
+
+# -- Done (validation + apply) ----------------------------------------------
+def test_done_applies_and_accepts(qapp, defaults, check_ok):
+    win = SettingsWindow(defaults)
+    win._pages["general"].tun_mtu.setValue(1280)
+    _done_and_wait(win)
+    assert win.result() == 1
+    assert defaults["tun_mtu"] == 1420  # caller dict untouched
+    assert win.values()["tun_mtu"] == 1280
+
+
+def test_done_blocked_by_a_check_failure_shows_reason_inline_and_keeps_window_open(
+    qapp, defaults, monkeypatch,
+):
+    monkeypatch.setattr(sw_mod.xraycheck, "check_config", lambda *a, **k: "simulated failure")
+    win = SettingsWindow(defaults)
+    win._pages["local-proxy"].socks_port.setValue(23456)
+    _done_and_wait(win)
+    assert win.result() == 0
+    assert not win._status_label.isHidden()
+    assert "simulated failure" in win._status_label.text()
+    assert defaults["core"]["socks_port"] == 10808
+    assert win.values()["core"]["socks_port"] == 23456  # still staged, not saved
+
+
+def test_done_reports_an_exception_in_validation(qapp, defaults, monkeypatch):
+    def boom(*a, **k):
+        raise RuntimeError("xray -test crashed")
+    monkeypatch.setattr(sw_mod.xraycheck, "check_config", boom)
+    win = SettingsWindow(defaults)
+    _done_and_wait(win)
+    assert win.result() == 0
+    assert not win._status_label.isHidden()
+    assert "xray -test crashed" in win._status_label.text()
+
+
+def test_reject_discards_staged_edits(qapp, defaults):
+    win = SettingsWindow(defaults)
+    win._pages["general"].tun_mtu.setValue(1280)
+    win.reject()
+    assert win.result() == 0
+    assert defaults["tun_mtu"] == 1420
+
+
+def test_enter_in_a_line_edit_triggers_done(qapp, defaults, monkeypatch):
+    monkeypatch.setattr(sw_mod.xraycheck, "check_config", lambda *a, **k: None)
+    win = SettingsWindow(defaults)
+    win.show()
+    qapp.processEvents()
+    win.activateWindow()
+    win._pages["general"].ping_target.setFocus()
+    qapp.processEvents()
+    QTest.keyClick(win._pages["general"].ping_target, Qt.Key_Return)
+    _pump(lambda: not win._busy)
+    win.close()
+    assert win.result() == 1
+
+
+# -- Startup, updates, geo, backup/restore ----------------------------------
+def test_start_on_login_disabled_with_reason_when_unsupported(qapp, defaults, monkeypatch):
+    monkeypatch.setattr(sw_mod.autostart, "is_supported",
+                        lambda: (False, "Install the .deb package to start sushTun at login."))
+    win = SettingsWindow(defaults)
+    page = win._pages["startup"]
+    assert not page.start_on_login.isEnabled()
+    assert page.start_on_login.toolTip() == "Install the .deb package to start sushTun at login."
+
+
+def test_start_on_login_enabled_when_supported(qapp, defaults, monkeypatch):
+    monkeypatch.setattr(sw_mod.autostart, "is_supported", lambda: (True, ""))
+    win = SettingsWindow(defaults)
+    assert win._pages["startup"].start_on_login.isEnabled()
+
+
+def test_done_enables_autostart_when_toggled_on(qapp, defaults, check_ok, monkeypatch):
+    monkeypatch.setattr(sw_mod.autostart, "is_supported", lambda: (True, ""))
+    calls = []
+    monkeypatch.setattr(sw_mod.autostart, "enable", lambda: calls.append("enable"))
+    monkeypatch.setattr(sw_mod.autostart, "disable", lambda: calls.append("disable"))
+
+    win = SettingsWindow(defaults)
+    win._pages["startup"].start_on_login.setChecked(True)
+    _done_and_wait(win)
+
+    assert calls == ["enable"]
+    assert win.result() == 1
+
+
+def test_done_shows_an_inline_error_when_enabling_autostart_fails(
+    qapp, defaults, check_ok, monkeypatch,
+):
+    monkeypatch.setattr(sw_mod.autostart, "is_supported", lambda: (True, ""))
+
+    def raise_enable():
+        raise RuntimeError("could not write the polkit rule")
+
+    monkeypatch.setattr(sw_mod.autostart, "enable", raise_enable)
+
+    win = SettingsWindow(defaults)
+    win._pages["startup"].start_on_login.setChecked(True)
+    _done_and_wait(win)
+
+    assert win.result() == 0
+    assert not win._status_label.isHidden()
+    assert "polkit rule" in win._status_label.text()
+
+
+def test_geo_update_now_success_sets_last_update_and_status(qapp, defaults, tmp_path,
+                                                            monkeypatch):
+    monkeypatch.setattr(sw_mod.app_settings.paths, "base_dir", lambda: tmp_path)
+    monkeypatch.setattr(sw_mod.geo_mod, "update", lambda source, fetch=None: None)
+    win = SettingsWindow(defaults)
+    page = win._pages["geo-data"]
+    assert page.geo_status.text() == "Never updated"
+
+    page._update_geo_now()
+    _pump(lambda: not page._geo_busy)
+
+    assert win.geo_updated()
+    assert page.geo_status.text() != "Never updated"
+    assert win.values()["geo"]["last_update"] > 0
+
+
+def test_geo_update_now_persists_the_source_alongside_last_update(qapp, defaults, tmp_path,
+                                                                  monkeypatch):
+    # A successful Update now already swapped real files on disk for that
+    # source; if the user then hits Cancel, settings must not claim a
+    # different source produced those files.
+    monkeypatch.setattr(sw_mod.app_settings.paths, "base_dir", lambda: tmp_path)
+    monkeypatch.setattr(sw_mod.geo_mod, "update", lambda source, fetch=None: None)
+    win = SettingsWindow(defaults)
+    page = win._pages["geo-data"]
+    page.geo_source.setCurrentText("Chocolate4U (Iran)")
+
+    page._update_geo_now()
+    _pump(lambda: not page._geo_busy)
+
+    saved = sw_mod.app_settings.load()
+    assert saved["geo"]["source"] == "Chocolate4U (Iran)"
+    assert saved["geo"]["last_update"] > 0
+
+
+def test_geo_update_now_failure_shows_inline_no_popup(qapp, defaults, tmp_path, monkeypatch):
+    monkeypatch.setattr(sw_mod.app_settings.paths, "base_dir", lambda: tmp_path)
+
+    def fake_update(source, fetch=None):
+        raise sw_mod.geo_mod.GeoUpdateError("new geo data rejected: bad category")
+
+    monkeypatch.setattr(sw_mod.geo_mod, "update", fake_update)
+    popups = []
+    monkeypatch.setattr(QMessageBox, "warning",
+                        staticmethod(lambda *a, **k: popups.append(a) or None), raising=False)
+
+    win = SettingsWindow(defaults)
+    page = win._pages["geo-data"]
+    page._update_geo_now()
+    _pump(lambda: not page._geo_busy)
+
+    assert not win.geo_updated()
+    assert "bad category" in page.geo_status.text()
+    assert popups == []
+    assert page.btn_geo_update.isEnabled()
+
+
+def test_backup_button_writes_a_zip_and_confirms(qapp, defaults, tmp_path, monkeypatch):
+    monkeypatch.setattr(paths, "base_dir", lambda: tmp_path)
+    paths.ensure_dirs()
+    (tmp_path / "settings.json").write_text("{}", encoding="utf-8")
+    dest = tmp_path / "out.zip"
+    monkeypatch.setattr(QFileDialog, "getSaveFileName",
+                        staticmethod(lambda *a, **k: (str(dest), "")), raising=False)
+    infos = []
+    monkeypatch.setattr(QMessageBox, "information",
+                        staticmethod(lambda *a, **k: infos.append(a) or None), raising=False)
+
+    win = SettingsWindow(defaults)
+    page = win._pages["backup"]
+    page._backup_now()
+    _pump(lambda: not page._backup_busy)
+
+    assert dest.exists()
+    assert infos
+    assert not win.restored()
+
+
+def test_restore_button_round_trips_and_flags_restored(qapp, defaults, tmp_path, monkeypatch):
+    src = tmp_path / "src"
+    src.mkdir()
+    monkeypatch.setattr(paths, "base_dir", lambda: src)
+    paths.ensure_dirs()
+    (src / "settings.json").write_text('{"marker": "from-backup"}', encoding="utf-8")
+    zip_path = tmp_path / "backup.zip"
+    sw_mod.backup_mod.backup(zip_path)
+
+    dest = tmp_path / "dest"
+    dest.mkdir()
+    monkeypatch.setattr(paths, "base_dir", lambda: dest)
+    paths.ensure_dirs()
+
+    monkeypatch.setattr(QFileDialog, "getOpenFileName",
+                        staticmethod(lambda *a, **k: (str(zip_path), "")), raising=False)
+    monkeypatch.setattr(QMessageBox, "question",
+                        staticmethod(lambda *a, **k: QMessageBox.Yes), raising=False)
+    monkeypatch.setattr(QMessageBox, "information",
+                        staticmethod(lambda *a, **k: None), raising=False)
+
+    win = SettingsWindow(defaults)
+    page = win._pages["backup"]
+    page._restore_now()
+
+    assert win.restored()
+    assert json.loads((dest / "settings.json").read_text()) == {"marker": "from-backup"}
+
+@pytest.mark.parametrize("lang", ["en", "fa"])
+def test_sidebar_names_are_not_elided(qapp, defaults, lang):
+    from PySide6.QtCore import Qt
+
+    from xrayui.i18n import set_language
+    from xrayui.ui.settings_window import SettingsSidebarItem
+    set_language(lang)
+    direction = Qt.RightToLeft if lang == "fa" else Qt.LeftToRight
+    qapp.setLayoutDirection(direction)
+    try:
+        win = SettingsWindow(defaults)
+        win.resize(820, 560)
+        win.show()
+        qapp.processEvents()
+        items = win.findChildren(SettingsSidebarItem)
+        assert items
+        for item in items:
+            assert item.visible_text() == item.text(), item.text()
+        win.close()
+    finally:
+        qapp.setLayoutDirection(Qt.LeftToRight)
+        set_language("en")
+
+def test_topic_icons_are_distinct_and_done_is_primary(qapp, defaults):
+    from xrayui.ui.icons import icon
+    from xrayui.ui.settings_window import TOPICS
+    names = [name for _key, _label, name, _color in TOPICS]
+    assert len(set(names)) == len(names), names
+    for name in names:
+        assert not icon(name).isNull()
+    from xrayui.ui.settings_window import SettingsWindow
+    win = SettingsWindow(defaults)
+    try:
+        assert win.btn_done.objectName() == "Primary"
+        assert win.btn_done.isDefault()
+    finally:
+        win.close()
+

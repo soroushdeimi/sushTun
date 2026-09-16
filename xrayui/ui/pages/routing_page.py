@@ -45,7 +45,7 @@ from PySide6.QtWidgets import (
 
 from ...core import routing as routing_mod
 from ...core import routing_io, xraycheck
-from ...i18n import tr
+from ...i18n import ltr, tr
 from ..rule_editor import CollapsibleSection, RuleEditorDialog, default_rule
 from ..theme import ACCENT, ERR, OK
 from ..workers import Worker
@@ -62,26 +62,18 @@ _ACTION_LABELS = {"proxy": "Proxy", "direct": "Direct", "block": "Block"}
 _ROOT = QModelIndex()  # a fresh QModelIndex() per call is a ruff B008 default-arg smell
 
 
-def _ltr(text: str) -> str:
-    """LTR-isolate `text` (a port, a count) so Persian RTL layout renders it
-    left-to-right. U+2066/U+2069 are the Unicode bidirectional-isolation
-    marks, honoured by Qt's text shaping. Another worker is adding i18n.ltr();
-    this local copy exists so the two can be unified at merge."""
-    return f"\u2066{text}\u2069"
-
-
 def _match_summary(rule: dict) -> str:
     dips = list(rule.get("domain") or []) + list(rule.get("ip") or [])
     parts = []
     if dips:
         extra = len(dips) - 1
-        parts.append(f"{dips[0]} +{_ltr(str(extra))}" if extra > 0 else dips[0])
+        parts.append(f"{dips[0]} +{ltr(str(extra))}" if extra > 0 else dips[0])
     extras = []
     if rule.get("port") and rule.get("network"):
         extras.append(tr("port {port}/{network}",
-                         port=_ltr(str(rule["port"])), network=rule["network"]))
+                         port=ltr(str(rule["port"])), network=rule["network"]))
     elif rule.get("port"):
-        extras.append(tr("port {port}", port=_ltr(str(rule["port"]))))
+        extras.append(tr("port {port}", port=ltr(str(rule["port"]))))
     elif rule.get("network"):
         extras.append(rule["network"])
     if rule.get("protocol"):

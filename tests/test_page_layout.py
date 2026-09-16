@@ -139,3 +139,30 @@ def test_flow_layout_wraps_when_there_is_no_room(qapp):
     host.close()
     assert flow.heightForWidth(120) > flow.minimumSize().height()
     assert not problems, "Clipped widgets:\n" + "\n".join(problems)
+
+
+def test_flow_layout_mirrors_in_rtl(qapp):
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QPushButton, QWidget
+
+    from xrayui.ui.pages.flow import FlowLayout
+
+    host = QWidget()
+    host.setLayoutDirection(Qt.RightToLeft)
+    flow = FlowLayout()
+    host.setLayout(flow)
+    for i in range(3):
+        flow.addWidget(QPushButton(f"rtl-{i}"))
+    host.resize(300, 100)
+    host.show()
+    qapp.processEvents()
+    qapp.processEvents()
+    items = [flow.itemAt(i).widget() for i in range(flow.count())]
+    # The first item must sit flush against the right edge -- leaving it at
+    # the left edge would open a gap beside the right-aligned label. The
+    # margin comes from the style, so read it back rather than hard-code it.
+    right_limit = flow.geometry().right() - flow.contentsMargins().right()
+    host.close()
+    assert items[0].geometry().right() >= right_limit - 1
+    # Items on the row order right-to-left.
+    assert items[0].geometry().right() > items[1].geometry().right()

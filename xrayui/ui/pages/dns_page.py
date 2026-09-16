@@ -31,7 +31,7 @@ from ...core import dns as dns_mod
 from ...core import render, xraycheck
 from ...core import routing as routing_mod
 from ...core.profiles import Profile
-from ...i18n import tr
+from ...i18n import ltr, tr
 from ..rule_editor import CollapsibleSection
 from ..workers import Worker
 from .flow import FlowLayout
@@ -41,15 +41,6 @@ _CHECK_PROFILE = Profile(
     id="11111111-1111-1111-1111-111111111111", encryption="none",
     network="tcp", security="none",
 )
-
-
-def _ltr(text: str) -> str:
-    """LTR-isolate `text` (a resolver address) so Persian RTL layout renders
-    it left-to-right inside the translated reason. U+2066/U+2069 are the
-    Unicode bidirectional-isolation marks, honoured by Qt's text shaping.
-    Another worker is adding i18n.ltr(); this local copy exists so the two
-    can be unified at merge."""
-    return f"\u2066{text}\u2069"
 
 
 class DnsPage(QWidget):
@@ -331,19 +322,19 @@ class DnsPage(QWidget):
         bad = dns_mod.invalid_server_reasons(self._lines(self.servers))
         if bad:
             self.status_label.setText("\n\n".join(
-                tr(tmpl, value=_ltr(value)) for value, tmpl in bad[:8]))
+                tr(tmpl, value=ltr(value)) for value, tmpl in bad[:8]))
             self.applyFinished.emit(False)
             return
         bad_domestic = dns_mod.validate_domestic_reasons(self._domestic_entries())
         if bad_domestic:
             self.status_label.setText("\n\n".join(
-                tr(tmpl, value=_ltr(value)) for value, tmpl in bad_domestic[:8]))
+                tr(tmpl, value=ltr(value)) for value, tmpl in bad_domestic[:8]))
             self.applyFinished.emit(False)
             return
         raw_issues = dns_mod.raw_override_issue_reasons(self.raw_override.toPlainText())
         if raw_issues:
             self.status_label.setText("\n\n".join(
-                tr(tmpl, value=_ltr(value)) for value, tmpl in raw_issues[:8]))
+                tr(tmpl, value=ltr(value)) for value, tmpl in raw_issues[:8]))
             self.applyFinished.emit(False)
             return
 
