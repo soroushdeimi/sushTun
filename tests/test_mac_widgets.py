@@ -596,3 +596,14 @@ def test_inset_group_long_label_wraps_instead_of_clipping(qapp):
         assert lbl.height() >= lbl.heightForWidth(lbl.width())
         assert lbl.height() > lbl.fontMetrics().height()  # on more than one line
     grp.hide()
+
+
+def test_connection_header_skips_unknown_meta_parts(qapp):
+    h = ConnectionHeader()
+    h.set("endpoint", "—")
+    h.set("iface", "—")
+    assert h._meta_full == "—"
+    h.set("endpoint", "de.example.com:443")
+    h.set("iface", "—")
+    assert "—" not in h._meta_full
+    assert "de.example.com:443" in h._meta_full

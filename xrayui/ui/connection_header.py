@@ -196,6 +196,10 @@ class ConnectionHeader(QFrame):
 
     def set(self, key: str, value: str) -> None:
         text = (value or "").strip()
+        # Callers pass "—" for "unknown"; joined with " · " that read as
+        # "— · —", so an unknown part is simply left out of the meta line.
+        if text == "—":
+            text = ""
         if key == "throughput":
             self._down_up_col[1].setText(ltr(text) if text else "—")
         elif key == "used":
