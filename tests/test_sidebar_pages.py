@@ -417,3 +417,15 @@ def test_activity_page_renders_each_segment(qapp):
         qapp.processEvents()
         _render(page)
     page.close()
+
+
+def test_sidebar_subscription_list_survives_repeated_refreshes(qapp):
+    from PySide6.QtCore import QCoreApplication, QEvent
+
+    lst = SidebarSubscriptionList()
+    for subs in ([], [Subscription(name="A", url="https://a.example")], []):
+        lst.set_subscriptions(subs)
+        # Run the pending deleteLater()s, as the real event loop would.
+        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+    assert lst._empty.text()
+    assert not lst._empty.isHidden()

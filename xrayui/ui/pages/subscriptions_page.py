@@ -196,9 +196,13 @@ class SidebarSubscriptionList(QWidget):
     def set_subscriptions(self, subs: list[Subscription]) -> None:
         while self._rows.count():
             item = self._rows.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
+            widget = item.widget()
+            # The empty-state label shares this layout; deleting it made the
+            # next refresh touch a dead QLabel and crash.
+            if widget is not None and widget is not self._empty:
+                widget.deleteLater()
         enabled = [s for s in subs if s.enabled]
+        self._rows.addWidget(self._empty)
         self._empty.setVisible(not enabled)
         for sub in enabled:
             row = _SidebarSubRow(sub)
