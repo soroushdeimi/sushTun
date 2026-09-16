@@ -290,3 +290,15 @@ def test_header_menu_toggles_an_optional_column(qapp):
 def test_table_starts_unsorted(qapp):
     panel = ProfilePanel()
     assert panel.table.horizontalHeader().sortIndicatorSection() == -1
+
+
+def test_more_menu_actions_fire_their_signals(qapp):
+    panel = ProfilePanel()
+    fired: list[str] = []
+    panel.removeFailedRequested.connect(lambda: fired.append("failed"))
+    panel.removeDuplicatesRequested.connect(lambda: fired.append("dups"))
+    actions = panel.btn_more.menu().actions()
+    assert [a.text() for a in actions] == ["Remove failed", "Remove duplicates"]
+    for action in actions:
+        action.trigger()  # SignalInstance is not callable: must fire via lambda
+    assert fired == ["failed", "dups"]

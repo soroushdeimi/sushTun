@@ -517,4 +517,8 @@ TRANSLATIONS_FA: dict[str, str] = {
         "SSID: {ssid} · رمز عبور: {pwd}",
     "Connected · {server}": "متصل · {server}",
     "off": "خاموش",
+    # -- ui/a-pages-main -----------------------------------------------------
+    "More server actions": "گزینه‌های بیشتر سرور",
+    "Import…": "وارد کردن…",
+    "Delete subscription": "حذف اشتراک",
 }

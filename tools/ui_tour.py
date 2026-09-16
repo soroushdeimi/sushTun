@@ -9,7 +9,8 @@ and the checks see the same pixels:
   ignored resize made "0 clipping at small size" meaningless);
 - RTL bidi: in fa, "650 ms" renders as "ms 650" unless isolated; every
   visible QLabel / button / table cell / menu action is screened for digit +
-  Latin-unit runs that aren't wrapped in U+2066..U+2069 isolates;
+  Latin-unit runs that aren't wrapped in U+2066 (LRI) / U+2067 (RLI) /
+  U+2068 (FSI) .. U+2069 (PDI) isolates;
 - tooltips/accessible names: visible buttons need text or a tooltip, and
   icon-only buttons need an accessibleName too;
 - every QDialog gets exactly one default button, Enter in a single-line field
@@ -80,6 +81,8 @@ from PySide6.QtWidgets import (  # noqa: E402
     QTableView,
     QWidget,
 )
+
+from xrayui.ui.pages import ServersPage  # noqa: E402
 
 SIZES = [("1040x700", 1040, 700), ("820x560", 820, 560)]
 LANGS = ["en", "fa"]
@@ -727,7 +730,10 @@ def _isolate_intervals(text: str) -> list[tuple[int, int]]:
 
 
 def _wrapped_in_isolate(text: str, start: int, end: int) -> bool:
-    return any(s < start and e > end for s, e in _isolate_intervals(text))
+    # The PDI sits at index e and the isolate covers [s+1, e-1], so a run
+    # whose last char is right before the closer (end == e, e.g. "\u2066650
+    # ms\u2069") is fully protected; requiring end < e would be a false hit.
+    return any(s < start and end <= e for s, e in _isolate_intervals(text))
 
 
 def _unscoped_bidi_runs(text: str) -> list[str]:
@@ -931,6 +937,132 @@ def _st_server_filter(ctx: Ctx) -> None:
     ctx.shot(win.profiles, "server_table_filter", "Filter text typed", expected=ctx.requested)
     win.profiles.filter_edit.clear()
     ctx.app.processEvents()
+
+
+# -- sidebar pages ---------------------------------------------------------
+def _page_shot(ctx: Ctx, page: QWidget, name: str, note: str) -> None:
+    # The pages live inside the sidebar window's content scroll area; the
+    # content column is the window minus a 244px sidebar. Rendering through
+    # the same scroll host keeps the tour's size checks honest at these
+    # widths (576 / 796) and lets a page that can't shrink below its min
+    # show its real scrollbar rather than a bogus "clipping" finding.
+    from PySide6.QtWidgets import QScrollArea, QVBoxLayout
+    content_w = ctx.requested[0] - 244
+    content_h = ctx.requested[1]
+    # Wrap the scroll area in a container so the off-window check sees the
+    # scroll area as a child of the container and correctly treats its
+    # descendants as "inside a scroll area".
+    container = QWidget()
+    lay = QVBoxLayout(container)
+    lay.setContentsMargins(0, 0, 0, 0)
+    scroll = QScrollArea()
+    scroll.setWidgetResizable(True)
+    scroll.setWidget(page)
+    lay.addWidget(scroll)
+    container.resize(content_w, content_h)
+    container.show()
+    ctx.app.processEvents()
+    ctx.shot(container, name, note, expected=(content_w, content_h))
+    container.close()
+
+
+def _build_servers_page() -> ServersPage:
+    from xrayui.core.profiles import ProfileStore
+    from xrayui.core.speedtest import ResultStore
+    from xrayui.core.subscription import SubscriptionStore
+    from xrayui.ui.pages import ServersPage
+    store = ProfileStore()
+    profiles = store.list()
+    results = {}
+    result_store = ResultStore()
+    for p in profiles:
+        card = result_store.get(p.uid)
+        if card:
+            results[p.uid] = card
+    sub_names = {}
+    for sub in SubscriptionStore().list():
+        for uid in sub.profile_uids:
+            sub_names[uid] = sub.name
+    page = ServersPage()
+    page.set_profiles(profiles, store.active_uid())
+    page.set_results(results)
+    page.set_sub_names(sub_names)
+    page.set_connected(False)
+    return page
+
+
+def _st_pages_servers(ctx: Ctx) -> None:
+    _page_shot(ctx, _build_servers_page(), "pages_servers",
+               "Servers page, disconnected")
+
+
+def _st_pages_servers_connected(ctx: Ctx) -> None:
+    page = _build_servers_page()
+    page.set_connected(True)
+    page.set_connection("throughput", "↓ 42.3 ↑ 8.1 Mbit/s")
+    page.set_connection("used", "18.6 GB")
+    page.set_connection("delay", "650 ms")
+    page.header.set_timer("42:10")
+    _page_shot(ctx, page, "pages_servers_connected",
+               "Servers page, connected header")
+
+
+def _st_pages_servers_filter(ctx: Ctx) -> None:
+    page = _build_servers_page()
+    page.set_filter_text("Frankfurt")
+    _page_shot(ctx, page, "pages_servers_filter",
+               "Servers page, filter text typed")
+
+
+def _st_pages_subscriptions(ctx: Ctx) -> None:
+    from xrayui.core.subscription import SubscriptionStore
+    from xrayui.ui.pages import SubscriptionsPage
+    page = SubscriptionsPage()
+    page.set_subscriptions(SubscriptionStore().list())
+    _page_shot(ctx, page, "pages_subscriptions",
+               "Subscriptions page with seeded plans")
+
+
+def _st_pages_activity_log(ctx: Ctx) -> None:
+    from xrayui.ui.pages import ActivityPage
+    page = ActivityPage()
+    for line in ("[tun] route 10.0.0.0/8 dev utun3",
+                 "[dns] nameservers in the tunnel",
+                 "[sys] connected — 42% of quota left"):
+        page.append_log(line)
+    _page_shot(ctx, page, "pages_activity_log", "Activity page, Live log")
+
+
+def _st_pages_activity_tools(ctx: Ctx) -> None:
+    from xrayui.ui.pages import ActivityPage
+    page = ActivityPage()
+    page.tabs.setCurrentIndex(1)
+    page.tools.set_result("ping de.example.com 8/8\navg 84 ms")
+    _page_shot(ctx, page, "pages_activity_tools", "Activity page, Tools")
+
+
+def _st_pages_activity_diagnostics(ctx: Ctx) -> None:
+    from xrayui.ui.pages import ActivityPage
+    page = ActivityPage()
+    page.tabs.setCurrentIndex(2)
+    page.diagnostics.set_detail("process", "xray 92934 (v1.8.13)")
+    page.diagnostics.set_detail("iface", "tun0 / Ethernet")
+    page.diagnostics.set_detail("ip", "10.10.0.2 / 192.168.1.42")
+    page.diagnostics.set_detail("gateway", "10.10.0.1")
+    page.diagnostics.set_detail("tun", "utun3")
+    page.diagnostics.set_output(
+        "process: xray 92934\ninterface: tun0 (tun)\ntun_index: 3\ngateway: 10.10.0.1")
+    _page_shot(ctx, page, "pages_activity_diagnostics",
+               "Activity page, Diagnostics readout")
+
+
+def _st_pages_sidebar_subs(ctx: Ctx) -> None:
+    from xrayui.core.subscription import SubscriptionStore
+    from xrayui.ui.pages import SidebarSubscriptionList
+    lst = SidebarSubscriptionList()
+    lst.set_subscriptions(SubscriptionStore().list())
+    _page_shot(ctx, lst, "pages_sidebar_subs",
+               "Sidebar subscription list (enabled plans only)")
 
 
 def _tray_menus(ctx: Ctx):
@@ -1187,6 +1319,16 @@ TOUR_STATES: list[State] = [
     State("qr_dialog", "Share-link QR dialog", _st_qr_dialog),
     State("default_buttons", "Every dialog has a default button; Enter/Esc behaviour",
           _st_default_buttons),
+    State("pages_servers", "Servers page, disconnected", _st_pages_servers),
+    State("pages_servers_connected", "Servers page, connected header",
+          _st_pages_servers_connected),
+    State("pages_servers_filter", "Servers page, filter text typed", _st_pages_servers_filter),
+    State("pages_subscriptions", "Subscriptions page", _st_pages_subscriptions),
+    State("pages_activity_log", "Activity page, Live log segment", _st_pages_activity_log),
+    State("pages_activity_tools", "Activity page, Tools segment", _st_pages_activity_tools),
+    State("pages_activity_diagnostics", "Activity page, Diagnostics readout",
+          _st_pages_activity_diagnostics),
+    State("pages_sidebar_subs", "Sidebar subscription list", _st_pages_sidebar_subs),
 ]
 
 
