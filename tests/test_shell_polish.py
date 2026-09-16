@@ -179,3 +179,24 @@ def test_subscriptions_use_the_finished_page_and_sidebar_list(qapp, tmp_path, mo
         assert win._stack.currentIndex() == PAGE_SUBS
     finally:
         win.close()
+
+
+def test_activity_uses_the_finished_page_and_runs_diagnostics(qapp, tmp_path, monkeypatch):
+    from xrayui import paths
+    from xrayui.ui.main_window import PAGE_ACTIVITY, MainWindow
+    from xrayui.ui.pages.activity_page import ActivityPage
+    monkeypatch.setattr(paths, "base_dir", lambda: tmp_path)
+    monkeypatch.setattr(paths, "state_dir", lambda: tmp_path / "state")
+    monkeypatch.setattr(paths, "profiles_dir", lambda: tmp_path / "profiles")
+    paths.ensure_dirs()
+    win = MainWindow(elevated=False)
+    try:
+        assert isinstance(win._stack.widget(PAGE_ACTIVITY), ActivityPage)
+        assert win.tools is win.activity_page.tools
+        assert win.log is win.activity_page.log
+        monkeypatch.setattr(win, "_diag_fn", lambda: "diag report")
+        monkeypatch.setattr(win, "_run_async", lambda fn, done: done(result=fn()))
+        win.activity_page.diagnostics.runRequested.emit()
+        assert win.activity_page.diagnostics.output.toPlainText() == "diag report"
+    finally:
+        win.close()

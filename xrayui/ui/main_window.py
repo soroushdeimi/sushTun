@@ -22,7 +22,6 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QStackedWidget,
     QSystemTrayIcon,
-    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -44,6 +43,7 @@ from .dns_dialog import DnsDialog
 from .icons import icon
 from .log_tailer import LogTailer
 from .mac import PopupButton
+from .pages.activity_page import ActivityPage
 from .pages.dns_page import DnsPage
 from .pages.leave import confirm_leave
 from .pages.routing_page import RoutingPage
@@ -54,8 +54,7 @@ from .settings_window import SettingsWindow
 from .sidebar import Sidebar
 from .theme import ERR, HAIRLINE, MUTED, TEXT
 from .titlebar import TitleBar
-from .tools_panel import ToolsPanel
-from .widgets import AlertBanner, LogView
+from .widgets import AlertBanner
 
 # how far in from the border a press starts a resize on the frameless window
 _RESIZE_MARGIN = 6
@@ -322,8 +321,11 @@ class MainWindow(QMainWindow):
         self.subs_panel.layout().setContentsMargins(16, 12, 16, 12)
         # Enabled subscriptions with their usage, under the sidebar section.
         self.sidebar_subs = SidebarSubscriptionList()
-        self.tools = ToolsPanel()
-        self.log = LogView()
+        # The Activity page owns the live log, the tools and diagnostics.
+        self.activity_page = ActivityPage()
+        self.activity_page.layout().setContentsMargins(16, 12, 16, 12)
+        self.tools = self.activity_page.tools
+        self.log = self.activity_page.log
         self.log.setLayoutDirection(Qt.LeftToRight)
         self.alert_banner = AlertBanner()
         self.step_label = QLabel("")
@@ -391,13 +393,7 @@ class MainWindow(QMainWindow):
             copy.deepcopy(self.settings["routing"]))
         self._dns_page.applied.connect(self._on_dns_applied)
 
-        activity = QWidget()
-        al = QVBoxLayout(activity)
-        al.setContentsMargins(16, 12, 16, 12)
-        tabs = QTabWidget()
-        tabs.addTab(self.log, tr("Live log"))
-        tabs.addTab(self.tools, tr("Tools"))
-        al.addWidget(tabs)
+        activity = self.activity_page
 
         self._stack = QStackedWidget()
         # Servers: header + profile list
@@ -486,6 +482,8 @@ class MainWindow(QMainWindow):
         self.tools.baselineRequested.connect(
             lambda: self._run_tool(self._baseline_fn))
         self.tools.diagnosticsRequested.connect(
+            lambda: self._run_tool(self._diag_fn))
+        self.activity_page.diagnostics.runRequested.connect(
             lambda: self._run_tool(self._diag_fn))
         self.status_card.restoreNetworkRequested.connect(self._cleanup)
         self.status_card.reconnectRequested.connect(self._reconnect_now)
@@ -976,6 +974,10 @@ class MainWindow(QMainWindow):
         def done(result=None, error=None):
             self.tools.set_busy(False)
             self.tools.set_result(error if error else str(result))
+            if fn == self._diag_fn:
+                # The Diagnostics segment shows the same report in full.
+                self.activity_page.diagnostics.set_output(
+                    error if error else str(result))
 
         self._run_async(fn, done)
 
