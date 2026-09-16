@@ -115,6 +115,15 @@ class SettingsSidebarItem(QPushButton):
         tile_x = w - 8 - 22 if rtl else 8
         self._icon_tile.move(tile_x, max((h - 22) // 2, 0))
 
+    def visible_text(self) -> str:
+        """The text as paintEvent will draw it (possibly elided)."""
+        fm = QFontMetrics(self.font())
+        if self.layoutDirection() == Qt.RightToLeft:
+            avail = max(self._icon_tile.x() - 8 - 12, 0)
+        else:
+            avail = max(self.width() - self._text_x - 12, 0)
+        return fm.elidedText(self.text(), Qt.ElideRight, avail)
+
     def paintEvent(self, _event) -> None:
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
@@ -135,13 +144,14 @@ class SettingsSidebarItem(QPushButton):
         rtl = self.layoutDirection() == Qt.RightToLeft
         text_color = QColor("#ffffff") if self.isChecked() else QColor("#dcdce0")
         if rtl:
-            text_x = 14
-            avail = w - self._icon_tile.x() - 8 - 8
-            text_rect_x = self._icon_tile.x() - 8 - min(avail, fm.horizontalAdvance(self.text()))
-            elided = fm.elidedText(self.text(), Qt.ElideRight, max(avail, 0))
+            # The tile sits on the right; the text runs from 12px after the
+            # left edge up to 8px before the tile, right-aligned.
+            right = self._icon_tile.x() - 8
+            avail = max(right - 12, 0)
+            elided = fm.elidedText(self.text(), Qt.ElideRight, avail)
             p.setPen(text_color)
-            p.drawText(text_rect_x, 0, min(avail, fm.horizontalAdvance(elided)), h,
-                       Qt.AlignLeft | Qt.AlignVCenter, elided)
+            p.drawText(right - avail, 0, avail, h,
+                       Qt.AlignRight | Qt.AlignVCenter, elided)
         else:
             text_x = self._text_x
             avail = w - text_x - 12

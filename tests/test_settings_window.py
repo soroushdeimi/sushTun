@@ -474,3 +474,26 @@ def test_restore_button_round_trips_and_flags_restored(qapp, defaults, tmp_path,
 
     assert win.restored()
     assert json.loads((dest / "settings.json").read_text()) == {"marker": "from-backup"}
+
+@pytest.mark.parametrize("lang", ["en", "fa"])
+def test_sidebar_names_are_not_elided(qapp, defaults, lang):
+    from PySide6.QtCore import Qt
+
+    from xrayui.i18n import set_language
+    from xrayui.ui.settings_window import SettingsSidebarItem
+    set_language(lang)
+    direction = Qt.RightToLeft if lang == "fa" else Qt.LeftToRight
+    qapp.setLayoutDirection(direction)
+    try:
+        win = SettingsWindow(defaults)
+        win.resize(820, 560)
+        win.show()
+        qapp.processEvents()
+        items = win.findChildren(SettingsSidebarItem)
+        assert items
+        for item in items:
+            assert item.visible_text() == item.text(), item.text()
+        win.close()
+    finally:
+        qapp.setLayoutDirection(Qt.LeftToRight)
+        set_language("en")
