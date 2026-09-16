@@ -39,7 +39,6 @@ from ..core.connection import Connection, _resolve
 from ..core.profiles import Profile, ProfileStore
 from ..core.xray import is_xray_running
 from ..i18n import ltr, tr
-from .connection_header import ConnectionHeader
 from .dialogs import ImportDialog, ProfileEditDialog, SettingsDialog, SubscriptionEditDialog
 from .dns_dialog import DnsDialog
 from .icons import icon
@@ -48,13 +47,14 @@ from .mac import PopupButton
 from .pages.dns_page import DnsPage
 from .pages.leave import confirm_leave
 from .pages.routing_page import RoutingPage
+from .pages.servers_page import ServersPage
 from .routing_dialog import RoutingDialog
 from .sidebar import Sidebar
 from .subscription_panel import SubscriptionPanel
 from .theme import ERR, HAIRLINE, MUTED, TEXT
 from .titlebar import TitleBar
 from .tools_panel import ToolsPanel
-from .widgets import AlertBanner, LogView, ProfilePanel
+from .widgets import AlertBanner, LogView
 
 # how far in from the border a press starts a resize on the frameless window
 _RESIZE_MARGIN = 6
@@ -310,8 +310,13 @@ class MainWindow(QMainWindow):
 
     def _build_ui(self, elevated: bool) -> None:
         # --- core widgets used by test_ui ---------------------------------
-        self.status_card = ConnectionHeader()
-        self.profiles = ProfilePanel()
+        # The Servers page owns the connection header and the server table;
+        # the old names stay as aliases because the wiring and tests use them.
+        self.servers_page = ServersPage()
+        self.status_card = self.servers_page.header
+        self.profiles = self.servers_page.core
+        # The toolbar's Filter field replaces the page's own filter row.
+        self.profiles.filter_edit.hide()
         self.subs_panel = SubscriptionPanel()
         self.tools = ToolsPanel()
         self.log = LogView()
@@ -390,11 +395,8 @@ class MainWindow(QMainWindow):
 
         self._stack = QStackedWidget()
         # Servers: header + profile list
-        servers_page = QWidget()
-        sp = QVBoxLayout(servers_page)
-        sp.setContentsMargins(16, 12, 16, 12)
-        sp.addWidget(self.status_card)
-        sp.addWidget(self.profiles, 1)
+        servers_page = self.servers_page
+        servers_page.layout().setContentsMargins(16, 12, 16, 12)
         # The real pages, by index; the stack may hold a scroll area instead.
         self._page_widgets = [servers_page, self.subs_panel,
                               self._routing_page, self._dns_page, activity]

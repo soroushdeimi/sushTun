@@ -84,6 +84,12 @@ def test_main_window_fits_820x560_on_every_page(qapp, tmp_path, monkeypatch, lan
         set_language("en")
 
 
+
+
+
+
+
+
 def test_dirty_routing_page_is_found_behind_its_scroll_area(qapp, tmp_path, monkeypatch):
     from xrayui import paths
     from xrayui.i18n import set_language
@@ -105,3 +111,23 @@ def test_dirty_routing_page_is_found_behind_its_scroll_area(qapp, tmp_path, monk
     finally:
         win.close()
         set_language("en")
+
+def test_servers_page_is_the_finished_page(qapp, tmp_path, monkeypatch):
+    from xrayui import paths
+    from xrayui.ui.main_window import MainWindow
+    from xrayui.ui.pages.servers_page import ServersPage
+    monkeypatch.setattr(paths, "base_dir", lambda: tmp_path)
+    monkeypatch.setattr(paths, "state_dir", lambda: tmp_path / "state")
+    monkeypatch.setattr(paths, "profiles_dir", lambda: tmp_path / "profiles")
+    paths.ensure_dirs()
+    win = MainWindow(elevated=False)
+    try:
+        assert isinstance(win._stack.widget(0), ServersPage)
+        assert win.status_card is win.servers_page.header
+        assert win.profiles is win.servers_page.core
+        assert win.btn_connect is win.servers_page.header.btn_connect
+        win.show()
+        assert not win.profiles.filter_edit.isVisible()
+        assert win.servers_page.more_btn.toolTip()
+    finally:
+        win.close()
