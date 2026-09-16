@@ -152,3 +152,30 @@ def test_settings_item_opens_the_settings_window(qapp, tmp_path, monkeypatch):
         assert win.settings["tun_mtu"] == 1380
     finally:
         win.close()
+
+
+def test_subscriptions_use_the_finished_page_and_sidebar_list(qapp, tmp_path, monkeypatch):
+    from xrayui import paths
+    from xrayui.core.subscription import Subscription
+    from xrayui.ui.main_window import PAGE_SUBS, MainWindow
+    from xrayui.ui.pages.subscriptions_page import (
+        SidebarSubscriptionList,
+        SubscriptionsPage,
+        _SidebarSubRow,
+    )
+    monkeypatch.setattr(paths, "base_dir", lambda: tmp_path)
+    monkeypatch.setattr(paths, "state_dir", lambda: tmp_path / "state")
+    monkeypatch.setattr(paths, "profiles_dir", lambda: tmp_path / "profiles")
+    paths.ensure_dirs()
+    win = MainWindow(elevated=False)
+    try:
+        assert isinstance(win.subs_panel, SubscriptionsPage)
+        assert isinstance(win.sidebar.sub_list_host, SidebarSubscriptionList)
+        win.subs.save(Subscription(name="Main plan", url="https://sub.example/x"))
+        win._reload_subs()
+        rows = win.sidebar_subs.findChildren(_SidebarSubRow)
+        assert len(rows) == 1
+        rows[0].activated.emit(rows[0].uid)
+        assert win._stack.currentIndex() == PAGE_SUBS
+    finally:
+        win.close()

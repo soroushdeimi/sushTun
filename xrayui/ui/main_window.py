@@ -48,10 +48,10 @@ from .pages.dns_page import DnsPage
 from .pages.leave import confirm_leave
 from .pages.routing_page import RoutingPage
 from .pages.servers_page import ServersPage
+from .pages.subscriptions_page import SidebarSubscriptionList, SubscriptionsPage
 from .routing_dialog import RoutingDialog
 from .settings_window import SettingsWindow
 from .sidebar import Sidebar
-from .subscription_panel import SubscriptionPanel
 from .theme import ERR, HAIRLINE, MUTED, TEXT
 from .titlebar import TitleBar
 from .tools_panel import ToolsPanel
@@ -318,7 +318,10 @@ class MainWindow(QMainWindow):
         self.profiles = self.servers_page.core
         # The toolbar's Filter field replaces the page's own filter row.
         self.profiles.filter_edit.hide()
-        self.subs_panel = SubscriptionPanel()
+        self.subs_panel = SubscriptionsPage()
+        self.subs_panel.layout().setContentsMargins(16, 12, 16, 12)
+        # Enabled subscriptions with their usage, under the sidebar section.
+        self.sidebar_subs = SidebarSubscriptionList()
         self.tools = ToolsPanel()
         self.log = LogView()
         self.log.setLayoutDirection(Qt.LeftToRight)
@@ -347,6 +350,8 @@ class MainWindow(QMainWindow):
                   else None)
         self.sidebar = Sidebar(traffic_lights=lights)
         self.sidebar.pageSelected.connect(self._show_page)
+        self.sidebar.set_subscription_list(self.sidebar_subs)
+        self.sidebar_subs.activated.connect(lambda _uid: self._show_page(PAGE_SUBS))
         self.sidebar.settingsRequested.connect(self._open_settings)
         self.sidebar.hotspotToggled.connect(self._toggle_gateway)
 
@@ -402,7 +407,7 @@ class MainWindow(QMainWindow):
         self._page_widgets = [servers_page, self.subs_panel,
                               self._routing_page, self._dns_page, activity]
         self._stack.addWidget(servers_page)                        # 0
-        self._stack.addWidget(self.subs_panel)                     # 1
+        self._stack.addWidget(self._scrolled(self.subs_panel))     # 1
         self._stack.addWidget(self._scrolled(self._routing_page))  # 2
         self._stack.addWidget(self._scrolled(self._dns_page))      # 3
         self._stack.addWidget(activity)                            # 4
@@ -770,6 +775,7 @@ class MainWindow(QMainWindow):
     def _reload_subs(self) -> None:
         subs_list = self.subs.list()
         self.subs_panel.set_subscriptions(subs_list)
+        self.sidebar_subs.set_subscriptions(subs_list)
         self.sidebar.set_subscription_count(len(subs_list))
 
     def _add_sub(self) -> None:

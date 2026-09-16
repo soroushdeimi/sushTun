@@ -1100,7 +1100,7 @@ def test_add_sub_uses_the_edit_dialog(window, monkeypatch):
 
 
 def test_edit_button_and_double_click_open_the_editor_for_the_right_uid(window, monkeypatch):
-    from xrayui.ui.subscription_panel import SubscriptionRow
+    from xrayui.ui.pages.subscriptions_page import _PageSubscriptionRow as SubscriptionRow
 
     sub = Subscription(name="A sub", url="https://sub.example/x")
     window.subs.save(sub)
@@ -1129,7 +1129,7 @@ def test_edit_button_and_double_click_open_the_editor_for_the_right_uid(window, 
 def test_disabled_sub_row_is_muted_and_meta_says_disabled(window):
     from PySide6.QtWidgets import QLabel
 
-    from xrayui.ui.subscription_panel import SubscriptionRow
+    from xrayui.ui.pages.subscriptions_page import _PageSubscriptionRow as SubscriptionRow
 
     window.subs.save(Subscription(name="Off sub", url="https://sub.example/x", enabled=False))
     window._reload_subs()
