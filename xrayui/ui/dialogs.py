@@ -71,7 +71,6 @@ def _mark_primary(button: QPushButton) -> None:
 
 
 class ImportDialog(QDialog):
-
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle(tr("Import profiles"))
@@ -177,7 +176,6 @@ class ProfileEditDialog(QDialog):
         form_scroll.setFrameShape(QScrollArea.NoFrame)
         form_scroll.setWidget(self._form_tab(profile))
         self.tabs.addTab(form_scroll, tr("Form"))
-
         self.raw = QPlainTextEdit(json.dumps(profile.to_dict(), indent=2, ensure_ascii=False))
         self.raw.setLayoutDirection(Qt.LeftToRight)
         self.tabs.addTab(self.raw, tr("Raw JSON"))
