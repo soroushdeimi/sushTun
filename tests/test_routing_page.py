@@ -23,7 +23,8 @@ from PySide6.QtWidgets import QApplication, QToolButton  # noqa: E402
 
 from xrayui.core import xraycheck  # noqa: E402
 from xrayui.core.settings import DEFAULTS  # noqa: E402
-from xrayui.ui.pages.routing_page import RoutingPage, _ltr, _match_summary  # noqa: E402
+from xrayui.i18n import ltr  # noqa: E402
+from xrayui.ui.pages.routing_page import RoutingPage, _match_summary  # noqa: E402
 
 
 @pytest.fixture(scope="module")
@@ -83,7 +84,7 @@ def test_match_summary_isolates_latin_port_numbers():
     summary = _match_summary({"port": 443, "network": "tcp"})
     assert "\u2066443\u2069" in summary
     assert "443" in summary.replace("\u2066", "").replace("\u2069", "")
-    assert _match_summary({"port": 443}) == f"port {_ltr('443')}"
+    assert _match_summary({"port": 443}) == f"port {ltr('443')}"
 
 
 def test_dirty_revert_and_applied_signal(qapp, monkeypatch):
