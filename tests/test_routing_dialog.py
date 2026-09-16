@@ -14,10 +14,11 @@ else:
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication, QDialog, QMessageBox  # noqa: E402
+from PySide6.QtWidgets import QApplication, QDialog, QMessageBox, QPushButton  # noqa: E402
 
 import xrayui.ui.routing_dialog as rd  # noqa: E402
 from xrayui.core.settings import DEFAULTS  # noqa: E402
+from xrayui.i18n import tr  # noqa: E402
 from xrayui.ui.rule_editor import RuleEditorDialog, default_rule  # noqa: E402
 
 
@@ -152,6 +153,18 @@ def test_dialog_is_a_thin_pages_wrapper(dlg):
     assert dlg.result_routing() is original
     assert dlg._busy is False
     assert dlg.tabs is dlg.page.tabs
+
+
+def test_save_is_the_only_default_button_and_stays_default_on_show(dlg, qapp):
+    defaults = [b.text() for b in dlg.findChildren(QPushButton) if b.isDefault()]
+    assert defaults == [tr("Save")]
+    # Ruleset/page buttons must not steal the dialog default once shown.
+    dlg.show()
+    qapp.processEvents()
+    shown = [b.text() for b in dlg.findChildren(QPushButton)
+             if b.isVisible() and b.isDefault()]
+    assert shown == [tr("Save")]
+    dlg.close()
 
 
 # -- save / validation ----------------------------------------------------

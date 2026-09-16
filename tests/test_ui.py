@@ -1527,3 +1527,19 @@ def test_subscription_count_reaches_the_sidebar(window):
     window.subs.save(s)
     window._reload_subs()
     assert window.sidebar.item_subs._count == "1"
+
+
+def test_subscription_edit_dialog_is_grouped_with_a_switch(qapp):
+    from xrayui.ui.mac import InsetGroup, Switch
+    sub = Subscription(name="Main", url="https://example.com/sub", enabled=False)
+    dlg = SubscriptionEditDialog(sub)
+    try:
+        assert isinstance(dlg.f_enabled, Switch)
+        assert not dlg.f_enabled.isChecked()
+        assert len(dlg.findChildren(InsetGroup)) == 2
+        assert dlg.f_enabled.accessibleName()
+        dlg.f_enabled.setChecked(True)
+        dlg._save()
+        assert dlg.result_subscription().enabled is True
+    finally:
+        dlg.close()

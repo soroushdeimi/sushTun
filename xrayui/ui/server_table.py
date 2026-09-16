@@ -229,6 +229,8 @@ class QrDialog(QDialog):
         copy_btn.clicked.connect(self._copy)
         close_btn = QPushButton(tr("Close"))
         close_btn.clicked.connect(self.accept)
+        close_btn.setDefault(True)
+        copy_btn.setAutoDefault(False)
         row = QHBoxLayout()
         row.addWidget(copy_btn)
         row.addWidget(close_btn)

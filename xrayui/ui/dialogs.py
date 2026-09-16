@@ -37,6 +37,7 @@ from ..core.outbounds.hysteria2 import normalize_ports
 from ..core.profiles import Profile, normalize_pcs, valid_pcs
 from ..core.subscription import DEFAULT_USER_AGENT, Subscription
 from ..i18n import tr
+from .mac import InsetGroup, Switch
 from .rule_editor import CollapsibleSection
 from .workers import Worker
 
@@ -59,6 +60,14 @@ _SETTINGS_CHECK_PROFILE = Profile(
     id="11111111-1111-1111-1111-111111111111", encryption="none",
     network="tcp", security="tls", sni="settings-check.invalid",
 )
+
+
+def _mark_primary(button: QPushButton) -> None:
+    # The layout has already polished the button by now, so the theme's
+    # #Primary rule only takes effect after an explicit re-polish.
+    button.setObjectName("Primary")
+    button.style().unpolish(button)
+    button.style().polish(button)
 
 
 class ImportDialog(QDialog):
@@ -89,13 +98,25 @@ class ImportDialog(QDialog):
         # overridden explicitly instead.
         buttons.button(QDialogButtonBox.Ok).setText(tr("OK"))
         buttons.button(QDialogButtonBox.Cancel).setText(tr("Cancel"))
-        buttons.button(QDialogButtonBox.Ok).setDefault(True)
+        ok_btn = buttons.button(QDialogButtonBox.Ok)
+        ok_btn.setDefault(True)
+        ok_btn.setAutoDefault(True)
+        buttons.button(QDialogButtonBox.Cancel).setAutoDefault(False)
         buttons.accepted.connect(self._accept)
         buttons.rejected.connect(self.reject)
 
         layout = QVBoxLayout(self)
         layout.addWidget(self.tabs)
         layout.addWidget(buttons)
+
+        # Qt falls back to the first autoDefault button in tab order when a
+        # dialog is shown and focus lands elsewhere (e.g. the QR tab's Choose
+        # image button -- this fails before reaching the QLineEdit as well);
+        # keep OK the single autoDefault so Enter always means "OK".
+        for btn in self.findChildren(QPushButton):
+            if btn is not ok_btn:
+                btn.setAutoDefault(False)
+        _mark_primary(ok_btn)
 
     def _qr_tab(self) -> QWidget:
         w = QWidget()
@@ -148,7 +169,13 @@ class ProfileEditDialog(QDialog):
         self._profile = profile
 
         self.tabs = QTabWidget()
-        self.tabs.addTab(self._form_tab(profile), tr("Form"))
+        # The form is taller than a small screen once Advanced opens; scroll
+        # it inside the tab so the dialog itself keeps a sane height.
+        form_scroll = QScrollArea()
+        form_scroll.setWidgetResizable(True)
+        form_scroll.setFrameShape(QScrollArea.NoFrame)
+        form_scroll.setWidget(self._form_tab(profile))
+        self.tabs.addTab(form_scroll, tr("Form"))
         self.raw = QPlainTextEdit(json.dumps(profile.to_dict(), indent=2, ensure_ascii=False))
         self.raw.setLayoutDirection(Qt.LeftToRight)
         self.tabs.addTab(self.raw, tr("Raw JSON"))
@@ -163,6 +190,7 @@ class ProfileEditDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.addWidget(self.tabs)
         layout.addWidget(buttons)
+        _mark_primary(buttons.button(QDialogButtonBox.Save))
 
     def _add_row(self, form: QFormLayout, text: str, widget) -> QLabel:
         lab = QLabel(text)
@@ -776,6 +804,10 @@ class SettingsDialog(QDialog):
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
         outer.addWidget(buttons)
+        # "Update now" was stealing Enter once shown; only Save answers it.
+        for btn in self.findChildren(QPushButton):
+            btn.setAutoDefault(btn is self.btn_save)
+        _mark_primary(self.btn_save)
 
         # The Advanced section alone can push this past 1000px, taller than
         # a small laptop screen; cap the initial height instead of letting
@@ -1003,7 +1035,8 @@ class SubscriptionEditDialog(QDialog):
     def __init__(self, sub: Subscription, parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle(tr("Edit subscription"))
-        self.resize(420, 0)
+        # Wide enough for a label, its footnote and the field side by side.
+        self.resize(560, 0)
         self._sub = sub
         # Auto-fill Name from the URL's host, same as the old bare "paste a
         # URL" Add flow -- but only until the user actually types a name of
@@ -1012,30 +1045,43 @@ class SubscriptionEditDialog(QDialog):
         self._name_auto = sub.name in ("", "Subscription")
 
         layout = QVBoxLayout(self)
-        form = QFormLayout()
-        layout.addLayout(form)
+        layout.setSpacing(14)
 
         self.f_name = QLineEdit(sub.name)
-        form.addRow(tr("Name"), self.f_name)
         self.f_url = QLineEdit(sub.url)
         self.f_url.setLayoutDirection(Qt.LeftToRight)
-        form.addRow("URL", self.f_url)
-        self.f_enabled = QCheckBox(tr("Enabled"))
+        self.f_enabled = Switch()
         self.f_enabled.setChecked(sub.enabled)
-        form.addRow(self.f_enabled)
+        self.f_enabled.setAccessibleName(tr("Enabled"))
+        self.f_enabled.setToolTip(tr("Enabled"))
         self.f_auto_hours = QSpinBox()
         self.f_auto_hours.setRange(0, 168)
         self.f_auto_hours.setSpecialValueText(tr("0 (default)"))
         self.f_auto_hours.setValue(int(sub.auto_update_hours))
-        form.addRow(tr("Auto-update every (hours)"), self.f_auto_hours)
         self.f_name_filter = QLineEdit(sub.name_filter)
         self.f_name_filter.setPlaceholderText(tr("Only keep servers whose name matches (regex)"))
         self.f_name_filter.setLayoutDirection(Qt.LeftToRight)
-        form.addRow(tr("Name filter"), self.f_name_filter)
         self.f_user_agent = QLineEdit(sub.user_agent)
         self.f_user_agent.setPlaceholderText(DEFAULT_USER_AGENT)
         self.f_user_agent.setLayoutDirection(Qt.LeftToRight)
-        form.addRow("User-Agent", self.f_user_agent)
+
+        # Grouped like System Settings: what the subscription is, then how
+        # it is fetched. Footnotes explain the two fields people misread.
+        self.group_main = InsetGroup()
+        self.group_main.add_row(tr("Name"), self.f_name)
+        self.group_main.add_row("URL", self.f_url)
+        self.group_main.add_row(tr("Enabled"), self.f_enabled)
+        layout.addWidget(self.group_main)
+
+        self.group_fetch = InsetGroup()
+        self.group_fetch.add_row(
+            tr("Auto-update every (hours)"), self.f_auto_hours,
+            footnote=tr("0 uses the app-wide refresh interval."))
+        self.group_fetch.add_row(
+            tr("Name filter"), self.f_name_filter,
+            footnote=tr("Regex. Only servers whose name matches are kept."))
+        self.group_fetch.add_row("User-Agent", self.f_user_agent)
+        layout.addWidget(self.group_fetch)
 
         self.f_url.textEdited.connect(self._maybe_autofill_name)
         self.f_name.textEdited.connect(self._stop_autofill_name)
@@ -1047,6 +1093,7 @@ class SubscriptionEditDialog(QDialog):
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+        _mark_primary(buttons.button(QDialogButtonBox.Save))
 
     def _stop_autofill_name(self, _text: str) -> None:
         self._name_auto = False
