@@ -373,11 +373,6 @@ TRANSLATIONS_FA: dict[str, str] = {
     "try this if servers connect but sites won't load.":
         "دست‌دهی TLS را به تکه‌های کوچک تقسیم می‌کند تا فیلترینگ نتواند آن را بخواند — "
         "اگر سرورها متصل می‌شوند ولی سایت‌ها باز نمی‌شوند این را امتحان کنید.",
-    "Routing…": "مسیریابی…",
-    "Routing:": "مسیریابی:",
-    "Simple = the bypass checkboxes in Routing…; your own rule sets appear here too.":
-        "ساده = چک‌باکس‌های دور زدن در پنجره مسیریابی…؛ مجموعه قوانین شما هم اینجا نشان داده می‌شود.",
-    "Choose which resolvers the tunnel uses.": "انتخاب کنید تونل از کدام سرورهای DNS استفاده کند.",
     "Share via hotspot": "اشتراک با هات‌اسپات",
     "Not available on this platform yet.": "هنوز روی این پلتفرم در دسترس نیست.",
     "Route devices on this PC's Windows hotspot through the tunnel, "
@@ -512,4 +507,14 @@ TRANSLATIONS_FA: dict[str, str] = {
     # Technical acronyms that stay Latin inside the Persian sentence, so
     # the coverage test sees them mapped.
     "MTU": "MTU",
+
+    # -- ui/a-shell: sidebar window ----------------------------------------
+    "Filter…": "فیلتر…",
+    "DNS": "DNS",
+    "Activity": "فعالیت",
+    "Hotspot": "هات‌اسپات",
+    "SSID: {ssid} · Password: {pwd}":
+        "SSID: {ssid} · رمز عبور: {pwd}",
+    "Connected · {server}": "متصل · {server}",
+    "off": "خاموش",
 }

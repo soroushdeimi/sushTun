@@ -715,7 +715,7 @@ def window(qapp, tmp_path, monkeypatch):
 
 
 def test_main_window_exposes_the_dns_and_baseline_entry_points(window):
-    assert window.btn_dns.text().startswith("DNS")
+    assert window.sidebar.item_dns.text().startswith("DNS")
     assert "Baseline" in [b.text() for b in window.tools._buttons]
 
 

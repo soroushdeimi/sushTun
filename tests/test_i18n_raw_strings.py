@@ -27,7 +27,7 @@ _MSGBOX_METHODS = {"warning", "information", "question", "critical"}
 _ALLOWLIST = {
     "",  # a label/field filled in later, never shown empty
     "JSON",
-    "DNS", "DNS…",
+    "DNS",
     "sushTun",
     "English", "فارسی",
     "↑", "↓", "✎", "↻", "✕", "⋯", "—",
