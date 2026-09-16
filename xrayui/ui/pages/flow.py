@@ -58,18 +58,39 @@ class FlowLayout(QLayout):
 
     def _layout(self, rect: QRect, test_only: bool) -> int:
         margins = self.contentsMargins()
-        x = rect.x() + margins.left()
         y = rect.y() + margins.top()
         row_height = 0
+        # QLayout.layoutDirection() is not reliably exposed in PySide; read
+        # it from the parent widget (always set before the layout activates).
+        parent = self.parentWidget()
+        rtl = parent is not None and parent.layoutDirection() == Qt.RightToLeft
+        limit_left = rect.x() + margins.left()
+        limit_right = rect.right() - margins.right()
+        # cursor tracks the leading edge of the next item -- its left edge in
+        # LTR, its right edge in RTL -- so a row starts at the leading border
+        # and grows toward the trailing one. Without the RTL mirroring the
+        # preset rows would still start at the left edge, leaving a gap beside
+        # the right-aligned label the page's parent lays the flow next to.
+        cursor = limit_right if rtl else limit_left
         for item in self._items:
             hint = item.sizeHint()
-            if (x + hint.width() > rect.right() - margins.right()
-                    and row_height > 0):
-                x = rect.x() + margins.left()
+            if rtl:
+                overflow = cursor - hint.width() < limit_left
+            else:
+                overflow = cursor + hint.width() > limit_right
+            if overflow and row_height > 0:
+                cursor = limit_right if rtl else limit_left
                 y += row_height + self._spacing
                 row_height = 0
             if not test_only:
+                if rtl:
+                    x = cursor - hint.width()
+                else:
+                    x = cursor
                 item.setGeometry(QRect(QPoint(x, y), hint))
-            x += hint.width() + self._spacing
+            if rtl:
+                cursor -= hint.width() + self._spacing
+            else:
+                cursor += hint.width() + self._spacing
             row_height = max(row_height, hint.height())
         return y + row_height - rect.y()
