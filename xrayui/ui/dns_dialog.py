@@ -6,7 +6,7 @@ interface (title, Save/Cancel) for today's users.
 """
 from __future__ import annotations
 
-from PySide6.QtWidgets import QDialog, QDialogButtonBox, QVBoxLayout
+from PySide6.QtWidgets import QDialog, QDialogButtonBox, QPushButton, QVBoxLayout
 
 from ..core import xraycheck  # noqa: F401 -- tests monkeypatch dialogs_mod.xraycheck.check_config
 from ..i18n import tr
@@ -34,6 +34,11 @@ class DnsDialog(QDialog):
         layout.addWidget(buttons)
 
         self.page.applied.connect(lambda _dns: self.accept())
+
+        # Qt hands the default to the first autoDefault button on show (the
+        # Cloudflare preset); only Save may answer Enter.
+        for btn in self.findChildren(QPushButton):
+            btn.setAutoDefault(btn is self.btn_save)
 
     def _save(self) -> None:
         if self._busy:

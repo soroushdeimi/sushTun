@@ -788,6 +788,9 @@ class SettingsDialog(QDialog):
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
         outer.addWidget(buttons)
+        # "Update now" was stealing Enter once shown; only Save answers it.
+        for btn in self.findChildren(QPushButton):
+            btn.setAutoDefault(btn is self.btn_save)
 
         # The Advanced section alone can push this past 1000px, taller than
         # a small laptop screen; cap the initial height instead of letting
