@@ -11,6 +11,7 @@ from PySide6.QtGui import QActionGroup, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -18,6 +19,7 @@ from PySide6.QtWidgets import (
     QMenu,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QStackedWidget,
     QSystemTrayIcon,
     QTabWidget,
@@ -296,6 +298,16 @@ class MainWindow(QMainWindow):
 
     # ── UI construction ───────────────────────────────────────────────────
 
+    @staticmethod
+    def _scrolled(page: QWidget) -> QScrollArea:
+        # A stacked widget is as tall as its tallest page; scrolling the long
+        # Routing/DNS pages lets the whole window shrink to 820x560.
+        area = QScrollArea()
+        area.setWidgetResizable(True)
+        area.setFrameShape(QFrame.NoFrame)
+        area.setWidget(page)
+        return area
+
     def _build_ui(self, elevated: bool) -> None:
         # --- core widgets used by test_ui ---------------------------------
         self.status_card = ConnectionHeader()
@@ -370,7 +382,7 @@ class MainWindow(QMainWindow):
 
         activity = QWidget()
         al = QVBoxLayout(activity)
-        al.setContentsMargins(0, 0, 0, 0)
+        al.setContentsMargins(16, 12, 16, 12)
         tabs = QTabWidget()
         tabs.addTab(self.log, tr("Live log"))
         tabs.addTab(self.tools, tr("Tools"))
@@ -380,14 +392,17 @@ class MainWindow(QMainWindow):
         # Servers: header + profile list
         servers_page = QWidget()
         sp = QVBoxLayout(servers_page)
-        sp.setContentsMargins(0, 0, 0, 0)
+        sp.setContentsMargins(16, 12, 16, 12)
         sp.addWidget(self.status_card)
         sp.addWidget(self.profiles, 1)
-        self._stack.addWidget(servers_page)               # 0
-        self._stack.addWidget(self.subs_panel)             # 1
-        self._stack.addWidget(self._routing_page)          # 2
-        self._stack.addWidget(self._dns_page)              # 3
-        self._stack.addWidget(activity)                    # 4
+        # The real pages, by index; the stack may hold a scroll area instead.
+        self._page_widgets = [servers_page, self.subs_panel,
+                              self._routing_page, self._dns_page, activity]
+        self._stack.addWidget(servers_page)                        # 0
+        self._stack.addWidget(self.subs_panel)                     # 1
+        self._stack.addWidget(self._scrolled(self._routing_page))  # 2
+        self._stack.addWidget(self._scrolled(self._dns_page))      # 3
+        self._stack.addWidget(activity)                            # 4
 
         # --- assemble central body ----------------------------------------
         content = QWidget()
@@ -513,7 +528,8 @@ class MainWindow(QMainWindow):
         if index == self._current_page:
             return
         # dirty page guard for routing / dns
-        old_page = self._stack.widget(self._current_page)
+        # The stack holds a scroll area for Routing/DNS, not the page itself.
+        old_page = self._page_widgets[self._current_page]
         if (hasattr(old_page, "is_dirty") and old_page.is_dirty()
                 and not confirm_leave(old_page, self)):
             self.sidebar.set_current_page(self._current_page)
