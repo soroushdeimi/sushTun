@@ -315,3 +315,13 @@ def test_more_menu_actions_fire_their_signals(qapp):
     for action in actions:
         action.trigger()  # SignalInstance is not callable: must fire via lambda
     assert fired == ["failed", "dups"]
+
+
+def test_alert_banner_close_button_is_labelled(qapp):
+    from PySide6.QtWidgets import QPushButton
+
+    from xrayui.ui.widgets import AlertBanner
+    banner = AlertBanner()
+    close = next(b for b in banner.findChildren(QPushButton) if b.text() == "✕")
+    assert close.toolTip() == tr("Close")
+    assert close.accessibleName() == tr("Close")
