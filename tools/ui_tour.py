@@ -9,7 +9,8 @@ and the checks see the same pixels:
   ignored resize made "0 clipping at small size" meaningless);
 - RTL bidi: in fa, "650 ms" renders as "ms 650" unless isolated; every
   visible QLabel / button / table cell / menu action is screened for digit +
-  Latin-unit runs that aren't wrapped in U+2066..U+2069 isolates;
+  Latin-unit runs that aren't wrapped in U+2066 (LRI) / U+2067 (RLI) /
+  U+2068 (FSI) .. U+2069 (PDI) isolates;
 - tooltips/accessible names: visible buttons need text or a tooltip, and
   icon-only buttons need an accessibleName too;
 - every QDialog gets exactly one default button, Enter in a single-line field
@@ -729,7 +730,10 @@ def _isolate_intervals(text: str) -> list[tuple[int, int]]:
 
 
 def _wrapped_in_isolate(text: str, start: int, end: int) -> bool:
-    return any(s < start and e > end for s, e in _isolate_intervals(text))
+    # The PDI sits at index e and the isolate covers [s+1, e-1], so a run
+    # whose last char is right before the closer (end == e, e.g. "\u2066650
+    # ms\u2069") is fully protected; requiring end < e would be a false hit.
+    return any(s < start and end <= e for s, e in _isolate_intervals(text))
 
 
 def _unscoped_bidi_runs(text: str) -> list[str]:
