@@ -1043,6 +1043,27 @@ def _st_settings(ctx: Ctx) -> None:
     dlg.close()
 
 
+def _st_settings_window(ctx: Ctx) -> None:
+    from xrayui.ui.settings_window import TOPICS, SettingsWindow
+    win = ctx.ensure_window()
+    dlg = SettingsWindow(win.settings, win)
+    dlg.resize(820, 560)
+    dlg.show()
+    ctx.app.processEvents()
+
+    for key, label, _icon, _color in TOPICS:
+        dlg._select_topic(key)
+        ctx.app.processEvents()
+        ctx.shot(dlg, f"settings_{key}", f"Settings — {label}",
+                 expected=(820, 560))
+
+    # Focus order across a field-dense topic page.
+    dlg._select_topic("general")
+    ctx.app.processEvents()
+    ctx.tour.check_focus_order(dlg, "settings_window")
+    dlg.close()
+
+
 def _st_routing_simple(ctx: Ctx) -> None:
     from xrayui.ui.routing_dialog import RoutingDialog
     win = ctx.ensure_window()
@@ -1141,10 +1162,12 @@ def _st_default_buttons(ctx: Ctx) -> None:
     from xrayui.ui.routing_dialog import RoutingDialog
     from xrayui.ui.rule_editor import RuleEditorDialog, default_rule
     from xrayui.ui.server_table import QrDialog
+    from xrayui.ui.settings_window import SettingsWindow
 
     win = ctx.ensure_window()
     checks = [
         (lambda: SettingsDialog(win.settings, win), "settings_dialog"),
+        (lambda: SettingsWindow(win.settings, win), "settings_window"),
         (lambda: DnsDialog(win.settings["dns"], win.settings["routing"], win), "dns_dialog"),
         (lambda: RoutingDialog(win.settings["routing"], win), "routing_dialog"),
         (lambda: RuleEditorDialog(default_rule(), win), "rule_editor"),
@@ -1179,6 +1202,7 @@ TOUR_STATES: list[State] = [
     State("profile_editors", "Profile editor per protocol, Advanced expanded",
           _st_profile_editors),
     State("settings", "Settings dialog, scrolled top/middle/bottom", _st_settings),
+    State("settings_window", "System-settings SettingsWindow, all topics", _st_settings_window),
     State("routing_simple", "Routing dialog, Simple tab", _st_routing_simple),
     State("routing_rule_sets", "Routing dialog, Rule sets tab", _st_routing_rule_sets),
     State("rule_editor", "Rule editor", _st_rule_editor),
