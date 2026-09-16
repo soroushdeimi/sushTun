@@ -49,7 +49,7 @@ from .pages.routing_page import RoutingPage
 from .routing_dialog import RoutingDialog
 from .sidebar import Sidebar
 from .subscription_panel import SubscriptionPanel
-from .theme import MUTED, TEXT
+from .theme import ERR, HAIRLINE, MUTED, TEXT
 from .titlebar import TitleBar
 from .tools_panel import ToolsPanel
 from .widgets import AlertBanner, LogView, ProfilePanel
@@ -86,8 +86,10 @@ class _Toolbar(QWidget):
         super().__init__()
         self._win = win
         self.setFixedHeight(52)
+        self.setObjectName("Toolbar")
+        self.setAttribute(Qt.WA_StyledBackground, True)
         self.setStyleSheet(
-            "background:transparent; border-bottom:1px solid #2e2e31;")
+            f"QWidget#Toolbar{{background:transparent; border-bottom:1px solid {HAIRLINE};}}")
 
         outer = QHBoxLayout(self)
         outer.setContentsMargins(16, 0, 16, 0)
@@ -400,7 +402,7 @@ class MainWindow(QMainWindow):
 
         if not elevated:
             warn = QLabel(tr("Not running as administrator — connecting will fail."))
-            warn.setStyleSheet("color:#ff6b6b;")
+            warn.setStyleSheet(f"color:{ERR}; padding:4px 16px;")
             cl.insertWidget(2, warn)
 
         body = QWidget()

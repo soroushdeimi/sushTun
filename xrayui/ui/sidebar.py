@@ -70,8 +70,12 @@ class Sidebar(QFrame):
         super().__init__(parent)
         self.setObjectName("Sidebar")
         self.setFixedWidth(212)
+        # A selector keeps the edge line on the sidebar itself; an unscoped
+        # rule gave every child label and row its own vertical line. In RTL
+        # the sidebar sits on the right, so its edge faces left.
+        edge = "border-left" if self.layoutDirection() == Qt.RightToLeft else "border-right"
         self.setStyleSheet(
-            f"background:{SIDEBAR}; border-right:1px solid {SIDEBAR_EDGE};")
+            f"QFrame#Sidebar{{background:{SIDEBAR}; {edge}:1px solid {SIDEBAR_EDGE};}}")
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(10, 16, 10, 12)

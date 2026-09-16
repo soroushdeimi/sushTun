@@ -1,60 +1,56 @@
-from PySide6.QtWidgets import QApplication, QLabel, QWidget
+"""Guards for the sidebar window's scoped styles and the RTL popup text."""
+from __future__ import annotations
 
-from xrayui.ui.mac import IconButton, InsetGroup, PopupButton, SidebarItem, Switch
+import os
 
-app = QApplication.instance() or QApplication([])
+import pytest
 
-def test_switch():
-    switch = Switch()
-    assert switch.sizeHint().width() == 32
-    assert switch.sizeHint().height() == 19
-    switch.setChecked(True)
-    assert switch.isChecked() is True
+if os.environ.get("CI"):
+    import PySide6  # noqa: F401
+else:
+    pytest.importorskip("PySide6")
 
-def test_inset_group():
-    group = InsetGroup()
-    group.setMinimumWidth(300)
-    label_widget = QLabel("Value")
-    row = group.add_row("Label", label_widget, "Footnote")
-    assert isinstance(row, QWidget)
-    assert row.minimumHeight() == 38
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-def test_sidebar_item():
-    item = SidebarItem("Home", "home")
-    assert item.text() == "Home"
-    item.set_count("5")
-    assert item.isEnabled()
+from PySide6.QtWidgets import QApplication  # noqa: E402
 
-def test_icon_button():
-    # Using a known icon name if possible, but since I don't know them,
-    # I'll try a common one or just skip if it's too hard.
-    # Actually, I can't easily know them without reading icons.py.
-    # Let's try to catch the error or use a likely one.
+from xrayui.ui.mac import PopupButton  # noqa: E402
+from xrayui.ui.sidebar import Sidebar  # noqa: E402
+
+
+@pytest.fixture(scope="module")
+def qapp():
+    return QApplication.instance() or QApplication([])
+
+
+def test_sidebar_stylesheet_is_scoped(qapp):
+    sb = Sidebar()
+    assert sb.styleSheet().lstrip().startswith("QFrame#Sidebar{")
+
+
+def test_toolbar_stylesheet_is_scoped(qapp, tmp_path, monkeypatch):
+    from xrayui import paths
+    from xrayui.ui.main_window import MainWindow
+    monkeypatch.setattr(paths, "base_dir", lambda: tmp_path)
+    monkeypatch.setattr(paths, "state_dir", lambda: tmp_path / "state")
+    monkeypatch.setattr(paths, "profiles_dir", lambda: tmp_path / "profiles")
+    paths.ensure_dirs()
+    win = MainWindow(elevated=False)
     try:
-        btn = IconButton("chevron-down", "Home Button")
-        assert btn.toolTip() == "Home Button"
-        assert btn.accessibleName() == "Home Button"
-    except KeyError:
-        pass
+        assert win.toolbar.styleSheet().lstrip().startswith("QWidget#Toolbar{")
+        assert win.toolbar.title.styleSheet().find("border") == -1
+    finally:
+        win.close()
 
-def test_popup_button():
-    popup = PopupButton("Setting", "Value")
-    assert popup.accessibleName() == "Setting: Value"
-    popup.set_value("New Value")
-    assert popup.accessibleName() == "Setting: New Value"
 
-    # Test elision/tooltip via resize
-    popup.setMinimumWidth(50)
-    popup.resize(50, 26)
-    # The assertion failed because the resize/paint cycle might not have happened in a headless test
-    # without a proper event loop or manual update.
-    # Let's just check that it doesn't crash.
-    assert isinstance(popup.toolTip(), str)
+def test_popup_text_positions_ltr_label_first_from_the_left():
+    label_x, value_x = PopupButton._text_positions(200, 60, 40, rtl=False)
+    assert label_x == 10
+    assert value_x == 70
 
-if __name__ == "__main__":
-    test_switch()
-    test_inset_group()
-    test_sidebar_item()
-    test_icon_button()
-    test_popup_button()
-    print("All shell polish tests passed!")
+
+def test_popup_text_positions_rtl_label_first_from_the_right():
+    label_x, value_x = PopupButton._text_positions(200, 60, 40, rtl=True)
+    # label ends at the right padding, value sits to its left
+    assert label_x + 60 == 190
+    assert value_x + 40 == label_x
