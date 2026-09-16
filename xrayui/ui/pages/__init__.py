@@ -1,4 +1,14 @@
-"""Embeddable settings pages shared with the sidebar window: the Routing and
-DNS editors render here so the window can host them in place while today's
-dialogs wrap them; sibling workers add the servers/subscriptions/activity
-pages to this package."""
+"""macOS-style page widgets for the sidebar window.
+
+The coordinator merges both worker branches' exports in this file by hand.
+"""
+from .activity_page import ActivityPage
+from .servers_page import ServersPage
+from .subscriptions_page import SidebarSubscriptionList, SubscriptionsPage
+
+__all__ = [
+    "ActivityPage",
+    "ServersPage",
+    "SidebarSubscriptionList",
+    "SubscriptionsPage",
+]

@@ -512,4 +512,9 @@ TRANSLATIONS_FA: dict[str, str] = {
     # Technical acronyms that stay Latin inside the Persian sentence, so
     # the coverage test sees them mapped.
     "MTU": "MTU",
+
+    # -- ui/a-pages-main -----------------------------------------------------
+    "More server actions": "گزینه‌های بیشتر سرور",
+    "Import…": "وارد کردن…",
+    "Delete subscription": "حذف اشتراک",
 }

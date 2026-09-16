@@ -30,11 +30,17 @@ def _placeholder_names(template: str) -> set[str]:
     return names
 
 
+def _ui_py_files() -> list[Path]:
+    """Every ui module the sidebar redesign owns -- both the direct children
+    and the pages/ package -- so new page strings are scanned the same way."""
+    return sorted([*UI_DIR.glob("*.py"), *(UI_DIR / "pages").glob("*.py")])
+
+
 def _tr_literal_calls() -> list[tuple[str, set[str], str, int]]:
     """(text, keyword-arg names, filename, lineno) for every tr("literal", ...)
     call across xrayui/ui/*.py (pages/ included)."""
     found = []
-    for path in sorted(UI_DIR.rglob("*.py")):
+    for path in _ui_py_files():
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
             if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
