@@ -35,6 +35,8 @@ class TrafficLight(QAbstractButton):
         # TitleBar is actually built (after startup, before module import).
         tips = {"close": tr("Close"), "minimize": tr("Minimize"), "zoom": tr("Zoom")}
         self.setToolTip(tips[kind])
+        # Screen readers need the same name a hovering user reads from the tooltip.
+        self.setAccessibleName(tips[kind])
         self._glyph = False
         self._active = True
 
