@@ -429,8 +429,11 @@ TRANSLATIONS_FA: dict[str, str] = {
     "Routing changed": "مسیریابی تغییر کرد",
     "Geo data updated.": "داده‌های جغرافیایی به‌روزرسانی شد.",
     "Hotspot sharing off.": "اشتراک‌گذاری هات‌اسپات خاموش شد.",
-    "Hotspot sharing on — applies on next connect.":
-        "اشتراک‌گذاری هات‌اسپات روشن شد — در اتصال بعدی اعمال می‌شود.",
+    "Hotspot sharing on — it starts when you connect.":
+        "اشتراک‌گذاری هات‌اسپات روشن شد — با اتصال بعدی راه می‌افتد.",
+    "Starting the hotspot…": "در حال روشن کردن هات‌اسپات…",
+    "Hotspot is on.": "هات‌اسپات روشن است.",
+    "Hotspot could not start: {error}": "هات‌اسپات روشن نشد: {error}",
     "Still running here. Quit from this icon's menu, or press Ctrl+Q.":
         "همچنان در حال اجراست. از منوی این آیکون خارج شوید یا Ctrl+Q را بزنید.",
 

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import copy
+import secrets
 import sys
 import threading
 import time
@@ -1351,22 +1352,37 @@ class MainWindow(QMainWindow):
         self._run_async(lambda: geo_mod.update(source), done)
 
     def _toggle_gateway(self, checked: bool) -> None:
-        self.settings["gateway"]["enabled"] = checked
+        gw = self.settings["gateway"]
+        gw["enabled"] = checked
+        # Made here, not at start, so the sidebar can show it at once and a
+        # later save of these settings cannot blank it out again.
+        if checked and len(gw.get("password") or "") < 8:  # WPA2: 8-63 chars
+            gw["password"] = secrets.token_urlsafe(9)
         app_settings.save(self.settings)
-        self.sidebar.set_hotspot_state(
-            checked,
-            self.settings["gateway"].get("ssid", ""),
-            self.settings["gateway"].get("password", ""),
-        )
-        if not checked and self.conn.is_connected():
-            self._run_async(
-                self.conn.stop_gateway,
-                lambda result=None, error=None: None)
+        self.sidebar.set_hotspot_state(checked, gw.get("ssid") or "sushTun", gw["password"])
+        if not self.conn.is_connected():
+            self.step_label.setText(
+                tr("Hotspot sharing on — it starts when you connect.")
+                if checked else tr("Hotspot sharing off."))
+            return
+        if not checked:
+            self._run_async(self.conn.stop_gateway, lambda result=None, error=None: None)
             self.step_label.setText(tr("Hotspot sharing off."))
             return
-        self.step_label.setText(
-            tr("Hotspot sharing on — applies on next connect.")
-            if checked else tr("Hotspot sharing off."))
+        # Already connected: start it now instead of waiting for a reconnect.
+        self.step_label.setText(tr("Starting the hotspot…"))
+        self._run_async(self.conn.start_gateway, self._on_gateway_started)
+
+    def _on_gateway_started(self, result=None, error=None) -> None:
+        if error is None:
+            self.step_label.setText(tr("Hotspot is on."))
+            return
+        # Say why and put the switch back, instead of showing "on" for a
+        # hotspot that never started.
+        self.settings["gateway"]["enabled"] = False
+        app_settings.save(self.settings)
+        self.sidebar.set_hotspot_state(False)
+        self.step_label.setText(tr("Hotspot could not start: {error}", error=error))
 
     # ── worker plumbing ---------------------------------------------------
 

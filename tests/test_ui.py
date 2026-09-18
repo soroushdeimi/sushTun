@@ -1544,3 +1544,35 @@ def test_subscription_edit_dialog_is_grouped_with_a_switch(qapp):
         assert dlg.result_subscription().enabled is True
     finally:
         dlg.close()
+
+
+def test_hotspot_password_shows_as_soon_as_the_switch_is_on(window):
+    window.settings["gateway"]["password"] = ""
+    window.sidebar.btn_gateway.setChecked(True)
+    password = window.settings["gateway"]["password"]
+    assert len(password) >= 8
+    assert app_settings.load()["gateway"]["password"] == password
+    assert window.sidebar.hotspot_detail.text().endswith(password)
+
+
+def test_hotspot_switch_starts_sharing_at_once_while_connected(window, monkeypatch):
+    started = []
+    monkeypatch.setattr(window.conn, "is_connected", lambda: True)
+    monkeypatch.setattr(window.conn, "start_gateway", lambda: started.append(True),
+                        raising=False)
+    monkeypatch.setattr(window, "_run_async", lambda fn, done: done(result=fn()))
+    window.sidebar.btn_gateway.setChecked(True)
+    assert started == [True]
+    assert window.step_label.text() == "Hotspot is on."
+
+
+def test_hotspot_that_fails_to_start_turns_the_switch_back_off(window, monkeypatch):
+    monkeypatch.setattr(window.conn, "is_connected", lambda: True)
+    monkeypatch.setattr(window.conn, "start_gateway", lambda: None, raising=False)
+    monkeypatch.setattr(window, "_run_async",
+                        lambda fn, done: done(error="hotspot did not start"))
+    window.sidebar.btn_gateway.setChecked(True)
+    assert not window.sidebar.btn_gateway.isChecked()
+    assert window.settings["gateway"]["enabled"] is False
+    assert app_settings.load()["gateway"]["enabled"] is False
+    assert "hotspot did not start" in window.step_label.text()
