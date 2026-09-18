@@ -8,7 +8,7 @@ English text unchanged, so this module never breaks the default UI and
 never raises -- a bad or missing translation degrades to English, not a
 crash.
 
-core/ must stay Qt-free and English (see CLAUDE.md); this module is
+core/ must stay Qt-free and English; this module is
 imported only by ui/*.py, which passes core's own English strings
 through tr() using the exact same source text the fa table is keyed on.
 """

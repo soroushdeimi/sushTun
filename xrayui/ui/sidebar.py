@@ -20,8 +20,7 @@ from .theme import MUTED, SIDEBAR, SIDEBAR_EDGE
 
 
 class PlaceholderSubscriptionList(QWidget):
-    """Minimal subscription list shown under the Subscriptions section.
-    Another worker's SidebarSubscriptionList will replace this."""
+    """Minimal subscription list shown under the Subscriptions section."""
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)

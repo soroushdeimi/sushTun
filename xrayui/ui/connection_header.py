@@ -235,7 +235,8 @@ class ConnectionHeader(QFrame):
             f"background:{bg}; border-radius:12px; color:{color};"
         )
         self._tile.setPixmap(icon("shield-check", color, 22).pixmap(22, 22))
-        # Show exactly one button per state (the reviewer's spec).
+        # Exactly one of Connect/Disconnect is visible, so the card never
+        # offers an action that cannot apply to the current state.
         self.btn_connect.setVisible(not connected)
         self.btn_disconnect.setVisible(connected)
         if not connected:

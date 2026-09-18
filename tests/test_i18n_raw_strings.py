@@ -22,8 +22,7 @@ _MSGBOX_METHODS = {"warning", "information", "question", "critical"}
 
 # Symbols, the product name, technical acronyms/tab labels, language names,
 # and routing/DNS/JSON syntax examples -- none of these are English prose
-# meant for translation (see CLAUDE.md and the Phase 7b spec's own list of
-# what stays untranslated).
+# meant for translation.
 _ALLOWLIST = {
     "",  # a label/field filled in later, never shown empty
     "JSON",

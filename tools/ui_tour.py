@@ -768,8 +768,8 @@ def _looks_like_untranslated_english(text: str) -> bool:
     if not stripped:
         return False
     lower = stripped.lower()
-    # Technical/proper nouns and units are allowed in fa by design (see
-    # CLAUDE.md / the i18n coverage tests' own allowlist) -- only flag text
+    # Technical/proper nouns and units are allowed in fa by design (see the
+    # i18n coverage tests' own allowlist) -- only flag text
     # that reads as ordinary English prose a translator would recognize.
     words = [w.strip(".,:;()…—-").lower() for w in lower.split()]
     hits = sum(1 for w in words if w in _EN_WORDS)
