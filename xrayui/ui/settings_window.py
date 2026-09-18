@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QStackedWidget,
     QVBoxLayout,
@@ -827,7 +828,13 @@ class SettingsWindow(QDialog):
         self._pages["language"] = _LanguagePage(self._language_was)
 
         for page in self._pages.values():
-            self._stack.addWidget(page)
+            # A topic page can be taller than the window (Persian wraps more);
+            # without scrolling its rows are squeezed and overlap each other.
+            area = QScrollArea()
+            area.setWidgetResizable(True)
+            area.setFrameShape(QScrollArea.NoFrame)
+            area.setWidget(page)
+            self._stack.addWidget(area)
 
         # Connect signals for side effects
         self._pages["geo-data"].geo_updated.connect(self._on_geo_updated)

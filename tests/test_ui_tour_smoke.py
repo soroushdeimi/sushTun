@@ -108,5 +108,7 @@ def test_ui_tour_smoke_runs_fast_and_restores_global_state(tmp_path):
     assert i18n.current() == old_lang
 
     # A prompt for a human must stay prompt: 3 states, one language, one
-    # size. Slowdowns here mean the real tour has become un-runnable.
-    assert elapsed < 15.0, f"smoke tour took {elapsed:.1f}s"
+    # size. The budget is generous because this runs on shared CI machines,
+    # where a loaded box turned a 1s tour into 16s and failed the suite;
+    # it still catches a tour that has become truly un-runnable.
+    assert elapsed < 90.0, f"smoke tour took {elapsed:.1f}s"
