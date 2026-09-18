@@ -7,6 +7,7 @@ preserved. Staged edits: nothing is saved until Done is clicked.
 from __future__ import annotations
 
 import copy
+import sys
 import time
 from pathlib import Path
 
@@ -37,6 +38,7 @@ from ..core.profiles import Profile
 from ..i18n import tr
 from .icons import icon
 from .mac import InsetGroup, Switch
+from .titlebar import TrafficLight, _LightGroup
 from .workers import Worker
 
 # Placeholder profile for validating candidate settings before saving
@@ -734,6 +736,12 @@ class SettingsWindow(QDialog):
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle(tr("Settings"))
+        # Same chrome as the main window: outside macOS the window draws its
+        # own working traffic lights. The native title bar was light-themed
+        # and, on GNOME, offered no close button at all.
+        self._frameless = sys.platform != "darwin"
+        if self._frameless:
+            self.setWindowFlag(Qt.FramelessWindowHint)
         self.setObjectName("SettingsWindow")
         self._settings = copy.deepcopy(settings)
         self._original_settings = copy.deepcopy(settings)
@@ -770,18 +778,18 @@ class SettingsWindow(QDialog):
         sidebar_layout.setContentsMargins(10, 16, 10, 16)
         sidebar_layout.setSpacing(2)
 
-        # Traffic lights placeholder (visual only)
-        lights = QWidget()
-        lights.setFixedHeight(18)
-        lights_layout = QHBoxLayout(lights)
-        lights_layout.setContentsMargins(2, 2, 2, 16)
-        lights_layout.setSpacing(8)
-        for _i, color in enumerate(["#ff5f57", "#febc2e", "#28c840"]):
-            dot = QWidget()
-            dot.setFixedSize(12, 12)
-            dot.setStyleSheet(f"background:{color};border-radius:6px;border:1px solid #e14640;")
-            lights_layout.addWidget(dot)
-        sidebar_layout.addWidget(lights)
+        if self._frameless:
+            # Real buttons: close cancels (discarding edits, like Esc).
+            self.btn_close = TrafficLight("close")
+            self.btn_minimize = TrafficLight("minimize")
+            self.btn_zoom = TrafficLight("zoom")
+            self.btn_close.clicked.connect(self.reject)
+            self.btn_minimize.clicked.connect(self.showMinimized)
+            self.btn_zoom.clicked.connect(
+                lambda: self.showNormal() if self.isMaximized() else self.showMaximized())
+            self.lights = _LightGroup([self.btn_close, self.btn_minimize, self.btn_zoom])
+            sidebar_layout.addWidget(self.lights, 0, Qt.AlignLeading)
+            sidebar_layout.addSpacing(16)
 
         # Sidebar items
         self._sidebar_items = []
@@ -843,6 +851,7 @@ class SettingsWindow(QDialog):
         # Buttons: Cancel, then Done (default) last, as on macOS
         buttons_row = QHBoxLayout()
         buttons_row.setContentsMargins(18, 10, 18, 14)
+        buttons_row.setSpacing(8)
         buttons_row.addStretch(1)
         btn_cancel = QPushButton(tr("Cancel"))
         btn_cancel.setAutoDefault(False)
@@ -862,6 +871,16 @@ class SettingsWindow(QDialog):
         # Store references for validation
         self._core_cfg = core_cfg
         self._start_on_login_was = self._pages["startup"].start_on_login.isChecked()
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802 - Qt convention
+        # Without a native title bar, empty space (the sidebar, the page
+        # margins) is where the window is dragged from.
+        handle = self.windowHandle()
+        if (self._frameless and event.button() == Qt.LeftButton
+                and handle is not None and handle.startSystemMove()):
+            event.accept()
+            return
+        super().mousePressEvent(event)
 
     def _select_topic(self, key: str) -> None:
         """Switch to the given topic page."""

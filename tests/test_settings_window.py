@@ -538,3 +538,28 @@ def test_topic_rows_do_not_overlap_in_persian(qapp, defaults):
         qapp.setLayoutDirection(Qt.LeftToRight)
         set_language("en")
 
+
+def test_close_light_cancels_and_the_buttons_have_a_gap(qapp, defaults):
+    import sys
+
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QPushButton
+
+    from xrayui.i18n import tr
+    win = SettingsWindow(defaults)
+    try:
+        win.resize(820, 560)
+        win.show()
+        qapp.processEvents()
+        cancel = next(b for b in win.findChildren(QPushButton) if b.text() == tr("Cancel"))
+        assert win.btn_done.x() - (cancel.x() + cancel.width()) >= 8
+        if sys.platform == "darwin":
+            return
+        assert win.windowFlags() & Qt.FramelessWindowHint
+        rejected = []
+        win.rejected.connect(lambda: rejected.append(True))
+        win.btn_close.click()
+        assert rejected == [True]
+    finally:
+        win.close()
+
