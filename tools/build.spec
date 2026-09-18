@@ -22,6 +22,11 @@ for _icon in ("assets/icon.png", "assets/icon.ico"):
     if (ROOT / _icon).exists():
         datas.append((str(ROOT / _icon), "assets"))
 
+# The theme loads its checkbox glyph by path next to theme.py; without it every
+# checkbox in the packaged app drew no check mark.
+for _svg in sorted((ROOT / "xrayui" / "ui").glob("*.svg")):
+    datas.append((str(_svg), "xrayui/ui"))
+
 # The Persian UI needs Vazirmatn; the system fallback has much taller metrics.
 _fonts = ROOT / "assets" / "fonts"
 if _fonts.is_dir():
