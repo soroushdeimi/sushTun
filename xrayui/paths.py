@@ -49,6 +49,11 @@ def _first_existing(name: str) -> Path:
     return base_dir() / name
 
 
+def font_file(name: str) -> Path:
+    """A bundled font face; assets/fonts next to the exe or in the source tree."""
+    return _first_existing(str(Path("assets") / "fonts" / name))
+
+
 def xray_exe() -> Path:
     return _first_existing("xray.exe" if sys.platform == "win32" else "xray")
 
