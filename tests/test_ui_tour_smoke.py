@@ -92,10 +92,10 @@ def test_ui_tour_smoke_runs_fast_and_restores_global_state(tmp_path):
     assert "actual " in index
 
     findings_txt = (tmp_path / "tour" / "findings.txt").read_text(encoding="utf-8")
-    # The main window refuses to shrink below its minimum ~1097px width, which
-    # the tour must learn about and report instead of standing over a
-    # screenshot of a window that never got the size it asked for.
-    assert any(f"[{sev}] size" in findings_txt for sev in ("high", "medium", "low"))
+    # These three states now fit the size they ask for. A size finding here
+    # means a window started refusing to shrink again -- the very thing the
+    # sidebar redesign fixed.
+    assert not [line for line in findings_txt.splitlines() if "] size:" in line]
     for header in ("# Findings", "# Deduplicated summary",
                    "# Screenshots that need a human look"):
         assert header in findings_txt
