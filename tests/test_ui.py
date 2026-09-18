@@ -991,7 +991,8 @@ def test_tray_servers_submenu_lists_active_server_checked_with_delay(window):
 
     actions = window.servers_menu.actions()
     labels = [act.text() for act in actions]
-    assert labels == ["A · 84 ms", "B"]
+    from xrayui.i18n import ltr
+    assert labels == [f"A · {ltr('84 ms')}", "B"]
     assert actions[0].isChecked()
     assert not actions[1].isChecked()
 

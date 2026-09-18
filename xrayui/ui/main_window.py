@@ -881,8 +881,11 @@ class MainWindow(QMainWindow):
         level = ("critical"
                  if any(a.level == "critical" for a in triggered)
                  else "warning")
+        # Amounts like "22.0 GB" and "22%" keep their order inside an RTL
+        # sentence only when each value is isolated.
         message = "  •  ".join(
-            tr(a.template, **a.params) if a.template else a.message
+            tr(a.template, **{k: ltr(str(v)) for k, v in a.params.items()})
+            if a.template else a.message
             for a in triggered)
         self.alert_banner.show_alert(level, message)
         if self.tray:
@@ -1263,7 +1266,7 @@ class MainWindow(QMainWindow):
             if not profile:
                 continue
             delay = (results.get(uid) or {}).get("delay_ms")
-            label = (f"{profile.name} · {delay:.0f} ms"
+            label = (f"{profile.name} · {ltr(f'{delay:.0f} ms')}"
                      if isinstance(delay, (int, float))
                      else profile.name)
             action = self.servers_menu.addAction(label)

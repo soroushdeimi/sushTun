@@ -850,7 +850,8 @@ def _st_main_alert(ctx: Ctx) -> None:
     if not win.alert_banner.isVisible():
         win.alert_banner.show_alert(
             "warning", ctx.i18n.tr("Low data: {amount} left ({percent})",
-                                   amount="22.0 GB", percent="22%"))
+                                   amount=ctx.i18n.ltr("22.0 GB"),
+                                   percent=ctx.i18n.ltr("22%")))
     ctx.shot(win, "main_alert_banner", "Quota alert banner", expected=ctx.requested)
 
 
