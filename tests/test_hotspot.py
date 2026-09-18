@@ -167,6 +167,9 @@ def _linux(monkeypatch, *, wifi_state="connected", phy=IW_PHY, up_rc=0):
                                      stderr="Error: Connection activation failed." if rc else "")
 
     monkeypatch.setattr(hotspot.proc, "run", run)
+    # Never touch the real /proc/sys from a test; record the change instead.
+    monkeypatch.setattr(hotspot, "_set_forwarding",
+                        lambda iface, on: ran.append(["forwarding", iface, "1" if on else "0"]))
     return ran, vif
 
 
@@ -287,3 +290,81 @@ def test_disconnect_drops_the_hotspot_before_the_tunnel(monkeypatch, tmp_path):
     conn._restore()
 
     assert order.index("hotspot") < order.index("xray")
+
+
+def test_hotspot_turns_on_forwarding_for_replies_from_the_tunnel(monkeypatch):
+    ran, _vif = _linux(monkeypatch)
+    hotspot.start_linux("sushTun", "secretpass")
+    up = ran.index(["nmcli", "connection", "up", hotspot.AP_CON])
+    assert ["forwarding", hotspot.TUN_NAME, "1"] in ran[up:]
+
+
+def test_failed_hotspot_leaves_forwarding_alone(monkeypatch):
+    ran, _vif = _linux(monkeypatch, up_rc=4)
+    with pytest.raises(RuntimeError):
+        hotspot.start_linux("sushTun", "secretpass")
+    assert ["forwarding", hotspot.TUN_NAME, "1"] not in ran
+
+
+def test_stopping_the_hotspot_turns_tunnel_forwarding_off_first(monkeypatch):
+    ran, vif = _linux(monkeypatch)
+    vif["exists"] = True
+    hotspot.stop_linux()
+    assert ran[0] == ["forwarding", hotspot.TUN_NAME, "0"]
+
+
+def test_set_forwarding_writes_the_per_interface_switch(monkeypatch, tmp_path):
+    target = tmp_path / "xray0"
+    monkeypatch.setattr(hotspot, "_FORWARDING", str(tmp_path / "{}"))
+    hotspot._set_forwarding("xray0", True)
+    assert target.read_text() == "1"
+    hotspot._set_forwarding("xray0", False)
+    assert target.read_text() == "0"
+
+
+def test_set_forwarding_never_raises_without_permission(monkeypatch, tmp_path):
+    monkeypatch.setattr(hotspot, "_FORWARDING", str(tmp_path / "missing" / "{}"))
+    hotspot._set_forwarding("xray0", True)
+
+
+def _gateway_conn(monkeypatch, tmp_path):
+    from xrayui import paths
+    from xrayui.core import connection
+    from xrayui.core import settings as app_settings
+    monkeypatch.setattr(paths, "base_dir", lambda: tmp_path)
+    monkeypatch.setattr(paths, "state_dir", lambda: tmp_path)
+    settings = app_settings.load()
+    settings["gateway"].update(enabled=True, password="joinme123")
+    app_settings.save(settings)
+    monkeypatch.setattr(connection, "IS_WIN", False)
+    monkeypatch.setattr(connection.hotspot, "supported", lambda: True)
+    return connection.Connection()
+
+
+def test_start_gateway_refuses_before_connecting(monkeypatch, tmp_path):
+    conn = _gateway_conn(monkeypatch, tmp_path)
+    started = []
+    monkeypatch.setattr(conn.state, "is_connected", lambda: False)
+    monkeypatch.setattr("xrayui.core.connection.hotspot.start_linux",
+                        lambda ssid, pw: started.append(ssid))
+    with pytest.raises(RuntimeError, match="connect first"):
+        conn.start_gateway()
+    assert started == []
+
+
+def test_start_gateway_shares_an_existing_connection_and_reports_failure(monkeypatch, tmp_path):
+    conn = _gateway_conn(monkeypatch, tmp_path)
+    monkeypatch.setattr(conn.state, "is_connected", lambda: True)
+    monkeypatch.setattr("xrayui.core.connection.hotspot.start_linux",
+                        lambda ssid, pw: hotspot.AP_IFACE)
+    conn.start_gateway()
+    assert conn.state.gateway_on()
+
+    def refuse(ssid, pw):
+        raise RuntimeError("hotspot did not start")
+
+    monkeypatch.setattr("xrayui.core.connection.hotspot.start_linux", refuse)
+    with pytest.raises(RuntimeError, match="did not start"):
+        conn.start_gateway()
+
+

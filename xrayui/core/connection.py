@@ -187,21 +187,33 @@ class Connection:
         if not cfg.get("enabled") or not hotspot.supported():
             return
         try:
-            if IS_WIN:
-                if cfg.get("start_hotspot", True) and hotspot.tethering_state() != "On":
-                    self._log("Starting Windows hotspot...")
-                    hotspot.start_tethering()
-                hotspot.enable(public_name=network.TUN_NAME)
-            else:
-                ssid, password = _hotspot_credentials()
-                self._log("Starting Wi-Fi hotspot...")
-                ap = hotspot.start_linux(ssid, password)
-                self._log(f'Hotspot "{ssid}" is on ({ap}); password: {password}')
-            self._gateway_on = True
-            self.state.set_gateway(True)
-            self._log("Gateway mode on — hotspot clients now use the tunnel.")
+            self._start_gateway(cfg)
         except Exception as exc:
             self._log(f"Gateway mode unavailable: {exc}")
+
+    def start_gateway(self) -> None:
+        """Start sharing on the connection that is already up. Raises on failure,
+        so the switch that asked for it can say why."""
+        if not self.state.is_connected():
+            raise RuntimeError("connect first")
+        if not hotspot.supported():
+            raise RuntimeError("not available on this platform")
+        self._start_gateway(app_settings.load().get("gateway", {}))
+
+    def _start_gateway(self, cfg: dict) -> None:
+        if IS_WIN:
+            if cfg.get("start_hotspot", True) and hotspot.tethering_state() != "On":
+                self._log("Starting Windows hotspot...")
+                hotspot.start_tethering()
+            hotspot.enable(public_name=network.TUN_NAME)
+        else:
+            ssid, password = _hotspot_credentials()
+            self._log("Starting Wi-Fi hotspot...")
+            ap = hotspot.start_linux(ssid, password)
+            self._log(f'Hotspot "{ssid}" is on ({ap}); password: {password}')
+        self._gateway_on = True
+        self.state.set_gateway(True)
+        self._log("Gateway mode on — hotspot clients now use the tunnel.")
 
     def stop_gateway(self) -> None:
         """Turn sharing off without dropping the tunnel."""

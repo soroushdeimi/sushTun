@@ -205,6 +205,18 @@ def stop_tethering() -> bool:
 
 AP_IFACE = "sushap0"
 AP_CON = "sushTun Hotspot"
+_FORWARDING = "/proc/sys/net/ipv4/conf/{}/forwarding"
+
+
+def _set_forwarding(iface: str, on: bool) -> None:
+    # NetworkManager 1.50+ turns forwarding on per interface, and only on the
+    # devices it manages. The tunnel is unmanaged, so replies coming back out
+    # of it were dropped instead of forwarded: hotspot clients could send but
+    # never got an answer.
+    try:
+        Path(_FORWARDING.format(iface)).write_text("1" if on else "0", encoding="ascii")
+    except OSError:
+        pass
 
 
 def _wifi_devices() -> list[tuple[str, str]]:
@@ -326,12 +338,14 @@ def start_linux(ssid: str, password: str) -> str:
         stop_linux()
         detail = ((up.stderr or "") + (up.stdout or "")).strip().splitlines()
         raise RuntimeError("hotspot did not start" + (f": {detail[-1]}" if detail else ""))
+    _set_forwarding(TUN_NAME, True)
     return ap
 
 
 def stop_linux() -> None:
     """Take the hotspot down. Must run before the tunnel goes: left up, its
     clients would be NATed straight out of the physical link, unprotected."""
+    _set_forwarding(TUN_NAME, False)
     proc.run(["nmcli", "connection", "down", AP_CON])
     proc.run(["nmcli", "connection", "delete", AP_CON])
     if proc.run(["iw", "dev", AP_IFACE, "info"]).returncode == 0:
