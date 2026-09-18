@@ -368,3 +368,13 @@ def test_start_gateway_shares_an_existing_connection_and_reports_failure(monkeyp
         conn.start_gateway()
 
 
+def test_hotspot_offers_wpa2_with_aes_only(monkeypatch):
+    ran, _vif = _linux(monkeypatch)
+    hotspot.start_linux("sushTun", "secretpass")
+    profile = _profile(ran)
+    # Without these, phones warn "weak security" (WPA1/TKIP were on offer).
+    assert profile[profile.index("wifi-sec.proto") + 1] == "rsn"
+    assert profile[profile.index("wifi-sec.pairwise") + 1] == "ccmp"
+    assert profile[profile.index("wifi-sec.group") + 1] == "ccmp"
+
+

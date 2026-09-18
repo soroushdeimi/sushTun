@@ -327,7 +327,12 @@ def start_linux(ssid: str, password: str) -> str:
            # IPv6 off: the tunnel carries IPv4 only, so shared IPv6 would hand
            # clients a path around it.
            "ipv4.method", "shared", "ipv6.method", "disabled",
-           "wifi-sec.key-mgmt", "wpa-psk", "wifi-sec.psk", password]
+           # WPA2 with AES only. Left to NetworkManager's defaults the hotspot
+           # also offered WPA1 and the TKIP cipher, and phones labelled it
+           # "weak security".
+           "wifi-sec.key-mgmt", "wpa-psk", "wifi-sec.proto", "rsn",
+           "wifi-sec.pairwise", "ccmp", "wifi-sec.group", "ccmp",
+           "wifi-sec.psk", password]
     if band:
         add += ["802-11-wireless.band", band, "802-11-wireless.channel", str(channel)]
     if proc.run(add).returncode != 0:
