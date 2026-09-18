@@ -92,7 +92,7 @@ def test_selecting_a_topic_shows_its_page_and_highlights_its_tile(qapp, defaults
     keys = list(win._pages)
     for key in keys:
         win._select_topic(key)
-        assert win._stack.currentWidget() is win._pages[key]
+        assert win._stack.currentWidget().widget() is win._pages[key]
         selected = keys.index(key)
         for i, item in enumerate(win._sidebar_items):
             assert item.isChecked() is (i == selected)
@@ -100,7 +100,7 @@ def test_selecting_a_topic_shows_its_page_and_highlights_its_tile(qapp, defaults
 
 def test_opens_on_the_requested_topic(qapp, defaults):
     win = SettingsWindow(defaults, topic="anti-filter")
-    assert win._stack.currentWidget() is win._pages["anti-filter"]
+    assert win._stack.currentWidget().widget() is win._pages["anti-filter"]
 
 
 def test_done_is_the_default_button(qapp, defaults):
@@ -512,4 +512,29 @@ def test_topic_icons_are_distinct_and_done_is_primary(qapp, defaults):
         assert win.btn_done.isDefault()
     finally:
         win.close()
+
+
+def test_topic_rows_do_not_overlap_in_persian(qapp, defaults):
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QWidget
+
+    from xrayui.i18n import set_language
+    set_language("fa")
+    qapp.setLayoutDirection(Qt.RightToLeft)
+    try:
+        win = SettingsWindow(defaults)
+        win.resize(820, 560)
+        win.show()
+        qapp.processEvents()
+        win._select_topic("anti-filter")
+        qapp.processEvents()
+        page = win._pages["anti-filter"]
+        rows = [w for w in page.findChildren(QWidget) if w.objectName() == "InsetGroupRow"]
+        assert rows
+        for row in rows:
+            assert row.height() >= row.minimumHeight(), row.height()
+        win.close()
+    finally:
+        qapp.setLayoutDirection(Qt.LeftToRight)
+        set_language("en")
 
