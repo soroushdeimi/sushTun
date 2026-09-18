@@ -218,9 +218,11 @@ def test_popup_button_elides_and_tooltips_at_narrow_width(qapp):
     pb.resize(150, 26)
     qapp.processEvents()
     assert pb.toolTip() == f"Region: {value}"
+    # The button paints its own text, so the tooltip stays even when the
+    # text fits: it is the only thing a screen reader and a hover can read.
     pb.resize(pb.sizeHint())
     qapp.processEvents()
-    assert pb.toolTip() == ""
+    assert pb.toolTip() == f"Region: {value}"
 
 
 # -- IconButton -----------------------------------------------------------
@@ -607,3 +609,18 @@ def test_connection_header_skips_unknown_meta_parts(qapp):
     h.set("iface", "—")
     assert "—" not in h._meta_full
     assert "de.example.com:443" in h._meta_full
+
+
+def test_inset_row_names_its_control_after_the_label(qapp):
+    group = InsetGroup()
+    toggle = Switch()
+    group.add_row("Check for updates", toggle)
+    assert toggle.accessibleName() == "Check for updates"
+    assert toggle.toolTip() == "Check for updates"
+
+    named = Switch()
+    named.setAccessibleName("Own name")
+    named.setToolTip("Own tip")
+    group.add_row("Row label", named)
+    assert named.accessibleName() == "Own name"
+    assert named.toolTip() == "Own tip"

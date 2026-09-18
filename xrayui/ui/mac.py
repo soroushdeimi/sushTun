@@ -130,6 +130,13 @@ class InsetGroup(QFrame):
             # The label absorbs a shortage by wrapping; the trailing
             # control therefore never shrinks below its natural content.
             widget.setMinimumWidth(widget.sizeHint().width())
+            if not widget.accessibleName():
+                # A Switch or spin box shows no text of its own; without this
+                # a screen reader reads the row as an unnamed control, and a
+                # hovering user gets no hint either.
+                widget.setAccessibleName(label)
+            if not widget.toolTip():
+                widget.setToolTip(label)
             h.addWidget(widget, 1, Qt.AlignVCenter)
 
         self._rows.addWidget(row)
@@ -290,18 +297,10 @@ class PopupButton(QToolButton):
 
     def _sync_accessible(self) -> None:
         self.setAccessibleName(f"{self._label}: {self._value}".strip(": ") or self._label)
+        # The button paints its own text, so Qt sees an empty button: the
+        # tooltip is the only hint a hovering user gets.
+        self.setToolTip(self._full_text() or self._label)
 
-    def resizeEvent(self, event) -> None:  # noqa: N802 – Qt convention
-        super().resizeEvent(event)
-        # Any elision in paintEvent means the value no longer fits; the
-        # tooltip then carries the full label/value instead of clipping it.
-        fm = self.fontMetrics()
-        avail = max(self.width() - 2 * 10 - 12 - 6, 0)
-        full = self._full_text()
-        if fm.elidedText(full, Qt.ElideRight, avail) != full:
-            self.setToolTip(full)
-        else:
-            self.setToolTip("")
 
     def sizeHint(self) -> QSize:
         # Same geometry the painter uses: leading pad + chevron + gap (+8 for
