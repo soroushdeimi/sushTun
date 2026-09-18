@@ -325,3 +325,18 @@ def test_alert_banner_close_button_is_labelled(qapp):
     close = next(b for b in banner.findChildren(QPushButton) if b.text() == "✕")
     assert close.toolTip() == tr("Close")
     assert close.accessibleName() == tr("Close")
+
+
+def test_server_table_shows_what_to_do_when_empty(qapp):
+    panel = ProfilePanel()
+    panel.show()
+    qapp.processEvents()
+    assert not panel.empty_hint.isHidden()
+    assert panel.empty_hint.text() == tr("No servers yet. Import a link, or add a subscription.")
+    panel.set_profiles([Profile(name="A", address="a.example.com", port=443, id="u")], None)
+    qapp.processEvents()
+    assert panel.empty_hint.isHidden()
+    panel.filter_edit.setText("zzz-no-match")
+    qapp.processEvents()
+    assert not panel.empty_hint.isHidden()
+    assert panel.empty_hint.text() == tr("No servers match the filter.")

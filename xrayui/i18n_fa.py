@@ -545,4 +545,9 @@ TRANSLATIONS_FA: dict[str, str] = {
     "XUDP UDP443": "XUDP UDP443",
     "Backup": "پشتیبان‌گیری",
     "Done": "انجام",
+
+    # -- ui/a-dialogs: empty server list -------------------------------------
+    "No servers yet. Import a link, or add a subscription.":
+        "هنوز سروری نیست. یک لینک وارد کنید یا یک اشتراک اضافه کنید.",
+    "No servers match the filter.": "هیچ سروری با این فیلتر پیدا نشد.",
 }
