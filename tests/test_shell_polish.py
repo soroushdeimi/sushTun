@@ -200,3 +200,28 @@ def test_activity_uses_the_finished_page_and_runs_diagnostics(qapp, tmp_path, mo
         assert win.activity_page.diagnostics.output.toPlainText() == "diag report"
     finally:
         win.close()
+
+
+def test_sidebar_rows_are_clear_and_pinned_to_the_bottom(qapp, tmp_path, monkeypatch):
+    from xrayui import paths
+    from xrayui.ui.main_window import MainWindow
+    monkeypatch.setattr(paths, "base_dir", lambda: tmp_path)
+    monkeypatch.setattr(paths, "state_dir", lambda: tmp_path / "state")
+    monkeypatch.setattr(paths, "profiles_dir", lambda: tmp_path / "profiles")
+    paths.ensure_dirs()
+    win = MainWindow(elevated=False)
+    try:
+        win.resize(1040, 700)
+        win.show()
+        qapp.processEvents()
+        sb = win.sidebar
+        assert "QFrame#Sidebar QWidget{background:transparent;}" in sb.styleSheet()
+        # Settings sits at the very bottom of the sidebar, not under the list.
+        bottom = sb._settings_row.geometry().bottom()
+        assert sb.height() - bottom < 40, (sb.height(), bottom)
+        # Every toolbar control shares the routing popup's height.
+        tb = win.toolbar
+        heights = {tb.btn_fragment.height(), tb.btn_low.height(), tb.filter_edit.height()}
+        assert heights == {26}, heights
+    finally:
+        win.close()

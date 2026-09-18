@@ -100,6 +100,9 @@ class _Toolbar(QWidget):
         # title + subtitle
         title_col = QVBoxLayout()
         title_col.setSpacing(0)
+        # Centred in the bar, like the traffic lights beside it; filling the
+        # whole 52px pushed the title against the top edge.
+        title_col.setContentsMargins(0, 6, 0, 6)
         self.title = QLabel(tr("Servers"))
         self.title.setStyleSheet("font-size:13px; font-weight:600; background:transparent;")
         self.subtitle = QLabel(tr("Disconnected"))
@@ -140,6 +143,12 @@ class _Toolbar(QWidget):
         self.filter_edit.setStyleSheet(
             "font-size:12px; padding:4px 8px; border-radius:6px;")
 
+        # One height for every control in the bar (the routing popup's 26px);
+        # the theme's button padding made the toggles ~40px next to it.
+        for w in (self.btn_fragment, self.btn_low, self.filter_edit):
+            w.setFixedHeight(26)
+        self.btn_fragment.setStyleSheet("QPushButton{padding:0 10px;}")
+        self.btn_low.setStyleSheet("QPushButton{padding:0 8px;}")
         for w in (self.btn_routing_popup, self.btn_fragment,
                   self.btn_low, self.filter_edit):
             outer.addWidget(w)

@@ -73,8 +73,11 @@ class Sidebar(QFrame):
         # rule gave every child label and row its own vertical line. In RTL
         # the sidebar sits on the right, so its edge faces left.
         edge = "border-left" if self.layoutDirection() == Qt.RightToLeft else "border-right"
+        # The theme paints every plain QWidget in the window colour; inside the
+        # sidebar that drew grey boxes behind the rows, so they stay clear.
         self.setStyleSheet(
-            f"QFrame#Sidebar{{background:{SIDEBAR}; {edge}:1px solid {SIDEBAR_EDGE};}}")
+            f"QFrame#Sidebar{{background:{SIDEBAR}; {edge}:1px solid {SIDEBAR_EDGE};}}"
+            "QFrame#Sidebar QWidget{background:transparent;}")
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(10, 16, 10, 12)
@@ -146,8 +149,6 @@ class Sidebar(QFrame):
         self._settings_row.setCursor(QCursor(Qt.PointingHandCursor))
         outer.addWidget(self._settings_row)
 
-        outer.addStretch(1)
-
     # ── helpers ───────────────────────────────────────────────────────────
 
     def _add_nav(self, text: str, icon_name: str) -> SidebarItem:
@@ -173,7 +174,9 @@ class Sidebar(QFrame):
             lay.removeWidget(old)
             old.hide()
             old.deleteLater()
-            lay.insertWidget(idx, widget)
+            # Stretch 1, like the placeholder: the list takes the free space so
+            # Hotspot and Settings stay pinned to the bottom.
+            lay.insertWidget(idx, widget, 1)
         self.sub_list_host = widget
 
     def set_hotspot_state(self, on: bool, ssid: str = "",

@@ -186,7 +186,8 @@ class SidebarSubscriptionList(QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._rows = QVBoxLayout(self)
-        self._rows.setContentsMargins(0, 0, 0, 0)
+        # Indented to line up with the section heading above it.
+        self._rows.setContentsMargins(8, 2, 8, 2)
         self._rows.setSpacing(2)
         self._empty = QLabel(tr("No subscriptions yet."))
         self._empty.setObjectName("Muted")
