@@ -211,6 +211,19 @@ class _ServerTableCore(QWidget):
         self.table.selectionModel().selectionChanged.connect(self._on_selection_changed)
         self._layout.addWidget(self.table, 1)
 
+        # An empty table says what to do next instead of showing a blank grid.
+        self.empty_hint = QLabel(self.table.viewport())
+        self.empty_hint.setObjectName("Muted")
+        self.empty_hint.setAlignment(Qt.AlignCenter)
+        self.empty_hint.setWordWrap(True)
+        self.empty_hint.setMinimumWidth(320)
+        hint_layout = QVBoxLayout(self.table.viewport())
+        hint_layout.addWidget(self.empty_hint, 0, Qt.AlignCenter)
+        for signal in (self.proxy.rowsInserted, self.proxy.rowsRemoved,
+                       self.proxy.modelReset, self.proxy.layoutChanged):
+            signal.connect(self._update_empty_hint)
+        self._update_empty_hint()
+
         # Toolbar buttons, placed by the consumer's own layout.
         self._testing = False
         self.btn_import = QPushButton(tr("Import"), self)
@@ -253,6 +266,16 @@ class _ServerTableCore(QWidget):
         self.filter_edit.setText(text)
 
     # -- population ----------------------------------------------------
+    def _update_empty_hint(self, *_args) -> None:
+        if self.proxy.rowCount():
+            self.empty_hint.hide()
+            return
+        if self.model.rowCount():
+            self.empty_hint.setText(tr("No servers match the filter."))
+        else:
+            self.empty_hint.setText(tr("No servers yet. Import a link, or add a subscription."))
+        self.empty_hint.show()
+
     def set_profiles(self, profiles: list[Profile], active_uid: str | None) -> None:
         # A full reload (import/edit/delete/subscription refresh) must not
         # collapse a multi-selection down to one row: keep whatever's still

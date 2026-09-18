@@ -318,7 +318,7 @@ def test_connection_header_set_and_connected(qapp):
     h.set("used", "18.6 GB")
     assert h._down_up_col[1].text() == i18n.ltr("↓ 4.2 ↑ 0.3 Mbit/s")
     assert h._session_col[1].text() == i18n.ltr("18.6 GB")
-    assert h._meta.text() == "—"
+    assert h._meta.text() == ""
 
 
 def test_connection_header_meta_line_uses_ltr(qapp):
@@ -604,7 +604,7 @@ def test_connection_header_skips_unknown_meta_parts(qapp):
     h = ConnectionHeader()
     h.set("endpoint", "—")
     h.set("iface", "—")
-    assert h._meta_full == "—"
+    assert h._meta_full == ""
     h.set("endpoint", "de.example.com:443")
     h.set("iface", "—")
     assert "—" not in h._meta_full

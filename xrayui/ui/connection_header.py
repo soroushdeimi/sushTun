@@ -45,7 +45,7 @@ class ConnectionHeader(QFrame):
         super().__init__()
         self.setObjectName("Card")
         self._narrow: bool | None = None  # unknown at init
-        self._meta_full: str = "—"
+        self._meta_full: str = ""
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(18, 14, 18, 14)
@@ -95,7 +95,8 @@ class ConnectionHeader(QFrame):
         self._row2 = QHBoxLayout()
         self._row2.setSpacing(16)
 
-        self._meta = QLabel("—")
+        # Empty until something is known; a lone "—" read as a stray mark.
+        self._meta = QLabel("")
         self._meta.setObjectName("Muted")
         # Ignored lets the meta shrink below its full text so it never forces
         # the header wide; _elide_meta keeps it readable and truthful instead.
@@ -219,7 +220,7 @@ class ConnectionHeader(QFrame):
         else:
             self._meta_parts.pop(slot, None)
         self._meta_full = (
-            " · ".join(self._meta_parts.values()) if self._meta_parts else "—"
+            " · ".join(self._meta_parts.values()) if self._meta_parts else ""
         )
         self._elide_meta()
 
