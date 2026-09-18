@@ -214,7 +214,9 @@ class ConnectionHeader(QFrame):
             self._set_meta("protocol", text)
         elif key == "delay":
             self._set_meta("delay", text)
-        elif key in ("iface", "tun"):
+        elif key == "iface":
+            # Only the interface name: the TUN index ("12") used to overwrite
+            # it in the same slot and meant nothing to the user.
             self._set_meta("iface", text)
 
     def _set_meta(self, slot: str, text: str) -> None:

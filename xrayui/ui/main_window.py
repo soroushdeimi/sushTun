@@ -494,6 +494,8 @@ class MainWindow(QMainWindow):
             lambda: self._run_tool(self._diag_fn))
         self.activity_page.diagnostics.runRequested.connect(
             lambda: self._run_tool(self._diag_fn))
+        self.status_card.connectRequested.connect(self._connect)
+        self.status_card.disconnectRequested.connect(self._disconnect)
         self.status_card.restoreNetworkRequested.connect(self._cleanup)
         self.status_card.reconnectRequested.connect(self._reconnect_now)
 
