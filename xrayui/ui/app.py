@@ -3,16 +3,32 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
-from .. import i18n
+from .. import i18n, paths
 from ..core import settings as app_settings
 from . import theme
 from .icon import app_icon
 from .main_window import MainWindow
 
-# Not bundled -- Noto Sans Arabic/Naskh ship on Linux, and Windows/macOS
-# system fonts already cover Persian. Vazirmatn is tried first for anyone
-# who does have it installed, since it reads better for Persian UI text.
+# Bundled so Persian looks the same everywhere. Without Vazirmatn the fallback
+# (Noto Sans Arabic) reports a 28px line for a 13px font, which inflates every
+# button and row; Vazirmatn reports 20px.
 _FA_FONTS = '"Vazirmatn", "Noto Sans Arabic", "Segoe UI", "Tahoma", "Geeza Pro"'
+_BUNDLED_FONTS = ("Vazirmatn-Regular.ttf", "Vazirmatn-Medium.ttf", "Vazirmatn-Bold.ttf")
+
+
+def load_bundled_fonts() -> list[str]:
+    """Register the bundled Persian faces; returns the families Qt now has."""
+    from PySide6.QtGui import QFontDatabase
+
+    families: list[str] = []
+    for name in _BUNDLED_FONTS:
+        path = paths.font_file(name)
+        if not path.exists():
+            continue
+        font_id = QFontDatabase.addApplicationFont(str(path))
+        if font_id != -1:
+            families.extend(QFontDatabase.applicationFontFamilies(font_id))
+    return families
 
 
 def starts_hidden(autostart: bool, settings: dict) -> bool:
@@ -26,6 +42,7 @@ def run(argv: list[str], elevated: bool = True, autostart: bool = False) -> int:
     i18n.set_language(app_settings.load().get("language", "en"))
 
     app = QApplication(argv)
+    load_bundled_fonts()
     app.setApplicationName("sushTun")
     # GNOME on Wayland pairs a window with its launcher (and so its dock and
     # Alt-Tab icon) by this id; matches the .deb's sushtun.desktop.

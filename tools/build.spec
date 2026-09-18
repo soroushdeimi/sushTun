@@ -22,6 +22,12 @@ for _icon in ("assets/icon.png", "assets/icon.ico"):
     if (ROOT / _icon).exists():
         datas.append((str(ROOT / _icon), "assets"))
 
+# The Persian UI needs Vazirmatn; the system fallback has much taller metrics.
+_fonts = ROOT / "assets" / "fonts"
+if _fonts.is_dir():
+    for _font in sorted(_fonts.glob("*.ttf")):
+        datas.append((str(_font), "assets/fonts"))
+
 ico = ROOT / "assets" / "icon.ico"
 exe_icon = str(ico) if ico.exists() else None
 
