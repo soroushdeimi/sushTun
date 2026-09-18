@@ -1,5 +1,46 @@
 # Changelog
 
+## v0.3.0
+
+### A new main window
+sushTun now opens as one window with a sidebar instead of a single scrolling
+page: Servers, Subscriptions, Routing, DNS and Activity are pages you switch
+between (Ctrl+1…5), and the connection card, the routing mode, the anti-filter
+and low-usage toggles and the server filter sit in a toolbar at the top.
+The sidebar also lists each enabled subscription with the data it has left,
+and carries the hotspot switch and Settings.
+
+### Settings in a System Settings style window
+Every setting moved into a window with topics down the side (General,
+Anti-filter, Local proxy, Geo data, Startup, Backup, Language) instead of one
+long page with an "Advanced" section. Nothing is saved until you press Done,
+which validates the configuration exactly as before and keeps the window open
+if Xray refuses it.
+
+### The window fits a small screen again
+The whole app now fits 820x560, down from 1097px wide. The Routing, DNS,
+settings and profile pages scroll instead of forcing the window taller than a
+laptop screen, and the Persian layout no longer squeezes rows until they
+overlap.
+
+### Persian
+- The Vazirmatn font ships with the app, so Persian no longer falls back to a
+  font whose taller line box inflated every button and row.
+- Data amounts, delays and percentages (for example "22.0 GB" or "84 ms") keep
+  their order inside Persian sentences.
+- The whole window mirrors properly, including the sidebar and the routing
+  button.
+
+### Fixed
+- The sidebar's subscription list crashed the app on the second refresh.
+- Enter now presses Save in the DNS and Settings dialogs instead of whichever
+  button Qt happened to focus first ("Cloudflare", "Update now").
+- The "More" menu on the server list raised an error instead of removing
+  failed or duplicate servers.
+- Screen readers now read the switches, the popup buttons, the window buttons
+  and the alert banner's close button; each has a name and a tooltip.
+- The connection card no longer shows a bare "— · —" when disconnected.
+
 ## v0.2.0
 
 ### Fixed: 0.1.13 crashed on start whenever a subscription existed
