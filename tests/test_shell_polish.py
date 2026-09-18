@@ -225,3 +225,39 @@ def test_sidebar_rows_are_clear_and_pinned_to_the_bottom(qapp, tmp_path, monkeyp
         assert heights == {26}, heights
     finally:
         win.close()
+
+
+def test_button_rows_are_level_and_the_lights_stay_close(qapp, tmp_path, monkeypatch):
+    from PySide6.QtWidgets import QPushButton
+
+    from xrayui import paths
+    from xrayui.ui import theme
+    from xrayui.ui.main_window import MainWindow
+    monkeypatch.setattr(paths, "base_dir", lambda: tmp_path)
+    monkeypatch.setattr(paths, "state_dir", lambda: tmp_path / "state")
+    monkeypatch.setattr(paths, "profiles_dir", lambda: tmp_path / "profiles")
+    paths.ensure_dirs()
+    old = qapp.styleSheet()
+    qapp.setStyleSheet(theme.STYLESHEET)
+    win = MainWindow(elevated=False)
+    try:
+        win.resize(1040, 700)
+        win.show()
+        qapp.processEvents()
+        page = win.servers_page
+        row = (page.core.btn_import, page.core.btn_test, page.core.btn_fastest, page.more_btn)
+        assert len({w.height() for w in row}) == 1, [w.height() for w in row]
+        header = win.status_card
+        assert header.btn_more.height() == header.btn_connect.height()
+        # A primary button is the same height as a plain one next to it.
+        plain, primary = QPushButton("Cancel"), QPushButton("Done")
+        primary.setObjectName("Primary")
+        assert plain.sizeHint().height() == primary.sizeHint().height()
+        if win.titlebar is not None:
+            lights = win.titlebar.lights.lights
+            gaps = [lights[i + 1].x() - (lights[i].x() + lights[i].width()) for i in range(2)]
+            assert gaps == [8, 8], gaps
+        assert "_arrow_down.svg" in theme.STYLESHEET
+    finally:
+        win.close()
+        qapp.setStyleSheet(old)

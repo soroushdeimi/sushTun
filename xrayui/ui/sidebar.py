@@ -85,7 +85,9 @@ class Sidebar(QFrame):
 
         # ── traffic lights (frameless Win/Linux only) ──────────────────
         if traffic_lights is not None:
-            outer.addWidget(traffic_lights)
+            # Kept at its natural width: stretched across the sidebar, the
+            # three lights drifted ~40px apart instead of macOS's 8px.
+            outer.addWidget(traffic_lights, 0, Qt.AlignLeading)
             outer.addSpacing(18)
 
         # ── nav items ──────────────────────────────────────────────────

@@ -87,6 +87,9 @@ class ConnectionHeader(QFrame):
         actions.addWidget(self.btn_connect)
         actions.addWidget(self.btn_disconnect)
         self.btn_more = self._build_more_button()
+        # Square and as tall as Connect, so the pair lines up in every font.
+        side = max(self.btn_connect.sizeHint().height(), self.btn_more.sizeHint().height())
+        self.btn_more.setFixedSize(side, side)
         actions.addWidget(self.btn_more)
         row1.addLayout(actions)
         outer.addLayout(row1)

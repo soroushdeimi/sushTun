@@ -26,6 +26,9 @@ ZEBRA = "rgba(255,255,255,0.025)"
 # has to live on disk (not a data URI): Qt stylesheets resolve image URLs
 # through QImageReader, which has no data: scheme handler.
 _CHECK_IMAGE = Path(__file__).with_name("_check.svg").resolve().as_posix()
+# Qt's own spin/combo arrows are dark on this dark theme and all but vanish.
+_ARROW_UP_IMAGE = Path(__file__).with_name("_arrow_up.svg").resolve().as_posix()
+_ARROW_DOWN_IMAGE = Path(__file__).with_name("_arrow_down.svg").resolve().as_posix()
 
 _FONT = '"-apple-system", "SF Pro Text", "Inter", "Segoe UI", "Ubuntu", "Cantarell", sans-serif'
 _MONO = '"SF Mono", "JetBrains Mono", "Cascadia Code", "Ubuntu Mono", "Consolas", monospace'
@@ -89,16 +92,18 @@ QPushButton:checked {{
 }}
 QPushButton:disabled {{ color: #5c5c61; background: #28282b; border-color: #313134; }}
 
+/* Same box as a plain QPushButton (6px padding + 1px border), so a primary
+   button sits level with its neighbours instead of 4px taller. */
 QPushButton#Primary {{
-    background: {ACCENT}; border: none; color: white; font-weight: 600;
-    padding: 9px 18px; border-radius: 8px;
+    background: {ACCENT}; border: 1px solid transparent; color: white; font-weight: 600;
+    padding: 6px 16px; border-radius: 7px;
 }}
 QPushButton#Primary:hover {{ background: #2b95ff; }}
 QPushButton#Primary:pressed {{ background: #0070e0; }}
 QPushButton#Primary:disabled {{ background: #1f3d66; color: #7d8ea8; }}
 QPushButton#Danger {{
-    background: {ERR}; border: none; color: white; font-weight: 600;
-    padding: 9px 18px; border-radius: 8px;
+    background: {ERR}; border: 1px solid transparent; color: white; font-weight: 600;
+    padding: 6px 16px; border-radius: 7px;
 }}
 QPushButton#Danger:hover {{ background: #ff5e55; }}
 QPushButton#Danger:pressed {{ background: #e0352b; }}
@@ -155,6 +160,13 @@ QTextEdit, QPlainTextEdit, QLineEdit, QComboBox, QSpinBox {{
 QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QPlainTextEdit:focus {{
     border: 1px solid {ACCENT};
 }}
+QSpinBox::up-button, QSpinBox::down-button {{
+    border: none; background: transparent; width: 18px;
+}}
+QSpinBox::up-arrow {{ image: url("{_ARROW_UP_IMAGE}"); width: 12px; height: 12px; }}
+QSpinBox::down-arrow {{ image: url("{_ARROW_DOWN_IMAGE}"); width: 12px; height: 12px; }}
+QComboBox::drop-down {{ border: none; width: 24px; }}
+QComboBox::down-arrow {{ image: url("{_ARROW_DOWN_IMAGE}"); width: 12px; height: 12px; }}
 QTextEdit#Log, QPlainTextEdit#Log {{ font-family: {_MONO}; font-size: 12px; }}
 
 /* Tabs as a macOS segmented control. */

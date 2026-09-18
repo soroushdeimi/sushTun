@@ -64,6 +64,13 @@ class ServersPage(QWidget):
         self.core.btn_more.hide()
         tool.addWidget(self.more_btn)
         tool.addStretch(1)
+        # One height for the whole row: the split Test button and the icon
+        # button otherwise come out a few pixels off the plain buttons.
+        row_h = max(w.sizeHint().height()
+                    for w in (self.core.btn_import, self.core.btn_test, self.core.btn_fastest))
+        for w in (self.core.btn_import, self.core.btn_test, self.core.btn_fastest):
+            w.setFixedHeight(row_h)
+        self.more_btn.setFixedSize(row_h, row_h)
         outer.addLayout(tool)
 
         outer.addWidget(self.core.filter_edit)
