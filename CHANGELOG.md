@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.3.1
+
+### Fixed: Connect and Disconnect did nothing
+In 0.3.0 the Connect and Disconnect buttons on the connection card were not
+wired to anything after the window was redesigned, so clicking them did
+nothing (the tray menu still worked). Both work again, and a new test now
+clicks every button in the main window and checks that it does its job, so a
+dead button fails the build instead of shipping.
+
+### Fixed: the connection card showed a bare number
+The line under the server address ended in the tunnel's internal index (for
+example "· 12"), which replaced the network interface name. It shows the
+interface name again.
+
 ## v0.3.0
 
 ### A new main window
