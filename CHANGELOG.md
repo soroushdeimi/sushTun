@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.3.2
+
+### Fixed: the Linux hotspot did not share the tunnel
+- **The Hotspot switch did nothing while connected.** It only saved the
+  setting for the next connect. It now starts the hotspot at once, and turning
+  it off stops it.
+- **Phones on the hotspot could send but never got an answer.** NetworkManager
+  1.50 and later turn on IP forwarding only for the interfaces they manage, and
+  the tunnel is not one of them, so replies coming back from the tunnel were
+  dropped. sushTun now turns forwarding on for the tunnel while the hotspot runs.
+- **The sidebar showed an empty password** until the hotspot had started once.
+  The password is created and shown as soon as the switch is turned on.
+- **Phones warned about "weak security".** The hotspot also offered WPA1 and the
+  old TKIP cipher. It now uses WPA2 with AES only.
+- If the hotspot cannot start, the switch turns back off and says why.
+
 ## v0.3.1
 
 ### Fixed: Connect and Disconnect did nothing
