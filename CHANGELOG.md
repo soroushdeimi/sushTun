@@ -39,7 +39,11 @@ overlap.
   failed or duplicate servers.
 - Screen readers now read the switches, the popup buttons, the window buttons
   and the alert banner's close button; each has a name and a tooltip.
-- The connection card no longer shows a bare "— · —" when disconnected.
+- The connection card no longer shows a stray "—" when nothing is known yet.
+- An empty server list now says how to add servers, or that the filter hides
+  them all.
+- The sidebar keeps Hotspot and Settings at the bottom, without grey boxes
+  behind its rows, and every control in the toolbar has the same height.
 
 ## v0.2.0
 
