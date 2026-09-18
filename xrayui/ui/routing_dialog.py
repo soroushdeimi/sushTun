@@ -6,7 +6,7 @@ interface (window title, Save/Cancel) for today's users.
 """
 from __future__ import annotations
 
-from PySide6.QtWidgets import QDialog, QDialogButtonBox, QPushButton, QVBoxLayout
+from PySide6.QtWidgets import QDialog, QDialogButtonBox, QPushButton, QScrollArea, QVBoxLayout
 
 from ..core import xraycheck  # noqa: F401 -- tests monkeypatch rd.xraycheck.check_rules
 from ..i18n import tr
@@ -25,7 +25,13 @@ class RoutingDialog(QDialog):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self.page)
+        # The page is taller than a small laptop screen (more so in
+        # Persian, which wraps); scroll it instead of forcing the height.
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+        scroll.setWidget(self.page)
+        layout.addWidget(scroll, 1)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         self.btn_save = buttons.button(QDialogButtonBox.Save)
