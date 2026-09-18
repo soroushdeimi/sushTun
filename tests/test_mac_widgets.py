@@ -618,6 +618,13 @@ def test_inset_row_names_its_control_after_the_label(qapp):
     assert toggle.accessibleName() == "Check for updates"
     assert toggle.toolTip() == "Check for updates"
 
+    named = Switch()
+    named.setAccessibleName("Own name")
+    named.setToolTip("Own tip")
+    group.add_row("Row label", named)
+    assert named.accessibleName() == "Own name"
+    assert named.toolTip() == "Own tip"
+
 
 def test_connection_meta_shows_the_interface_not_the_tun_index(qapp):
     h = ConnectionHeader()

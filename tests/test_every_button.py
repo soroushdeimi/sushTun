@@ -55,6 +55,7 @@ def win(qapp, tmp_path, monkeypatch):
     window.show()
     qapp.processEvents()
     yield window
+    window.close()
 
 
 def _clicked(win, action) -> list[str]:
