@@ -208,8 +208,12 @@ class Connection:
             hotspot.enable(public_name=network.TUN_NAME)
         else:
             ssid, password = _hotspot_credentials()
+            gw = app_settings.load()["gateway"]
             self._log("Starting Wi-Fi hotspot...")
-            ap = hotspot.start_linux(ssid, password)
+            ap = hotspot.start_linux(ssid, password, security=str(gw.get("security")),
+                                     band_choice=str(gw.get("band")),
+                                     hidden=gw.get("hidden") is True,
+                                     isolation=gw.get("isolation") is True)
             self._log(f'Hotspot "{ssid}" is on ({ap}); password: {password}')
         self._gateway_on = True
         self.state.set_gateway(True)
