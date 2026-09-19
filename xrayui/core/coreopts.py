@@ -162,7 +162,6 @@ def apply_udp_noise(cfg: dict, core_cfg: dict, profile: Profile) -> None:
         udp.insert(0, mask)
 
 
-
 # -- TCP socket options -----------------------------------------------------
 _CONGESTION_FILE = "/proc/sys/net/ipv4/tcp_available_congestion_control"
 
