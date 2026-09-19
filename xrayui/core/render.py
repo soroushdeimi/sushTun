@@ -12,6 +12,7 @@ from pathlib import Path
 from .. import paths
 from . import coreopts, outbounds
 from . import dns as dns_mod
+from . import exits as exits_mod
 from . import routing as routing_mod
 from . import settings as app_settings
 from .metrics import STATS_API_PORT
@@ -97,6 +98,8 @@ def build_text(
     tun_mtu: int | None = None,
     server_ip: str | None = None,
     core_cfg: dict | None = None,
+    exits: list[exits_mod.Exit] | None = None,
+    exits_cfg: dict | None = None,
 ) -> str:
     tmpl_path = template_path or paths.config_template()
     cfg = json.loads(tmpl_path.read_text(encoding="utf-8"))
@@ -116,6 +119,12 @@ def build_text(
             # template's own rules right now, so this is where "after the
             # template's rules, before any user rule" actually happens.
             _apply_dns_routing(cfg, dns_routing_rules)
+
+        if exits:
+            # Same slot as the DNS rules: after the template's own rules and
+            # before every user rule, so a chosen exit beats Iran-direct.
+            cfg.setdefault("routing", {}).setdefault("rules", []).extend(
+                exits_mod.apply(cfg, exits, exits_cfg or {}, core_cfg, profile))
 
     if routing_rules:
         _apply_routing(cfg, routing_rules, domain_strategy)
@@ -144,6 +153,8 @@ def build(
     tun_mtu: int | None = None,
     server_ip: str | None = None,
     core_cfg: dict | None = None,
+    exits: list[exits_mod.Exit] | None = None,
+    exits_cfg: dict | None = None,
 ) -> Path:
     out = paths.runtime_config()
     # Forward by keyword: a positional forward silently mis-binds the next time
@@ -162,6 +173,8 @@ def build(
             tun_mtu=tun_mtu,
             server_ip=server_ip,
             core_cfg=core_cfg,
+            exits=exits,
+            exits_cfg=exits_cfg,
         ),
         encoding="utf-8",
     )

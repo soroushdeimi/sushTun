@@ -110,6 +110,10 @@ DEFAULTS: dict = {
         # Junk UDP packets before a Hysteria2 handshake. Off: see coreopts.apply_udp_noise.
         "udp_noise": {"enabled": False, "length": "10-20", "delay": "10-16"},
     },
+    # Multi-exit SOCKS port (core/exits.py). Off: nothing is rendered for it.
+    # items is a list of {"user", "profile_uid"}: a list, not a map, so _merge
+    # keeps it whole (see dns.hosts).
+    "exits": {"enabled": False, "port": 10809, "password": "", "items": []},
     "startup": {
         "start_on_login": False,
         "start_minimized": False,
