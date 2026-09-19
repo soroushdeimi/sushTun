@@ -591,3 +591,79 @@ def test_settings_window_udp_noise_persists(qapp, defaults):
     page.noise_delay.setText("5-10")
     assert page.collect()["udp_noise"] == {"enabled": True, "length": "20-40", "delay": "5-10"}
 
+
+# -- Multi-exit port page -------------------------------------------------------------
+def _servers():
+    from xrayui.core.profiles import Profile
+    return [Profile(uid="de1", name="Germany", protocol="vless", address="de.example",
+                    port=443, id="u"),
+            Profile(uid="nl1", name="NL", protocol="vless", address="203.0.113.9",
+                    port=443, id="u")]
+
+
+def test_exits_page_is_off_with_a_password_ready(qapp, defaults):
+    page = SettingsWindow(defaults, profiles=_servers())._pages["exits"]
+    got = page.collect()
+    assert got["enabled"] is False and got["port"] == 10809 and got["items"] == []
+    assert len(got["password"]) >= 8  # made for the user, saved on Done
+    assert page.problem() is None      # off: nothing to check
+
+
+def test_exits_page_saves_rows(qapp, defaults):
+    win = SettingsWindow(defaults, profiles=_servers())
+    page = win._pages["exits"]
+    page.enabled.setChecked(True)
+    page.btn_add.click()
+    page.btn_add.click()
+    (_r1, name1, server1), (_r2, name2, server2) = page._rows
+    name1.setText("de")
+    server1.setCurrentIndex(server1.findData("de1"))
+    name2.setText("nl")
+    server2.setCurrentIndex(server2.findData("nl1"))
+    assert page.problem() is None
+    assert win.values()["exits"]["items"] == [{"user": "de", "profile_uid": "de1"},
+                                              {"user": "nl", "profile_uid": "nl1"}]
+
+
+def test_exits_page_remove_drops_the_row(qapp, defaults):
+    page = SettingsWindow(defaults, profiles=_servers())._pages["exits"]
+    page.btn_add.click()
+    row, _name, _server = page._rows[0]
+    row.findChild(QAbstractButton).click()
+    assert page._rows == [] and page.collect()["items"] == []
+
+
+@pytest.mark.parametrize("items,port,reason", [
+    ([], 10809, "at least one exit"),
+    ([{"user": "de", "profile_uid": "de1"}, {"user": "de", "profile_uid": "nl1"}],
+     10809, "used twice"),
+    ([{"user": "De!", "profile_uid": "de1"}], 10809, "not a valid username"),
+    ([{"user": "de", "profile_uid": "de1"}], 10808, "already used by sushTun"),
+])
+def test_exits_page_refuses_bad_values_while_on(qapp, defaults, items, port, reason):
+    defaults["exits"].update(enabled=True, port=port, password="pw123456", items=items)
+    win = SettingsWindow(defaults, profiles=_servers())
+    assert reason in win._pages["exits"].problem()
+    win._on_done()
+    assert not win._busy
+    assert reason in win._status_label.text()
+
+
+def test_exits_page_marks_a_deleted_server(qapp, defaults):
+    defaults["exits"].update(enabled=True, items=[{"user": "de", "profile_uid": "gone"}])
+    page = SettingsWindow(defaults, profiles=_servers())._pages["exits"]
+    _row, _name, server = page._rows[0]
+    assert server.currentData() == "gone"
+    assert "no longer exists" in page.problem()
+
+
+def test_exits_page_warns_about_host_names_with_remote_dns(qapp, defaults):
+    defaults["dns"]["remote_via_tunnel"] = True
+    defaults["exits"]["items"] = [{"user": "nl", "profile_uid": "nl1"}]
+    page = SettingsWindow(defaults, profiles=_servers())._pages["exits"]
+    assert page.dns_warning.isHidden()          # an IP address needs no lookup
+    _row, _name, server = page._rows[0]
+    server.setCurrentIndex(server.findData("de1"))
+    assert not page.dns_warning.isHidden()       # de.example is a host name
+
+
