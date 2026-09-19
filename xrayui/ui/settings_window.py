@@ -35,6 +35,7 @@ from PySide6.QtWidgets import (
 from ..core import autostart, coreopts, render, xraycheck
 from ..core import backup as backup_mod
 from ..core import exits as exits_mod
+from ..core import forwards as forwards_mod
 from ..core import geo as geo_mod
 from ..core import settings as app_settings
 from ..core.profiles import Profile
@@ -61,6 +62,7 @@ TOPICS = [
     ("hotspot", "Hotspot", "hotspot", "#34c759"),
     ("startup", "Startup", "arrow-up", "#ff9f0a"),
     ("exits", "Multi-exit port", "subscriptions", "#5e5ce6"),
+    ("forwards", "Port forwarding", "activity", "#ff9f0a"),
     ("backup", "Backup", "archive", "#64d2ff"),
     ("language", "Language", "language", "#ff375f"),
 ]
@@ -633,6 +635,102 @@ class _HotspotPage(QWidget):
         return out
 
 
+class _ForwardsPage(QWidget):
+    """Port forwarding: a local port that always reaches one fixed host:port.
+
+    Empty by default; see core/forwards.py. Each forward is checked on its own,
+    and a bad or busy one is only skipped for that connection."""
+
+    _NETWORKS = (("tcp", "TCP"), ("udp", "UDP"), ("tcp,udp", "TCP + UDP"))
+
+    def __init__(self, forwards_cfg, core_cfg: dict, exits_cfg: dict, parent=None) -> None:
+        super().__init__(parent)
+        self._core_cfg = core_cfg
+        self._exits_cfg = exits_cfg
+        self._rows: list[tuple[QWidget, QSpinBox, QLineEdit, QComboBox, QComboBox]] = []
+        self._build_ui(forwards_cfg if isinstance(forwards_cfg, list) else [])
+
+    def _build_ui(self, items: list) -> None:
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(18, 18, 18, 18)
+        title = QLabel(tr("Port forwarding"))
+        title.setObjectName("H1")
+        layout.addWidget(title)
+        intro = QLabel(tr("Each local port always reaches one fixed address, through the "
+                          "tunnel or directly."))
+        intro.setObjectName("Muted")
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+        self._rows_box = QVBoxLayout()
+        layout.addLayout(self._rows_box)
+        for item in items:
+            if isinstance(item, dict):
+                self._add_row(item)
+        self.btn_add = QPushButton(tr("Add forward"))
+        self.btn_add.clicked.connect(lambda: self._add_row({}))
+        layout.addWidget(self.btn_add, 0, Qt.AlignLeading)
+        note = QLabel(tr("Newer Xray servers refuse private addresses such as the server's "
+                         "own 127.0.0.1, so a forward to them will not connect."))
+        note.setObjectName("Muted")
+        note.setWordWrap(True)
+        layout.addWidget(note)
+        layout.addStretch(1)
+
+    def _add_row(self, item: dict) -> None:
+        row = QWidget()
+        box = QHBoxLayout(row)
+        box.setContentsMargins(0, 0, 0, 0)
+        port = QSpinBox()
+        port.setRange(1024, 65535)
+        value = item.get("port")
+        port.setValue(value if isinstance(value, int) and 1024 <= value <= 65535 else 2222)
+        port.setToolTip(tr("Local port"))
+        target = QLineEdit(str(item.get("target") or ""))
+        target.setPlaceholderText(tr("host:port"))
+        target.setLayoutDirection(Qt.LeftToRight)
+        via = QComboBox()
+        via.addItem(tr("Through the tunnel"), "proxy")
+        via.addItem(tr("Direct"), "direct")
+        via.setCurrentIndex(max(via.findData(item.get("via")), 0))
+        network = QComboBox()
+        for key, label in self._NETWORKS:
+            network.addItem(label, key)
+        network.setCurrentIndex(max(network.findData(item.get("network")), 0))
+        remove = QPushButton()
+        remove.setIcon(icon("close"))
+        remove.setToolTip(tr("Remove forward"))
+        remove.setAccessibleName(tr("Remove forward"))
+        entry = (row, port, target, via, network)
+        remove.clicked.connect(lambda: self._remove_row(entry))
+        box.addWidget(port)
+        box.addWidget(target, 2)
+        box.addWidget(via, 1)
+        box.addWidget(network)
+        box.addWidget(remove)
+        self._rows.append(entry)
+        self._rows_box.addWidget(row)
+
+    def _remove_row(self, entry) -> None:
+        self._rows.remove(entry)
+        entry[0].setParent(None)
+
+    def collect(self) -> list[dict]:
+        return [{"port": port.value(), "target": target.text().strip(),
+                 "via": via.currentData(), "network": network.currentData()}
+                for _row, port, target, via, network in self._rows]
+
+    def problem(self, exits_cfg: dict | None = None) -> str | None:
+        """Why these forwards can't be saved, or None. `exits_cfg` is the
+        multi-exit setting about to be saved, whose port they must not take."""
+        taken = forwards_mod.taken_ports(self._core_cfg, exits_cfg or self._exits_cfg)
+        for item in self.collect():
+            why = forwards_mod.item_problem(item, taken)
+            if why:
+                return tr("Port forwarding: {why}", why=why)
+            taken.add(item["port"])
+        return None
+
+
 class _LocalProxyPage(QWidget):
     """Local proxy: port, allow LAN, auth, sniffing, default FP."""
 
@@ -1137,6 +1235,8 @@ class SettingsWindow(QDialog):
         self._pages["startup"] = _StartupPage(startup_cfg)
         self._pages["exits"] = _ExitsPage(self._settings.get("exits") or {}, core_cfg,
                                           self._settings.get("dns") or {}, self._profiles)
+        self._pages["forwards"] = _ForwardsPage(self._settings.get("forwards"), core_cfg,
+                                                self._settings.get("exits") or {})
         self._pages["backup"] = _BackupPage()
         self._pages["language"] = _LanguagePage(self._language_was)
 
@@ -1214,7 +1314,8 @@ class SettingsWindow(QDialog):
     def _on_done(self) -> None:
         if self._busy:
             return
-        problem = self._pages["exits"].problem() or self._pages["hotspot"].problem()
+        problem = (self._pages["exits"].problem() or self._pages["hotspot"].problem()
+                   or self._pages["forwards"].problem(self._pages["exits"].collect()))
         if problem:
             self._show_status(problem)
             return
@@ -1315,6 +1416,7 @@ class SettingsWindow(QDialog):
             "core": core_cfg,
             "startup": self._pages["startup"].collect(),
             "exits": self._pages["exits"].collect(),
+            "forwards": self._pages["forwards"].collect(),
             "gateway": self._pages["hotspot"].collect(),
             "updates": {
                 **self._settings.get("updates", {}),
