@@ -1611,3 +1611,47 @@ def test_profile_edit_dialog_refuses_a_malformed_pqv(qapp, warnings):
 def test_profile_edit_dialog_hides_pqv_outside_reality(qapp):
     p = Profile(name="t", address="a.com", port=443, id="u", network="tcp", security="tls")
     assert ProfileEditDialog(p).f_pqv.isHidden()
+
+
+@pytest.mark.parametrize("key,change", [
+    ("exits", {"enabled": True, "port": 10809, "password": "pw123456",
+               "items": [{"user": "de", "profile_uid": "x"}]}),
+    ("forwards", [{"port": 2222, "target": "10.8.0.5:22", "via": "proxy", "network": "tcp"}]),
+    ("gateway", {"enabled": False, "start_hotspot": True, "ssid": "Home", "password": "",
+                 "security": "wpa3", "band": "auto", "hidden": False, "isolation": False}),
+])
+def test_settings_that_xray_reads_at_startup_ask_for_a_reconnect(
+    window, monkeypatch, key, change,
+):
+    # These are applied when Xray starts, so changing them while connected must
+    # say so instead of looking like nothing happened.
+    reconnects: list[str] = []
+    monkeypatch.setattr(window, "_needs_reconnect", lambda what: reconnects.append(what))
+
+    class _Dlg:
+        def __init__(self, *a, **k):
+            pass
+
+        def exec(self):
+            return True
+
+        def values(self):
+            values = {k: copy.deepcopy(window.settings[k]) for k in
+                      ("tun_mtu", "log_level", "core", "exits", "forwards", "gateway")}
+            values[key] = change
+            return values
+
+        def geo_updated(self):
+            return False
+
+        def restored(self):
+            return False
+
+    import xrayui.ui.main_window as main_window_mod
+
+    monkeypatch.setattr(main_window_mod, "SettingsWindow", _Dlg)
+    window._open_settings()
+
+    assert reconnects and reconnects[0].endswith("changed")
+    assert window.settings[key] == change
+
