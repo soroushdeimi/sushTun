@@ -1149,6 +1149,9 @@ class MainWindow(QMainWindow):
         old_mtu = self.settings.get("tun_mtu")
         old_log = self.settings.get("log_level")
         old_core = copy.deepcopy(self.settings.get("core"))
+        old_exits = copy.deepcopy(self.settings.get("exits"))
+        old_forwards = copy.deepcopy(self.settings.get("forwards"))
+        old_gateway = copy.deepcopy(self.settings.get("gateway"))
         dlg = SettingsWindow(self.settings, self, profiles=self.store.list())
         if dlg.exec():
             values = dlg.values()
@@ -1160,6 +1163,10 @@ class MainWindow(QMainWindow):
                 (tr("MTU"), old_mtu, values["tun_mtu"]),
                 (tr("Log level"), old_log, values["log_level"]),
                 (tr("Core options"), old_core, values["core"]),
+                # Xray reads these at startup, so they need a reconnect too.
+                (tr("Multi-exit port"), old_exits, values["exits"]),
+                (tr("Port forwarding"), old_forwards, values["forwards"]),
+                (tr("Hotspot"), old_gateway, values["gateway"]),
             ) if old != new]
             if changed:
                 self._needs_reconnect(
