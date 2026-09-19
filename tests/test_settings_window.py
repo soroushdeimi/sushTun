@@ -667,3 +667,65 @@ def test_exits_page_warns_about_host_names_with_remote_dns(qapp, defaults):
     assert not page.dns_warning.isHidden()       # de.example is a host name
 
 
+# -- Hotspot page -------------------------------------------------------------------
+def test_hotspot_page_keeps_the_on_off_keys_and_saves_the_options(qapp, defaults, monkeypatch):
+    monkeypatch.setattr(sw_mod.sys, "platform", "linux")
+    defaults["gateway"].update(enabled=True, start_hotspot=False, password="joinme123")
+    win = SettingsWindow(defaults)
+    page = win._pages["hotspot"]
+    assert page.password.echoMode() == page.password.EchoMode.Password
+    page.btn_show.setChecked(True)
+    assert page.password.echoMode() == page.password.EchoMode.Normal
+    page.ssid.setText("Home AP")
+    page.security.setCurrentIndex(page.security.findData("wpa3"))
+    page.band.setCurrentIndex(page.band.findData("a"))
+    page.hidden.setChecked(True)
+    page.isolation.setChecked(True)
+    assert win.values()["gateway"] == {
+        "enabled": True, "start_hotspot": False, "ssid": "Home AP", "password": "joinme123",
+        "security": "wpa3", "band": "a", "hidden": True, "isolation": True}
+
+
+def test_hotspot_page_new_makes_a_valid_password(qapp, defaults, monkeypatch):
+    monkeypatch.setattr(sw_mod.sys, "platform", "linux")
+    page = SettingsWindow(defaults)._pages["hotspot"]
+    page.btn_new.click()
+    assert 8 <= len(page.password.text()) <= 63
+    assert page.problem() is None
+
+
+@pytest.mark.parametrize("ssid,password,ok", [
+    ("sushTun", "", True),              # empty: made on the first start
+    ("sushTun", "joinme123", True),
+    ("", "joinme123", False),
+    ("x" * 33, "joinme123", False),
+    ("sushTun", "short", False),
+    ("sushTun", "x" * 64, False),
+    ("sushTun", "رمزعبور۱۲۳", False),   # WPA passphrases are plain ASCII
+])
+def test_hotspot_page_validation(qapp, defaults, monkeypatch, ssid, password, ok):
+    monkeypatch.setattr(sw_mod.sys, "platform", "linux")
+    page = SettingsWindow(defaults)._pages["hotspot"]
+    page.ssid.setText(ssid)
+    page.password.setText(password)
+    assert (page.problem() is None) == ok
+
+
+def test_done_is_refused_while_the_hotspot_page_is_invalid(qapp, defaults, monkeypatch, check_ok):
+    monkeypatch.setattr(sw_mod.sys, "platform", "linux")
+    win = SettingsWindow(defaults)
+    win._pages["hotspot"].password.setText("short")
+    win._on_done()
+    assert not win._busy
+    assert "8 to 63" in win._status_label.text()
+
+
+def test_hotspot_page_on_windows_only_explains(qapp, defaults, monkeypatch):
+    monkeypatch.setattr(sw_mod.sys, "platform", "win32")
+    win = SettingsWindow(defaults)
+    page = win._pages["hotspot"]
+    page.ssid.setText("")  # disabled there; must not block Done or change anything
+    assert page.problem() is None
+    assert win.values()["gateway"] == defaults["gateway"]
+
+
