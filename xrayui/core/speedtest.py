@@ -48,9 +48,9 @@ def build_test_config(
 
     No tun inbound, no dns-in, no stats API -- this never touches the ports
     or tags the live connection owns, so it can run concurrently with it.
-    core_cfg, when given, applies TLS fragment the same way render.build_text
-    does -- a server that only works with fragment enabled must not show up
-    as failed just because the test dialed it without.
+    core_cfg, when given, applies TLS fragment and UDP noise the same way
+    render.build_text does -- a server that only works with them enabled must
+    not show up as failed just because the test dialed it without.
     """
     inbounds = []
     outbounds_list = []
@@ -68,6 +68,7 @@ def build_test_config(
         outbound = outbounds.build(p, out_tag)
         if core_cfg:
             coreopts.apply_fragment({"outbounds": [outbound]}, core_cfg, p)
+            coreopts.apply_udp_noise({"outbounds": [outbound]}, core_cfg, p)
         outbounds_list.append(outbound)
         rules.append({"type": "field", "inboundTag": [in_tag], "outboundTag": out_tag})
 

@@ -107,6 +107,8 @@ DEFAULTS: dict = {
         # TCP socket options for the proxy connection. All off: an untouched
         # install renders exactly what it always has (see coreopts.apply_sockopt).
         "sockopt": {"tcp_fast_open": False, "tcp_mptcp": False, "tcp_congestion": ""},
+        # Junk UDP packets before a Hysteria2 handshake. Off: see coreopts.apply_udp_noise.
+        "udp_noise": {"enabled": False, "length": "10-20", "delay": "10-16"},
     },
     "startup": {
         "start_on_login": False,

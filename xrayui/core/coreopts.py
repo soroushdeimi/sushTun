@@ -126,6 +126,42 @@ def apply_mux(cfg: dict, core_cfg: dict, profile: Profile) -> None:
     proxy["mux"] = build_mux(mux_cfg)
 
 
+# -- UDP noise ----------------------------------------------------------------
+def _range(text: str, low: int, high: int) -> str | None:
+    """"a" or "a-b" with low <= a <= b <= high, or None."""
+    if not _RANGE_RE.match(text):
+        return None
+    lo, _, hi = text.partition("-")
+    lo_n, hi_n = int(lo), int(hi or lo)
+    return text if low <= lo_n <= hi_n <= high else None
+
+
+def build_udp_noise_mask(cfg: dict) -> dict:
+    """The noise mask object. A bad field falls back to its default, like
+    the fragment mask: a typo must not stop the app from connecting."""
+    # Xray sends an empty packet for a zero length; keep junk under the MTU.
+    length = _range(str(cfg.get("length") or "").strip(), 1, 1200) or "10-20"
+    delay = _range(str(cfg.get("delay") or "").strip(), 0, 1000) or "10-16"
+    return {"type": "noise", "settings": {"noise": [{"rand": length, "delay": delay}]}}
+
+
+def apply_udp_noise(cfg: dict, core_cfg: dict, profile: Profile) -> None:
+    noise_cfg = core_cfg.get("udp_noise") or {}
+    # Hysteria2 only: Xray 26.3.27's WireGuard client never applies UDP
+    # masks (proxy/wireguard/client.go), so noise there would do nothing.
+    if not noise_cfg.get("enabled") or (profile.protocol or "").lower() != "hysteria2":
+        return
+    mask = build_udp_noise_mask(noise_cfg)
+    for outbound in cfg.get("outbounds", []):
+        stream = outbound.get("streamSettings") or {}
+        if stream.get("network") != "hysteria":
+            continue
+        # First in the list sits next to the socket, so the junk goes out raw
+        # and salamander (if any) still obfuscates the real packets.
+        udp = stream.setdefault("finalmask", {}).setdefault("udp", [])
+        udp.insert(0, mask)
+
+
 # -- TCP socket options -----------------------------------------------------
 _CONGESTION_FILE = "/proc/sys/net/ipv4/tcp_available_congestion_control"
 
@@ -255,3 +291,4 @@ def apply_all(cfg: dict, core_cfg: dict, profile: Profile) -> None:
     apply_fragment(cfg, core_cfg, profile)
     apply_mux(cfg, core_cfg, profile)
     apply_sockopt(cfg, core_cfg, profile)
+    apply_udp_noise(cfg, core_cfg, profile)

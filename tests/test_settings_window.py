@@ -582,3 +582,12 @@ def test_settings_window_hides_congestion_without_a_kernel_list(qapp, defaults, 
     assert page.tcp_congestion.parent() is None or page.tcp_congestion.isHidden()
     assert SettingsWindow(defaults).values()["core"]["sockopt"]["tcp_congestion"] == ""
 
+
+def test_settings_window_udp_noise_persists(qapp, defaults):
+    page = SettingsWindow(defaults)._pages["anti-filter"]
+    assert not page.noise_enabled.isChecked()
+    page.noise_enabled.setChecked(True)
+    page.noise_length.setText("20-40")
+    page.noise_delay.setText("5-10")
+    assert page.collect()["udp_noise"] == {"enabled": True, "length": "20-40", "delay": "5-10"}
+
