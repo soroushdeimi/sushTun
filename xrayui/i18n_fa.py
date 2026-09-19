@@ -627,12 +627,18 @@ TRANSLATIONS_FA: dict[str, str] = {
         "هر پورت محلی همیشه به یک نشانی ثابت می‌رسد، از داخل تونل یا مستقیم.",
     "Add forward": "افزودن انتقال",
     "Newer Xray servers refuse private addresses such as the server's own 127.0.0.1, "
-    "so a forward to them will not connect.":
+    "so a forward to them will not connect. A shared forward can be used by anyone on "
+    "your network.":
         "سرورهای جدیدتر Xray نشانی‌های خصوصی مانند 127.0.0.1 خود سرور را نمی‌پذیرند، "
-        "پس انتقال به آن‌ها وصل نمی‌شود.",
+        "پس انتقال به آن‌ها وصل نمی‌شود. از یک انتقال اشتراکی هر کسی در شبکه‌ی شما "
+        "می‌تواند استفاده کند.",
     "Local port": "پورت محلی",
     "host:port": "host:port",
     "Remove forward": "حذف انتقال",
+    "Use this forward": "استفاده از این انتقال",
+    "LAN": "LAN",
+    "Let other devices on your network use this forward.":
+        "بگذار دستگاه‌های دیگر شبکه هم از این انتقال استفاده کنند.",
     "Port forwarding: {why}": "انتقال پورت: {why}",
     "Through the tunnel": "از داخل تونل",
 }

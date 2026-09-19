@@ -1,8 +1,10 @@
 """Port forwarding: a local port that always reaches one fixed host:port.
 
-Off by default (an empty list). Each forward is a dokodemo-door inbound on
-127.0.0.1 plus one routing rule that sends it through the tunnel or directly,
-placed before every user rule so the choice holds whatever the routing mode.
+Off by default (an empty list). Each forward is a dokodemo-door inbound
+(127.0.0.1, or the whole network when the user shares that one) plus a routing
+rule that sends it through the tunnel or directly, placed before every user
+rule so the choice holds whatever the routing mode. A forward switched off in
+Settings is skipped silently.
 
 Forwards are independent: a bad or busy one is dropped on its own with a
 warning, and none of them can keep the main connection from starting.
@@ -27,6 +29,12 @@ class Forward:
     target_port: int
     via: str
     network: str
+    lan: bool = False
+
+    @property
+    def listen(self) -> str:
+        # Sharing one is opt-in per forward: on the LAN anyone can use it.
+        return "0.0.0.0" if self.lan else "127.0.0.1"
 
     @property
     def tag(self) -> str:
@@ -96,6 +104,8 @@ def prepare(forwards_cfg, core_cfg: dict | None,
     kept: list[Forward] = []
     warnings: list[str] = []
     for item in forwards_cfg:
+        if isinstance(item, dict) and item.get("enabled", True) is False:
+            continue  # switched off in Settings: not an error, just skipped
         why = item_problem(item, taken)
         if why is None and not exits.port_is_free(item["port"]):
             why = f"port {item['port']} is in use by another program"
@@ -104,7 +114,7 @@ def prepare(forwards_cfg, core_cfg: dict | None,
             continue
         host, target_port = _parse_target(item["target"])
         kept.append(Forward(item["port"], host, target_port, item["via"],
-                            item.get("network", "tcp")))
+                            item.get("network", "tcp"), item.get("lan") is True))
         taken.add(item["port"])
     return kept, warnings
 
@@ -114,7 +124,7 @@ def apply(cfg: dict, forwards: list[Forward]) -> list[dict]:
     rules: list[dict] = []
     for f in forwards:
         cfg.setdefault("inbounds", []).append({
-            "tag": f.tag, "listen": "127.0.0.1", "port": f.port,
+            "tag": f.tag, "listen": f.listen, "port": f.port,
             "protocol": "dokodemo-door",
             "settings": {"address": f.host, "port": f.target_port, "network": f.network},
         })

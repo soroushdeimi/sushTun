@@ -209,3 +209,17 @@ def test_a_healthy_start_is_not_touched(monkeypatch, tmp_path):
     kept, _ = forwards.prepare([SSH], _core(), None)
     conn._retry_without_extras(lambda e, f: "cfg", [], kept)
     assert xray.starts == ["cfg-0"]
+
+
+def test_a_switched_off_forward_is_skipped_without_a_warning():
+    kept, warnings = forwards.prepare([{**SSH, "enabled": False}, DNS], _core(), None)
+    assert [f.port for f in kept] == [5353] and warnings == []
+
+
+def test_sharing_one_forward_does_not_share_the_others():
+    kept, _ = forwards.prepare([SSH, {**DNS, "lan": True}], _core(), None)
+    assert [(f.port, f.listen) for f in kept] == [(2222, "127.0.0.1"), (5353, "0.0.0.0")]
+    out = _render(kept)
+    listens = {i["tag"]: i["listen"] for i in out["inbounds"] if i["tag"].startswith("fwd-")}
+    assert listens == {"fwd-2222": "127.0.0.1", "fwd-5353": "0.0.0.0"}
+

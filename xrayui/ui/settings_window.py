@@ -17,6 +17,7 @@ from PySide6.QtCore import Qt, QThreadPool, Signal
 from PySide6.QtGui import QColor, QFontMetrics, QPainter
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QComboBox,
     QDialog,
     QFileDialog,
@@ -647,7 +648,7 @@ class _ForwardsPage(QWidget):
         super().__init__(parent)
         self._core_cfg = core_cfg
         self._exits_cfg = exits_cfg
-        self._rows: list[tuple[QWidget, QSpinBox, QLineEdit, QComboBox, QComboBox]] = []
+        self._rows: list[dict] = []
         self._build_ui(forwards_cfg if isinstance(forwards_cfg, list) else [])
 
     def _build_ui(self, items: list) -> None:
@@ -670,7 +671,8 @@ class _ForwardsPage(QWidget):
         self.btn_add.clicked.connect(lambda: self._add_row({}))
         layout.addWidget(self.btn_add, 0, Qt.AlignLeading)
         note = QLabel(tr("Newer Xray servers refuse private addresses such as the server's "
-                         "own 127.0.0.1, so a forward to them will not connect."))
+                         "own 127.0.0.1, so a forward to them will not connect. A shared "
+                         "forward can be used by anyone on your network."))
         note.setObjectName("Muted")
         note.setWordWrap(True)
         layout.addWidget(note)
@@ -696,34 +698,47 @@ class _ForwardsPage(QWidget):
         for key, label in self._NETWORKS:
             network.addItem(label, key)
         network.setCurrentIndex(max(network.findData(item.get("network")), 0))
+        enabled = QCheckBox()
+        enabled.setChecked(item.get("enabled", True) is not False)
+        enabled.setToolTip(tr("Use this forward"))
+        enabled.setAccessibleName(tr("Use this forward"))
+        lan = QCheckBox(tr("LAN"))
+        lan.setChecked(item.get("lan") is True)
+        lan.setToolTip(tr("Let other devices on your network use this forward."))
         remove = QPushButton()
         remove.setIcon(icon("close"))
         remove.setToolTip(tr("Remove forward"))
         remove.setAccessibleName(tr("Remove forward"))
-        entry = (row, port, target, via, network)
+        entry = {"row": row, "enabled": enabled, "port": port, "target": target,
+                 "via": via, "network": network, "lan": lan}
         remove.clicked.connect(lambda: self._remove_row(entry))
+        box.addWidget(enabled)
         box.addWidget(port)
         box.addWidget(target, 2)
         box.addWidget(via, 1)
         box.addWidget(network)
+        box.addWidget(lan)
         box.addWidget(remove)
         self._rows.append(entry)
         self._rows_box.addWidget(row)
 
     def _remove_row(self, entry) -> None:
         self._rows.remove(entry)
-        entry[0].setParent(None)
+        entry["row"].setParent(None)
 
     def collect(self) -> list[dict]:
-        return [{"port": port.value(), "target": target.text().strip(),
-                 "via": via.currentData(), "network": network.currentData()}
-                for _row, port, target, via, network in self._rows]
+        return [{"enabled": r["enabled"].isChecked(), "port": r["port"].value(),
+                 "target": r["target"].text().strip(), "via": r["via"].currentData(),
+                 "network": r["network"].currentData(), "lan": r["lan"].isChecked()}
+                for r in self._rows]
 
     def problem(self, exits_cfg: dict | None = None) -> str | None:
         """Why these forwards can't be saved, or None. `exits_cfg` is the
         multi-exit setting about to be saved, whose port they must not take."""
         taken = forwards_mod.taken_ports(self._core_cfg, exits_cfg or self._exits_cfg)
         for item in self.collect():
+            if not item["enabled"]:
+                continue  # a switched-off row is never rendered
             why = forwards_mod.item_problem(item, taken)
             if why:
                 return tr("Port forwarding: {why}", why=why)
