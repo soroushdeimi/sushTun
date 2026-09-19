@@ -120,6 +120,9 @@ DEFAULTS: dict = {
     # items is a list of {"user", "profile_uid"}: a list, not a map, so _merge
     # keeps it whole (see dns.hosts).
     "exits": {"enabled": False, "port": 10809, "password": "", "items": []},
+    # Port forwards (core/forwards.py): a list of {"port", "target": "host:port",
+    # "via": "proxy"|"direct", "network"}. Empty: nothing is rendered for it.
+    "forwards": [],
     "startup": {
         "start_on_login": False,
         "start_minimized": False,

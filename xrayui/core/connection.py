@@ -11,6 +11,7 @@ from collections.abc import Callable
 from .. import paths
 from . import bootrestore, coreopts, hotspot, network, render, routing
 from . import exits as exits_mod
+from . import forwards as forwards_mod
 from . import settings as app_settings
 from . import tun2socks as t2s
 from . import xray as xray_mod
@@ -132,6 +133,14 @@ class Connection:
             self._log(f"WARNING: {warning}")
         return exits
 
+    def _forwards(self, cfgs: dict) -> list[forwards_mod.Forward]:
+        # Each bad or busy forward is dropped on its own, with a warning.
+        forwards, warnings = forwards_mod.prepare(cfgs.get("forwards"), cfgs.get("core"),
+                                                  cfgs.get("exits"))
+        for warning in warnings:
+            self._log(f"WARNING: {warning}")
+        return forwards
+
     def _log_lan_share(self, core_cfg: dict, iface) -> None:
         if not core_cfg.get("allow_lan"):
             return
@@ -149,7 +158,8 @@ class Connection:
                            stats=True, log_level=cfgs.get("log_level"),
                            dns_cfg=cfgs.get("dns"), tun_mtu=cfgs.get("tun_mtu"),
                            server_ip=server_ip, core_cfg=cfgs.get("core"),
-                           exits=self._exits(cfgs), exits_cfg=cfgs.get("exits"))
+                           exits=self._exits(cfgs), exits_cfg=cfgs.get("exits"),
+                           forwards=self._forwards(cfgs))
         self._log_lan_share(cfgs.get("core") or {}, iface)
 
         self._log("Starting Xray...")
@@ -248,7 +258,8 @@ class Connection:
                             domain_strategy=routing.domain_strategy_for(cfgs["routing"]),
                             stats=True, include_tun=False, log_level=cfgs.get("log_level"),
                             dns_cfg=cfgs.get("dns"), server_ip=server_ip, core_cfg=core_cfg,
-                            exits=self._exits(cfgs), exits_cfg=cfgs.get("exits"))
+                            exits=self._exits(cfgs), exits_cfg=cfgs.get("exits"),
+                            forwards=self._forwards(cfgs))
         self._log_lan_share(core_cfg, iface)
         # Same validation render already applied to socks-in inside cfg, so
         # the port this process waits on and bridges from is the one Xray
