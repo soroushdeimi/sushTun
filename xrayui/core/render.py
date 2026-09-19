@@ -120,11 +120,11 @@ def build_text(
             # template's rules, before any user rule" actually happens.
             _apply_dns_routing(cfg, dns_routing_rules)
 
-        if exits:
-            # Same slot as the DNS rules: after the template's own rules and
-            # before every user rule, so a chosen exit beats Iran-direct.
-            cfg.setdefault("routing", {}).setdefault("rules", []).extend(
-                exits_mod.apply(cfg, exits, exits_cfg or {}, core_cfg, profile))
+    if exits:
+        # Same slot as the DNS rules: after the template's own rules and
+        # before every user rule, so a chosen exit beats Iran-direct.
+        cfg.setdefault("routing", {}).setdefault("rules", []).extend(
+            exits_mod.apply(cfg, exits, exits_cfg or {}, core_cfg, profile))
 
     if routing_rules:
         _apply_routing(cfg, routing_rules, domain_strategy)

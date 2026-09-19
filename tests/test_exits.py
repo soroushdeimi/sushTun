@@ -88,7 +88,7 @@ def test_prepare_returns_one_exit_per_username():
     ({"port": 10808}, "already used by sushTun"),   # the local SOCKS port
     ({"port": 10085}, "already used by sushTun"),   # the stats API
     ({"password": ""}, "password is required"),
-    ({"items": []}, "add at least one exit"),
+    ({"items": []}, "at least one exit"),
     ({"items": [{"user": "DE", "profile_uid": "de1"}]}, "not a valid username"),
     ({"items": [{"user": "de", "profile_uid": "de1"},
                 {"user": "de", "profile_uid": "nl1"}]}, "used twice"),
@@ -117,8 +117,15 @@ def test_connection_logs_the_warning_and_keeps_going(monkeypatch):
     monkeypatch.setattr(connection.ProfileStore, "get", lambda self, uid: PROFILES.get(uid))
     steps: list[str] = []
     conn = connection.Connection(on_step=steps.append)
-    assert conn._exits(cfgs={"exits": _exits_cfg(password=""), "core": _core()}) == []
+    assert conn._exits({"exits": _exits_cfg(password=""), "core": _core()}) == []
     assert steps and steps[0].startswith("WARNING: Multi-exit port is off")
+
+
+# -- apply ------------------------------------------------------------------------------
+def _exit_list(**over):
+    exit_list, warning = exits.prepare(_exits_cfg(**over), _core(), PROFILES.get)
+    assert warning is None
+    return exit_list
 
 
 def test_inbound_is_local_password_socks_without_udp():
@@ -127,26 +134,7 @@ def test_inbound_is_local_password_socks_without_udp():
     assert inbound["listen"] == "127.0.0.1" and inbound["port"] == 10809
     assert inbound["settings"] == {
         "auth": "password", "udp": False,
-        "accounts": [{"user": e.user, "pass": str(_exits_cfg()["password"])}
-                     for e in _exit_list()],
-    }
-
-
-def _exit_list(**over):
-    exit_list, warning = exits.prepare(_exits_cfg(**over), _core(), PROFILES.get)
-    assert warning is None
-    return exit_list
-
-
-def test_inbound_is_local_password_socks_without_udp_v2():
-    # Re-implementing to avoid issues with the previous one's logic
-    out = _render(_exit_list(), _exits_cfg())
-    inbound = next(i for i in out["inbounds"] if i["tag"] == "exits-in")
-    assert inbound["listen"] == "127.0.0.1" and inbound["port"] == 10809
-    assert inbound["settings"] == {
-        "auth": "password", "udp": False,
-        "accounts": [{"user": "de", "pass": "s3cret"}, {"user": "nl", "pass": "s3cret"}],
-    }
+        "accounts": [{"user": "de", "pass": "s3cret"}, {"user": "nl", "pass": "s3cret"}]}
 
 
 def test_each_exit_has_its_own_outbound_bound_to_the_physical_interface():
@@ -202,4 +190,5 @@ def test_xray_test_accepts_the_multi_exit_config(tmp_path, monkeypatch):
     text = render.build_text(profile=MAIN, iface_alias="lo", template_path=TEMPLATE,
                              include_tun=False, core_cfg=_core(),
                              exits=_exit_list(), exits_cfg=_exits_cfg())
+    assert '"tag": "exits-in"' in text  # also without a DNS config
     assert xraycheck.check_config(text) is None

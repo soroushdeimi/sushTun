@@ -127,7 +127,7 @@ class Connection:
         # A bad or busy multi-exit setting is dropped here with a warning;
         # it must never keep the main connection from starting.
         exits, warning = exits_mod.prepare(cfgs.get("exits"), cfgs.get("core"),
-                                       ProfileStore().get)
+                                           ProfileStore().get)
         if warning:
             self._log(f"WARNING: {warning}")
         return exits
