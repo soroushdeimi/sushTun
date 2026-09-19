@@ -18,16 +18,16 @@ Baseline core: **26.3.27** (bundled). Keys that first appear later are listed as
 | log | 4 | 2 | 0 | 0 | 0 | 2 | 0 | 2 | 0 |
 | metrics | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3 | 0 |
 | observatory | 5 | 0 | 0 | 0 | 0 | 5 | 0 | 0 | 0 |
-| outbounds | 443 | 96 | 7 | 26 | 58 | 256 | 78 | 25 | 245 |
+| outbounds | 443 | 99 | 7 | 26 | 58 | 253 | 78 | 25 | 245 |
 | policy | 7 | 0 | 0 | 0 | 0 | 7 | 3 | 5 | 0 |
 | reverse | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 7 | 0 |
 | routing | 39 | 10 | 1 | 0 | 0 | 28 | 2 | 0 | 1 |
 | stats | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 |
 | transport | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 |
 | version | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3 | 0 |
-| **all** | **564** | **129** | **11** | **42** | **58** | **324** | **514** | **71** | **529** |
+| **all** | **564** | **132** | **11** | **42** | **58** | **321** | **514** | **71** | **529** |
 
-Client-side keys reachable today: **240 of 564** (42%); with a form (full or partial): **140** (24%).
+Client-side keys reachable today: **243 of 564** (43%); with a form (full or partial): **143** (25%).
 
 ## Client-side keys
 
@@ -425,12 +425,12 @@ Status: full = a form or setting writes it (and links carry it where they have a
 | `outbounds[].streamSettings.sockopt.happyEyeballs.tryDelayMs` | <=26.3.27 | unsupported |  |  |  | dialerProxy (chaining) is only respected when present (coreopts.apply_fragment skips it), never written |
 | `outbounds[].streamSettings.sockopt.mark` | <=26.3.27 | unsupported |  |  |  | dialerProxy (chaining) is only respected when present (coreopts.apply_fragment skips it), never written |
 | `outbounds[].streamSettings.sockopt.penetrate` | <=26.3.27 | unsupported |  |  |  | dialerProxy (chaining) is only respected when present (coreopts.apply_fragment skips it), never written |
-| `outbounds[].streamSettings.sockopt.tcpCongestion` | <=26.3.27 | unsupported |  |  |  | dialerProxy (chaining) is only respected when present (coreopts.apply_fragment skips it), never written |
-| `outbounds[].streamSettings.sockopt.tcpFastOpen` | <=26.3.27 | unsupported |  |  |  | dialerProxy (chaining) is only respected when present (coreopts.apply_fragment skips it), never written |
+| `outbounds[].streamSettings.sockopt.tcpCongestion` | <=26.3.27 | full | no |  | xrayui/core/coreopts.py, xrayui/core/settings.py | global setting (settings.core.sockopt), proxy outbound only; tcpCongestion only if the kernel lists it (coreopts.available_tcp_congestion) |
+| `outbounds[].streamSettings.sockopt.tcpFastOpen` | <=26.3.27 | full | no |  | xrayui/core/coreopts.py, xrayui/core/settings.py | global setting (settings.core.sockopt), proxy outbound only; tcpCongestion only if the kernel lists it (coreopts.available_tcp_congestion) |
 | `outbounds[].streamSettings.sockopt.tcpKeepAliveIdle` | <=26.3.27 | unsupported |  |  |  | dialerProxy (chaining) is only respected when present (coreopts.apply_fragment skips it), never written |
 | `outbounds[].streamSettings.sockopt.tcpKeepAliveInterval` | <=26.3.27 | unsupported |  |  |  | dialerProxy (chaining) is only respected when present (coreopts.apply_fragment skips it), never written |
 | `outbounds[].streamSettings.sockopt.tcpMaxSeg` | <=26.3.27 | unsupported |  |  |  | dialerProxy (chaining) is only respected when present (coreopts.apply_fragment skips it), never written |
-| `outbounds[].streamSettings.sockopt.tcpMptcp` | <=26.3.27 | unsupported |  |  |  | dialerProxy (chaining) is only respected when present (coreopts.apply_fragment skips it), never written |
+| `outbounds[].streamSettings.sockopt.tcpMptcp` | <=26.3.27 | full | no |  | xrayui/core/coreopts.py, xrayui/core/settings.py | global setting (settings.core.sockopt), proxy outbound only; tcpCongestion only if the kernel lists it (coreopts.available_tcp_congestion) |
 | `outbounds[].streamSettings.sockopt.tcpUserTimeout` | <=26.3.27 | unsupported |  |  |  | dialerProxy (chaining) is only respected when present (coreopts.apply_fragment skips it), never written |
 | `outbounds[].streamSettings.sockopt.tcpWindowClamp` | <=26.3.27 | unsupported |  |  |  | dialerProxy (chaining) is only respected when present (coreopts.apply_fragment skips it), never written |
 | `outbounds[].streamSettings.splithttpSettings` | <=26.3.27 | alias | n/a |  | xrayui/core/outbounds/_common.py | splithttpSettings = old name of xhttpSettings; rawSettings = new name of tcpSettings |

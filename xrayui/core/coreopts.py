@@ -10,6 +10,7 @@ app follows.
 from __future__ import annotations
 
 import re
+import sys
 
 from .metrics import STATS_API_PORT
 from .profiles import Profile
@@ -125,6 +126,53 @@ def apply_mux(cfg: dict, core_cfg: dict, profile: Profile) -> None:
     proxy["mux"] = build_mux(mux_cfg)
 
 
+# -- TCP socket options -----------------------------------------------------
+_CONGESTION_FILE = "/proc/sys/net/ipv4/tcp_available_congestion_control"
+
+
+def available_tcp_congestion() -> list[str]:
+    """Congestion algorithms this kernel can use right now. Xray fails the
+    dial when setsockopt(TCP_CONGESTION) is refused, so an algorithm the
+    kernel lacks (bbr is often not loaded) would break every connection.
+    Empty off Linux, where Xray ignores the option."""
+    if not sys.platform.startswith("linux"):
+        return []
+    try:
+        with open(_CONGESTION_FILE, encoding="ascii") as f:
+            return f.read().split()
+    except OSError:
+        return []
+
+
+def sockopt_eligible(profile: Profile) -> bool:
+    # TCP options mean nothing to the UDP-based protocols.
+    return (profile.protocol or "").lower() not in ("hysteria2", "wireguard")
+
+
+def apply_sockopt(cfg: dict, core_cfg: dict, profile: Profile) -> None:
+    tuning = core_cfg.get("sockopt") or {}
+    if not sockopt_eligible(profile):
+        return
+    options: dict = {}
+    if tuning.get("tcp_fast_open") is True:
+        options["tcpFastOpen"] = True
+    if tuning.get("tcp_mptcp") is True:
+        options["tcpMptcp"] = True
+    congestion = str(tuning.get("tcp_congestion") or "").strip()
+    if congestion and congestion in available_tcp_congestion():
+        options["tcpCongestion"] = congestion
+    if not options:
+        return
+    proxy = next((o for o in cfg.get("outbounds", []) if o.get("tag") == "proxy"), None)
+    if proxy is None:
+        return
+    sockopt = proxy.setdefault("streamSettings", {}).setdefault("sockopt", {})
+    # A chained outbound doesn't open the socket itself.
+    if sockopt.get("dialerProxy"):
+        return
+    sockopt.update(options)
+
+
 # -- Sniffing ---------------------------------------------------------------
 def apply_sniffing(cfg: dict, core_cfg: dict) -> None:
     sniffing_cfg = core_cfg.get("sniffing") or {}
@@ -206,3 +254,4 @@ def apply_all(cfg: dict, core_cfg: dict, profile: Profile) -> None:
     apply_default_fp(cfg, core_cfg, profile)
     apply_fragment(cfg, core_cfg, profile)
     apply_mux(cfg, core_cfg, profile)
+    apply_sockopt(cfg, core_cfg, profile)

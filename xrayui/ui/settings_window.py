@@ -237,6 +237,7 @@ class _AntiFilterPage(QWidget):
         mux_cfg = core_cfg.get("mux") or {}
         self._frag_cfg = frag_cfg
         self._mux_cfg = mux_cfg
+        self._sockopt_cfg = core_cfg.get("sockopt") or {}
         self._build_ui()
 
     def _build_ui(self) -> None:
@@ -309,6 +310,28 @@ class _AntiFilterPage(QWidget):
         mux_group.add_row(tr("XUDP UDP443"), self.mux_xudp_udp443)
 
         layout.addWidget(mux_group)
+
+        # TCP tuning for the connection to the server
+        tcp_group = InsetGroup(self)
+        self.tcp_fast_open = Switch()
+        self.tcp_fast_open.setChecked(self._sockopt_cfg.get("tcp_fast_open") is True)
+        tcp_group.add_row(tr("TCP Fast Open"), self.tcp_fast_open,
+                          tr("Saves a round trip when opening connections."))
+        self.tcp_mptcp = Switch()
+        self.tcp_mptcp.setChecked(self._sockopt_cfg.get("tcp_mptcp") is True)
+        tcp_group.add_row(tr("Multipath TCP"), self.tcp_mptcp,
+                          tr("Falls back to normal TCP if the system can't use it."))
+        # Only algorithms this kernel has: an unavailable one fails every dial.
+        self.tcp_congestion = QComboBox()
+        self.tcp_congestion.addItem(tr("System default"), "")
+        for name in coreopts.available_tcp_congestion():
+            self.tcp_congestion.addItem(name, name)
+        index = self.tcp_congestion.findData(str(self._sockopt_cfg.get("tcp_congestion") or ""))
+        self.tcp_congestion.setCurrentIndex(max(index, 0))
+        # Windows and macOS ignore the setting, so don't offer it there.
+        if self.tcp_congestion.count() > 1:
+            tcp_group.add_row(tr("Congestion control"), self.tcp_congestion)
+        layout.addWidget(tcp_group)
         layout.addStretch(1)
 
     def collect(self) -> dict:
@@ -326,11 +349,17 @@ class _AntiFilterPage(QWidget):
                 "xudp_concurrency": self.mux_xudp_concurrency.value(),
                 "xudp_proxy_udp443": self.mux_xudp_udp443.currentText(),
             },
+            "sockopt": {
+                "tcp_fast_open": self.tcp_fast_open.isChecked(),
+                "tcp_mptcp": self.tcp_mptcp.isChecked(),
+                "tcp_congestion": self.tcp_congestion.currentData() or "",
+            },
         }
 
     def apply_to(self, target: dict) -> None:
         target["fragment"] = self.collect()["fragment"]
         target["mux"] = self.collect()["mux"]
+        target["sockopt"] = self.collect()["sockopt"]
 
 
 class _LocalProxyPage(QWidget):

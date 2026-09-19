@@ -563,3 +563,22 @@ def test_close_light_cancels_and_the_buttons_have_a_gap(qapp, defaults):
     finally:
         win.close()
 
+
+def test_settings_window_tcp_tuning_persists(qapp, defaults, monkeypatch):
+    monkeypatch.setattr(sw_mod.coreopts, "available_tcp_congestion", lambda: ["reno", "cubic"])
+    win = SettingsWindow(defaults)
+    page = win._pages["anti-filter"]
+    assert page.tcp_congestion.currentData() == ""  # system default
+    page.tcp_fast_open.setChecked(True)
+    page.tcp_mptcp.setChecked(True)
+    page.tcp_congestion.setCurrentIndex(page.tcp_congestion.findData("cubic"))
+    assert win.values()["core"]["sockopt"] == {
+        "tcp_fast_open": True, "tcp_mptcp": True, "tcp_congestion": "cubic"}
+
+
+def test_settings_window_hides_congestion_without_a_kernel_list(qapp, defaults, monkeypatch):
+    monkeypatch.setattr(sw_mod.coreopts, "available_tcp_congestion", lambda: [])
+    page = SettingsWindow(defaults)._pages["anti-filter"]
+    assert page.tcp_congestion.parent() is None or page.tcp_congestion.isHidden()
+    assert SettingsWindow(defaults).values()["core"]["sockopt"]["tcp_congestion"] == ""
+

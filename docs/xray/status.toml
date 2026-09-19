@@ -441,6 +441,15 @@ link = "n/a"
 note = "only `interface` (internal) is written"
 
 [[key]]
+match = ["outbounds[].streamSettings.sockopt.tcpFastOpen",
+         "outbounds[].streamSettings.sockopt.tcpMptcp",
+         "outbounds[].streamSettings.sockopt.tcpCongestion"]
+status = "full"
+files = ["xrayui/core/coreopts.py", "xrayui/core/settings.py"]
+link = "no"
+note = "global setting (settings.core.sockopt), proxy outbound only; tcpCongestion only if the kernel lists it (coreopts.available_tcp_congestion)"
+
+[[key]]
 match = ["outbounds[].streamSettings.sockopt.*"]
 status = "unsupported"
 note = "dialerProxy (chaining) is only respected when present (coreopts.apply_fragment skips it), never written"

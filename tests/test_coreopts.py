@@ -297,3 +297,65 @@ def test_default_fp_not_applied_to_wireguard():
     out = _render(p, core_cfg=_core(default_fp="chrome"))
     proxy = next(o for o in out["outbounds"] if o["tag"] == "proxy")
     assert "streamSettings" not in proxy  # wireguard has none at all
+
+
+# -- TCP socket options -------------------------------------------------------
+def _sockopt(out: dict) -> dict:
+    proxy = next(o for o in out["outbounds"] if o["tag"] == "proxy")
+    return proxy["streamSettings"]["sockopt"]
+
+
+def test_sockopt_off_by_default_renders_only_the_interface():
+    assert set(_sockopt(_render(core_cfg=_core()))) == {"interface"}
+
+
+def test_sockopt_fast_open_and_mptcp_are_added_next_to_the_interface():
+    out = _render(core_cfg=_core(sockopt={"tcp_fast_open": True, "tcp_mptcp": True,
+                                          "tcp_congestion": ""}))
+    sockopt = _sockopt(out)
+    assert sockopt["tcpFastOpen"] is True and sockopt["tcpMptcp"] is True
+    assert sockopt["interface"] == "lo"
+    for o in out["outbounds"]:
+        if o["tag"] != "proxy":  # direct and DNS traffic stay untouched
+            assert "tcpFastOpen" not in json.dumps(o)
+
+
+def test_sockopt_congestion_only_when_the_kernel_offers_it(monkeypatch):
+    monkeypatch.setattr(coreopts, "available_tcp_congestion", lambda: ["reno", "cubic"])
+    cfg = _core(sockopt={"tcp_fast_open": False, "tcp_mptcp": False,
+                         "tcp_congestion": "cubic"})
+    assert _sockopt(_render(core_cfg=cfg))["tcpCongestion"] == "cubic"
+    # bbr not loaded: Xray would fail every dial, so it is never written.
+    cfg["sockopt"]["tcp_congestion"] = "bbr"
+    assert "tcpCongestion" not in _sockopt(_render(core_cfg=cfg))
+
+
+def test_available_tcp_congestion_reads_the_kernel_list(tmp_path, monkeypatch):
+    listing = tmp_path / "cc"
+    listing.write_text("reno cubic bbr\n", encoding="ascii")
+    monkeypatch.setattr(coreopts, "_CONGESTION_FILE", str(listing))
+    monkeypatch.setattr(coreopts.sys, "platform", "linux")
+    assert coreopts.available_tcp_congestion() == ["reno", "cubic", "bbr"]
+    monkeypatch.setattr(coreopts, "_CONGESTION_FILE", str(tmp_path / "missing"))
+    assert coreopts.available_tcp_congestion() == []
+    monkeypatch.setattr(coreopts.sys, "platform", "win32")
+    assert coreopts.available_tcp_congestion() == []
+
+
+@pytest.mark.parametrize("protocol", ["wireguard", "hysteria2"])
+def test_sockopt_skips_udp_protocols(protocol):
+    p = _profile(protocol=protocol, pbk="3g3WHDGa8v18xcdb5DXWSm1p4wjM4Qzg93_VqhZC5Ck")
+    out = _render(p, core_cfg=_core(sockopt={"tcp_fast_open": True, "tcp_mptcp": True,
+                                             "tcp_congestion": ""}))
+    assert "tcpFastOpen" not in json.dumps(out)
+
+
+def test_sockopt_xray_test_accepts_it(tmp_path, monkeypatch):
+    _skip_if_no_binary()
+    monkeypatch.setattr(xraycheck.paths, "state_dir", lambda: tmp_path)
+    monkeypatch.setattr(coreopts, "available_tcp_congestion", lambda: ["reno"])
+    text = render.build_text(_profile(), "lo", TEMPLATE, include_tun=False,
+                             core_cfg=_core(sockopt={"tcp_fast_open": True, "tcp_mptcp": True,
+                                                     "tcp_congestion": "reno"}))
+    assert "tcpCongestion" in text
+    assert xraycheck.check_config(text) is None

@@ -553,4 +553,14 @@ TRANSLATIONS_FA: dict[str, str] = {
     "No servers yet. Import a link, or add a subscription.":
         "هنوز سروری نیست. یک لینک وارد کنید یا یک اشتراک اضافه کنید.",
     "No servers match the filter.": "هیچ سروری با این فیلتر پیدا نشد.",
+
+    # -- ui/a-shell: TCP tuning ---------------------------------------------
+    "TCP Fast Open": "TCP Fast Open",
+    "Saves a round trip when opening connections.":
+        "باز کردن اتصال‌ها را یک رفت‌وبرگشت سریع‌تر می‌کند.",
+    "Multipath TCP": "Multipath TCP",
+    "Falls back to normal TCP if the system can't use it.":
+        "اگر سیستم پشتیبانی نکند، از TCP معمولی استفاده می‌شود.",
+    "Congestion control": "کنترل ازدحام",
+    "System default": "پیش‌فرض سیستم",
 }

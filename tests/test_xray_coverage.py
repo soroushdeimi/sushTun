@@ -121,6 +121,7 @@ def test_sushtun_writes_no_key_the_bundled_core_ignores(keys):
     core["fragment"]["enabled"] = True
     core["mux"]["enabled"] = True
     core.update(allow_lan=True, lan_user="u", lan_pass="p", default_fp="chrome")
+    core["sockopt"] = {"tcp_fast_open": True, "tcp_mptcp": True, "tcp_congestion": "reno"}
     dns = json.loads(json.dumps(settings.DEFAULTS["dns"]))
     dns.update(domestic_servers=["1.1.1.1"], parallel_query=True, serve_stale=True,
                hosts=["a.example = 1.2.3.4"], remote_via_tunnel=True)

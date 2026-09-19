@@ -104,6 +104,9 @@ DEFAULTS: dict = {
         "lan_user": "",
         "lan_pass": "",
         "default_fp": "",
+        # TCP socket options for the proxy connection. All off: an untouched
+        # install renders exactly what it always has (see coreopts.apply_sockopt).
+        "sockopt": {"tcp_fast_open": False, "tcp_mptcp": False, "tcp_congestion": ""},
     },
     "startup": {
         "start_on_login": False,
