@@ -620,4 +620,19 @@ TRANSLATIONS_FA: dict[str, str] = {
     "Remove exit": "حذف خروجی",
     "Multi-exit port: {why}": "پورت چند خروجی: {why}",
     "(missing server)": "(سرور حذف شده)",
+
+    # -- ui/a-dialogs: port forwarding page ---------------------------------
+    "Port forwarding": "انتقال پورت",
+    "Each local port always reaches one fixed address, through the tunnel or directly.":
+        "هر پورت محلی همیشه به یک نشانی ثابت می‌رسد، از داخل تونل یا مستقیم.",
+    "Add forward": "افزودن انتقال",
+    "Newer Xray servers refuse private addresses such as the server's own 127.0.0.1, "
+    "so a forward to them will not connect.":
+        "سرورهای جدیدتر Xray نشانی‌های خصوصی مانند 127.0.0.1 خود سرور را نمی‌پذیرند، "
+        "پس انتقال به آن‌ها وصل نمی‌شود.",
+    "Local port": "پورت محلی",
+    "host:port": "host:port",
+    "Remove forward": "حذف انتقال",
+    "Port forwarding: {why}": "انتقال پورت: {why}",
+    "Through the tunnel": "از داخل تونل",
 }
