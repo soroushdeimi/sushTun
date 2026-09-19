@@ -78,7 +78,7 @@ def test_targets_must_be_host_and_port(target, ok):
     ({"port": 10808}, "already used by sushTun"),   # the local SOCKS port
     ({"port": 10085}, "already used by sushTun"),   # the stats API
     ({"via": "block"}, "through the tunnel or direct"),
-    ({"network": "icmp"}, "choose TCP, UDP or both"),
+    ({"network": "icmp"}, "TCP, UDP or both"),
 ])
 def test_a_bad_forward_is_dropped_alone_with_a_warning(over, reason):
     kept, warnings = forwards.prepare([{**SSH, **over}, DNS], _core(), None)
@@ -114,7 +114,7 @@ def test_a_busy_port_drops_only_that_forward(monkeypatch):
 def test_connection_logs_each_dropped_forward(monkeypatch):
     steps: list[str] = []
     conn = connection.Connection(on_step=steps.append)
-    kept = conn._forwards(cfgs={"forwards": [{**SSH, "via": "x"}, DNS], "core": _core()})
+    kept = conn._forwards({"forwards": [{**SSH, "via": "x"}, DNS], "core": _core()})
     assert [f.port for f in kept] == [5353]
     assert steps == ["WARNING: Port forward skipped: choose through the tunnel or direct."]
 
@@ -129,6 +129,16 @@ def test_each_forward_is_a_local_dokodemo_inbound():
                    "settings": {"address": "10.8.0.5", "port": 22, "network": "tcp"}}
     dns = next(i for i in out["inbounds"] if i["tag"] == "fwd-5353")
     assert dns["settings"]["network"] == "tcp,udp"
+
+
+def test_forward_rules_come_before_every_user_rule():
+    kept, _ = forwards.prepare([SSH, DNS], _core(), None)
+    rules = _render(kept)["routing"]["rules"]
+    fwd = [i for i, r in enumerate(rules) if str(r.get("inboundTag", [""])[0]).startswith("fwd-")]
+    first_user = next(i for i, r in enumerate(rules) if "inboundTag" not in r)
+    assert fwd and max(fwd) < first_user  # so Iran-direct can't override "through the tunnel"
+    assert rules[fwd[0]] == {"type": "field", "inboundTag": ["fwd-2222"], "outboundTag": "proxy"}
+    assert rules[fwd[1]] == {"type": "field", "inboundTag": ["fwd-5353"], "outboundTag": "direct"}
 
 
 def test_xray_test_accepts_the_forwards(tmp_path, monkeypatch):

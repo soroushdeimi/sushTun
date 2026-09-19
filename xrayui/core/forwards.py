@@ -58,6 +58,7 @@ def _is_ipv4(text: str) -> bool:
         ipaddress.IPv4Address(text)
     except ValueError:
         return False
+    return True
 
 
 def item_problem(item, taken: set[int]) -> str | None:
