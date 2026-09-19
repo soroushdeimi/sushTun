@@ -1,5 +1,46 @@
 # Changelog
 
+## v0.4.0
+
+Everything new here is optional and off until you turn it on. With all of it off,
+sushTun builds exactly the same Xray configuration as 0.3.3 (a test checks this).
+
+### New: one local port, several exit countries
+Settings → Multi-exit port gives you a single SOCKS port where the **username picks the
+server**: `socks5://de:PASSWORD@127.0.0.1:10809` leaves through the server you named
+"de", `nl` through another, while everything else keeps using the main tunnel. A chosen
+exit always wins over the routing rules, so an Iranian site opened through an exit still
+goes out of that country. UDP is refused on this port, because the username does not
+travel with UDP packets and the traffic would silently leave through the wrong server.
+
+### New: port forwarding
+Settings → Port forwarding maps a local port to one fixed address, through the tunnel or
+directly: reach a machine that only your server can see, or force one destination through
+the tunnel whatever the routing says. Each row can be switched off, and can optionally be
+shared with other devices on your network.
+
+### New: hotspot settings
+Settings → Hotspot now holds the network name, the password (with Show and a button to
+make a new one), WPA2 or WPA3, the band, a hidden network, and "keep devices apart".
+With the defaults the hotspot starts exactly as before. On Windows the page says that
+Windows Settings owns the hotspot.
+
+### New: anti-filter and connection options
+- **UDP noise** for Hysteria2 servers: a few random packets before the handshake.
+- **TCP Fast Open, Multipath TCP and the congestion algorithm** for the server
+  connection. Only algorithms your system really has are offered, because an unavailable
+  one makes every connection fail.
+- **Post-quantum server check for REALITY** (`pqv` in a share link).
+
+### Fixed
+- **xhttp servers that download over a second connection** sent that connection into
+  sushTun's own tunnel instead of out to the network. It is now bound like the main one.
+- **Changing these settings while connected** said nothing; the window now asks you to
+  reconnect, as it already did for MTU and the core options.
+- **A local port taken by another program** (a forward or the multi-exit port) stopped
+  Xray from starting at all, which took the whole tunnel down. sushTun now starts without
+  those ports and says which one was busy.
+
 ## v0.3.3
 
 ### Fixed: sushTun did not open from the app menu
