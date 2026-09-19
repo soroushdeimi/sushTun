@@ -1215,13 +1215,17 @@ def test_auto_refresh_subs_uses_is_due_and_skips_disabled(window, monkeypatch):
 
 
 # -- --autostart launch behavior (Phase 7a) ----------------------------------
-def test_starts_hidden_true_for_the_autostart_flag_or_start_minimized(defaults):
+def test_starts_hidden_only_for_a_login_launch_with_start_minimized(defaults):
     from xrayui.ui.app import starts_hidden
-    assert starts_hidden(True, defaults) is True
     settings = copy.deepcopy(defaults)
     settings["startup"]["start_minimized"] = True
-    assert starts_hidden(False, settings) is True
+    assert starts_hidden(True, settings) is True
+    # Opening it from the menu always shows the window.
+    assert starts_hidden(False, settings) is False
+    assert starts_hidden(True, defaults) is False
     assert starts_hidden(False, defaults) is False
+    # No tray icon means a hidden window could never be reached.
+    assert starts_hidden(True, settings, tray=False) is False
 
 
 def test_auto_connect_on_startup_skips_quietly_with_no_profile(window, monkeypatch):

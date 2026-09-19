@@ -5,7 +5,7 @@ from PySide6.QtWidgets import QApplication
 
 from .. import i18n, paths
 from ..core import settings as app_settings
-from . import theme
+from . import single_instance, theme
 from .icon import app_icon
 from .main_window import MainWindow
 
@@ -31,9 +31,14 @@ def load_bundled_fonts() -> list[str]:
     return families
 
 
-def starts_hidden(autostart: bool, settings: dict) -> bool:
-    """Whether the window should stay in the tray instead of showing at launch."""
-    return autostart or bool(settings.get("startup", {}).get("start_minimized"))
+def starts_hidden(autostart: bool, settings: dict, tray: bool = True) -> bool:
+    """Whether the window should stay in the tray instead of showing at launch.
+
+    Only a login launch hides, and only when asked to: opening the app from
+    the menu must always show a window, and without a tray icon a hidden
+    window could never be reached at all.
+    """
+    return autostart and tray and bool(settings.get("startup", {}).get("start_minimized"))
 
 
 def run(argv: list[str], elevated: bool = True, autostart: bool = False) -> int:
@@ -41,6 +46,10 @@ def run(argv: list[str], elevated: bool = True, autostart: bool = False) -> int:
     # picks up the right language and direction from the start.
     i18n.set_language(app_settings.load().get("language", "en"))
 
+    # Two launches racing through the elevation prompt both got past the
+    # check in __main__; the later one hands over here instead.
+    if single_instance.notify_running(show=not autostart):
+        return 0
     app = QApplication(argv)
     load_bundled_fonts()
     app.setApplicationName("sushTun")
@@ -54,10 +63,10 @@ def run(argv: list[str], elevated: bool = True, autostart: bool = False) -> int:
         app.setStyleSheet(theme.STYLESHEET)
     app.setWindowIcon(app_icon())
     window = MainWindow(elevated=elevated, autostart=autostart)
-    # A login-triggered launch stays out of the way in the tray if either the
-    # --autostart flag itself or the "start minimized" setting asks for it.
-    if not starts_hidden(autostart, window.settings):
+    if not starts_hidden(autostart, window.settings, tray=window.tray is not None):
         window.show()
+    instance = single_instance.InstanceServer(parent=app)
+    instance.show_requested.connect(window._show_window)
 
     def restore_on_quit(*_args) -> None:
         try:

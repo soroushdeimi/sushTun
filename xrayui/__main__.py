@@ -15,11 +15,17 @@ def main() -> int:
     argv = sys.argv
     if is_restore_argv(argv):
         return _restore_stale_main()
+    autostart = "--autostart" in argv
+    # Checked before elevating, so a second launch neither asks for the
+    # password again nor starts a copy that would fight over the tunnel.
+    from xrayui.ui.single_instance import notify_running
+    if notify_running(show=not autostart):
+        return 0
     if not elevate.is_admin() and elevate.relaunch_as_admin():
         return 0  # elevated instance takes over
     paths.ensure_dirs()
     from xrayui.ui.app import run
-    return run(argv, elevated=elevate.is_admin(), autostart="--autostart" in argv)
+    return run(argv, elevated=elevate.is_admin(), autostart=autostart)
 
 
 def _restore_stale_main() -> int:
