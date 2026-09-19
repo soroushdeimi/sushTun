@@ -68,6 +68,12 @@ DEFAULTS: dict = {
         # phone that joined once rejoins on its own.
         "ssid": "sushTun",
         "password": "",
+        # Linux hotspot options (Settings → Hotspot). These defaults start the
+        # hotspot exactly as before: WPA2-AES, the uplink's band, visible.
+        "security": "wpa2",
+        "band": "auto",
+        "hidden": False,
+        "isolation": False,
     },
     "alerts": {
         "data_percent": 10,

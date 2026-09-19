@@ -292,8 +292,21 @@ def _linux_running() -> bool:
     return AP_CON in out.splitlines()
 
 
-def start_linux(ssid: str, password: str) -> str:
-    """Bring up a NetworkManager hotspot. Returns the interface it runs on."""
+SECURITY_CHOICES = ("wpa2", "wpa3")
+BAND_CHOICES = ("auto", "bg", "a")
+
+
+def start_linux(ssid: str, password: str, *, security: str = "wpa2", band_choice: str = "auto",
+                hidden: bool = False, isolation: bool = False) -> str:
+    """Bring up a NetworkManager hotspot. Returns the interface it runs on.
+
+    The keyword options come from Settings → Hotspot; their defaults give the
+    same hotspot as before they existed. An unknown value falls back to its
+    default rather than failing."""
+    if security not in SECURITY_CHOICES:
+        security = "wpa2"
+    if band_choice not in BAND_CHOICES:
+        band_choice = "auto"
     devices = _wifi_devices()
     if not devices:
         raise RuntimeError("no Wi-Fi adapter found")
@@ -330,11 +343,24 @@ def start_linux(ssid: str, password: str) -> str:
            # WPA2 with AES only. Left to NetworkManager's defaults the hotspot
            # also offered WPA1 and the TKIP cipher, and phones labelled it
            # "weak security".
-           "wifi-sec.key-mgmt", "wpa-psk", "wifi-sec.proto", "rsn",
+           "wifi-sec.key-mgmt", "sae" if security == "wpa3" else "wpa-psk",
+           "wifi-sec.proto", "rsn",
            "wifi-sec.pairwise", "ccmp", "wifi-sec.group", "ccmp",
            "wifi-sec.psk", password]
+    if security == "wpa3":
+        # WPA3 requires protected management frames. Whether the card can run
+        # SAE as an access point is only known when NetworkManager tries.
+        add += ["wifi-sec.pmf", "required"]
     if band:
+        # One radio: the hotspot must stay on the uplink's own channel, so the
+        # band setting only applies when the computer isn't on Wi-Fi.
         add += ["802-11-wireless.band", band, "802-11-wireless.channel", str(channel)]
+    elif band_choice != "auto":
+        add += ["802-11-wireless.band", band_choice]
+    if hidden:
+        add += ["802-11-wireless.hidden", "yes"]
+    if isolation:
+        add += ["802-11-wireless.ap-isolation", "1"]
     if proc.run(add).returncode != 0:
         stop_linux()
         raise RuntimeError("NetworkManager refused the hotspot profile")

@@ -259,7 +259,8 @@ def test_linux_connect_starts_the_hotspot_and_says_how_to_join(monkeypatch, tmp_
     app_settings.save(settings)
     monkeypatch.setattr(connection, "IS_WIN", False)
     monkeypatch.setattr(connection.hotspot, "supported", lambda: True)
-    monkeypatch.setattr(connection.hotspot, "start_linux", lambda ssid, pw: hotspot.AP_IFACE)
+    monkeypatch.setattr(connection.hotspot, "start_linux",
+                        lambda ssid, pw, **kw: hotspot.AP_IFACE)
 
     steps = []
     conn = connection.Connection(on_step=steps.append)
@@ -346,7 +347,7 @@ def test_start_gateway_refuses_before_connecting(monkeypatch, tmp_path):
     started = []
     monkeypatch.setattr(conn.state, "is_connected", lambda: False)
     monkeypatch.setattr("xrayui.core.connection.hotspot.start_linux",
-                        lambda ssid, pw: started.append(ssid))
+                        lambda ssid, pw, **kw: started.append(ssid))
     with pytest.raises(RuntimeError, match="connect first"):
         conn.start_gateway()
     assert started == []
@@ -356,11 +357,11 @@ def test_start_gateway_shares_an_existing_connection_and_reports_failure(monkeyp
     conn = _gateway_conn(monkeypatch, tmp_path)
     monkeypatch.setattr(conn.state, "is_connected", lambda: True)
     monkeypatch.setattr("xrayui.core.connection.hotspot.start_linux",
-                        lambda ssid, pw: hotspot.AP_IFACE)
+                        lambda ssid, pw, **kw: hotspot.AP_IFACE)
     conn.start_gateway()
     assert conn.state.gateway_on()
 
-    def refuse(ssid, pw):
+    def refuse(ssid, pw, **kw):
         raise RuntimeError("hotspot did not start")
 
     monkeypatch.setattr("xrayui.core.connection.hotspot.start_linux", refuse)
@@ -376,5 +377,73 @@ def test_hotspot_offers_wpa2_with_aes_only(monkeypatch):
     assert profile[profile.index("wifi-sec.proto") + 1] == "rsn"
     assert profile[profile.index("wifi-sec.pairwise") + 1] == "ccmp"
     assert profile[profile.index("wifi-sec.group") + 1] == "ccmp"
+
+
+# -- Settings → Hotspot options ---------------------------------------------------
+# Today's exact command for an idle card. The options below must leave it alone
+# while they are at their defaults.
+_TODAY = ["nmcli", "connection", "add", "type", "wifi", "ifname", "wlp2s0",
+          "con-name", "sushTun Hotspot", "autoconnect", "no", "ssid", "sushTun",
+          "802-11-wireless.mode", "ap", "ipv4.method", "shared", "ipv6.method", "disabled",
+          "wifi-sec.key-mgmt", "wpa-psk", "wifi-sec.proto", "rsn",
+          "wifi-sec.pairwise", "ccmp", "wifi-sec.group", "ccmp", "wifi-sec.psk", "secretpass"]
+
+
+def test_default_options_give_exactly_todays_hotspot(monkeypatch):
+    ran, _vif = _linux(monkeypatch, wifi_state="disconnected")
+    hotspot.start_linux("sushTun", "secretpass")
+    assert _profile(ran) == _TODAY
+
+
+def test_unknown_option_values_fall_back_to_todays_hotspot(monkeypatch):
+    ran, _vif = _linux(monkeypatch, wifi_state="disconnected")
+    hotspot.start_linux("sushTun", "secretpass", security="wep", band_choice="60GHz")
+    assert _profile(ran) == _TODAY
+
+
+def test_wpa3_uses_sae_with_required_management_frame_protection(monkeypatch):
+    ran, _vif = _linux(monkeypatch, wifi_state="disconnected")
+    hotspot.start_linux("sushTun", "secretpass", security="wpa3")
+    profile = _profile(ran)
+    assert profile[profile.index("wifi-sec.key-mgmt") + 1] == "sae"
+    assert profile[profile.index("wifi-sec.pmf") + 1] == "required"
+
+
+def test_hidden_and_isolation_are_added_only_when_asked(monkeypatch):
+    ran, _vif = _linux(monkeypatch, wifi_state="disconnected")
+    hotspot.start_linux("sushTun", "secretpass", hidden=True, isolation=True)
+    profile = _profile(ran)
+    assert profile[profile.index("802-11-wireless.hidden") + 1] == "yes"
+    assert profile[profile.index("802-11-wireless.ap-isolation") + 1] == "1"
+
+
+def test_band_choice_applies_on_an_idle_card(monkeypatch):
+    ran, _vif = _linux(monkeypatch, wifi_state="disconnected")
+    hotspot.start_linux("sushTun", "secretpass", band_choice="a")
+    profile = _profile(ran)
+    assert profile[profile.index("802-11-wireless.band") + 1] == "a"
+    assert "802-11-wireless.channel" not in profile  # NetworkManager picks it
+
+
+def test_band_choice_yields_to_the_uplink_on_a_shared_radio(monkeypatch):
+    ran, _vif = _linux(monkeypatch)  # connected on 2.4 GHz channel 6
+    hotspot.start_linux("sushTun", "secretpass", band_choice="a")
+    profile = _profile(ran)
+    assert profile[profile.index("802-11-wireless.band") + 1] == "bg"
+    assert profile.count("802-11-wireless.band") == 1
+
+
+def test_start_gateway_passes_the_hotspot_options(monkeypatch, tmp_path):
+    from xrayui.core import settings as app_settings
+    conn = _gateway_conn(monkeypatch, tmp_path)
+    settings = app_settings.load()
+    settings["gateway"].update(security="wpa3", band="a", hidden=True, isolation=True)
+    app_settings.save(settings)
+    monkeypatch.setattr(conn.state, "is_connected", lambda: True)
+    seen = {}
+    monkeypatch.setattr("xrayui.core.connection.hotspot.start_linux",
+                        lambda ssid, pw, **kw: (seen.update(kw), hotspot.AP_IFACE)[1])
+    conn.start_gateway()
+    assert seen == {"security": "wpa3", "band_choice": "a", "hidden": True, "isolation": True}
 
 
