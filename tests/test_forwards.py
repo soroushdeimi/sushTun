@@ -151,3 +151,61 @@ def test_xray_test_accepts_the_forwards(tmp_path, monkeypatch):
                              include_tun=False, core_cfg=_core(), forwards=kept)
     assert '"tag": "fwd-2222"' in text and '"tag": "fwd-8443"' in text
     assert xraycheck.check_config(text) is None
+
+
+# -- a port taken after the check must not take the tunnel down ------------------------
+class _FakeXray:
+    """Dies on the first start (port taken), runs on the second."""
+
+    def __init__(self, deaths=1):
+        self.starts: list = []
+        self._deaths = deaths
+        self._alive = False
+
+    def start(self, cfg):
+        self.starts.append(cfg)
+        self._alive = len(self.starts) > self._deaths
+
+    def is_running(self):
+        return self._alive
+
+
+def _conn_with(monkeypatch, tmp_path, xray, last_line):
+    monkeypatch.setattr(connection, "_last_log_line", lambda: last_line)
+    monkeypatch.setattr(connection.time, "sleep", lambda _s: None)
+    conn = connection.Connection(on_step=lambda _m: None)
+    conn.xray = xray
+    return conn
+
+
+def test_a_port_taken_after_the_check_starts_without_the_extras(monkeypatch, tmp_path):
+    xray = _FakeXray()
+    conn = _conn_with(monkeypatch, tmp_path, xray,
+                      "failed to listen TCP on 2222 > bind: address already in use")
+    built: list = []
+
+    def build(exits, forwards):
+        built.append((exits, forwards))
+        return f"cfg-{len(built)}"
+
+    kept, _ = forwards.prepare([SSH], _core(), None)
+    conn._retry_without_extras(build, [], kept)
+    assert built == [([], [])]          # rebuilt without the optional inbounds
+    assert xray.starts == ["cfg-1"]     # and started again
+
+
+def test_another_startup_failure_is_left_to_the_caller(monkeypatch, tmp_path):
+    xray = _FakeXray()
+    conn = _conn_with(monkeypatch, tmp_path, xray, "failed to parse config: bad json")
+    kept, _ = forwards.prepare([SSH], _core(), None)
+    conn._retry_without_extras(lambda e, f: "cfg", [], kept)
+    assert xray.starts == []            # no second try: this is a real failure
+
+
+def test_a_healthy_start_is_not_touched(monkeypatch, tmp_path):
+    xray = _FakeXray(deaths=0)
+    xray.start("cfg-0")
+    conn = _conn_with(monkeypatch, tmp_path, xray, "")
+    kept, _ = forwards.prepare([SSH], _core(), None)
+    conn._retry_without_extras(lambda e, f: "cfg", [], kept)
+    assert xray.starts == ["cfg-0"]

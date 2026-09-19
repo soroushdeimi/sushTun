@@ -133,6 +133,27 @@ class Connection:
             self._log(f"WARNING: {warning}")
         return exits
 
+    def _retry_without_extras(self, build, exits, forwards) -> None:
+        """Start again without the multi-exit port and the port forwards when
+        one of their ports turned out to be taken.
+
+        Their ports are checked before connecting, but another program can take
+        one in between, and Xray then refuses to start -- which would take the
+        whole tunnel down for an optional feature.
+        """
+        if not exits and not forwards:
+            return
+        deadline = time.time() + 1.5
+        while time.time() < deadline:
+            if not self.xray.is_running():
+                if "address already in use" not in _last_log_line().lower():
+                    return  # a different startup failure: leave it to the caller
+                self._log("WARNING: a port of the multi-exit port or of a port forward is "
+                          "in use; starting without them.")
+                self.xray.start(build([], []))
+                return
+            time.sleep(0.1)
+
     def _forwards(self, cfgs: dict) -> list[forwards_mod.Forward]:
         # Each bad or busy forward is dropped on its own, with a warning.
         forwards, warnings = forwards_mod.prepare(cfgs.get("forwards"), cfgs.get("core"),
@@ -153,13 +174,19 @@ class Connection:
         self._log("Building runtime config...")
         cfgs = app_settings.load()
         rules = routing.build_rules(cfgs["routing"])
-        cfg = render.build(profile, iface.alias, routing_rules=rules,
-                           domain_strategy=routing.domain_strategy_for(cfgs["routing"]),
-                           stats=True, log_level=cfgs.get("log_level"),
-                           dns_cfg=cfgs.get("dns"), tun_mtu=cfgs.get("tun_mtu"),
-                           server_ip=server_ip, core_cfg=cfgs.get("core"),
-                           exits=self._exits(cfgs), exits_cfg=cfgs.get("exits"),
-                           forwards=self._forwards(cfgs))
+        exits = self._exits(cfgs)
+        forwards = self._forwards(cfgs)
+
+        def build(exits, forwards):
+            return render.build(profile, iface.alias, routing_rules=rules,
+                                domain_strategy=routing.domain_strategy_for(cfgs["routing"]),
+                                stats=True, log_level=cfgs.get("log_level"),
+                                dns_cfg=cfgs.get("dns"), tun_mtu=cfgs.get("tun_mtu"),
+                                server_ip=server_ip, core_cfg=cfgs.get("core"),
+                                exits=exits, exits_cfg=cfgs.get("exits"),
+                                forwards=forwards)
+
+        cfg = build(exits, forwards)
         self._log_lan_share(cfgs.get("core") or {}, iface)
 
         self._log("Starting Xray...")
@@ -168,6 +195,7 @@ class Connection:
         # until this exists that dial races the default route out of the box.
         network.add_host_route(server_ip, iface.gateway)
         self.xray.start(cfg)
+        self._retry_without_extras(build, exits, forwards)
 
         self._log("Waiting for TUN adapter...")
         tun = network.wait_for_tun(alive=self.xray.is_running)
@@ -254,12 +282,18 @@ class Connection:
         cfgs = app_settings.load()
         rules = routing.build_rules(cfgs["routing"])
         core_cfg = cfgs.get("core") or {}
-        cfg = render.build(profile, iface.alias, routing_rules=rules,
-                            domain_strategy=routing.domain_strategy_for(cfgs["routing"]),
-                            stats=True, include_tun=False, log_level=cfgs.get("log_level"),
-                            dns_cfg=cfgs.get("dns"), server_ip=server_ip, core_cfg=core_cfg,
-                            exits=self._exits(cfgs), exits_cfg=cfgs.get("exits"),
-                            forwards=self._forwards(cfgs))
+        exits = self._exits(cfgs)
+        forwards = self._forwards(cfgs)
+
+        def build(exits, forwards):
+            return render.build(profile, iface.alias, routing_rules=rules,
+                                domain_strategy=routing.domain_strategy_for(cfgs["routing"]),
+                                stats=True, include_tun=False, log_level=cfgs.get("log_level"),
+                                dns_cfg=cfgs.get("dns"), server_ip=server_ip,
+                                core_cfg=core_cfg, exits=exits,
+                                exits_cfg=cfgs.get("exits"), forwards=forwards)
+
+        cfg = build(exits, forwards)
         self._log_lan_share(core_cfg, iface)
         # Same validation render already applied to socks-in inside cfg, so
         # the port this process waits on and bridges from is the one Xray
@@ -270,6 +304,7 @@ class Connection:
         network.remove_routes(server_ip)
         network.add_host_route(server_ip, iface.gateway)
         self.xray.start(cfg)
+        self._retry_without_extras(build, exits, forwards)
         if not _wait_port(SOCKS_HOST, socks_port):
             self._fail_connect(server_ip, "Xray SOCKS inbound did not come up")
 
