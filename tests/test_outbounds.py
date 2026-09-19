@@ -400,3 +400,36 @@ def test_xray_test_accepts_a_reality_pqv(tmp_path, monkeypatch):
     text = render.build_text(_reality(pqv=_pqv_key()), "lo", TEMPLATE, include_tun=False)
     assert "mldsa65Verify" in text
     assert xraycheck.check_config(text) is None
+
+
+_DOWNLOAD = {"address": "cdn.example.com", "port": 443, "network": "xhttp",
+             "security": "tls", "tlsSettings": {"serverName": "cdn.example.com"},
+             "xhttpSettings": {"path": "/down"}}
+
+
+def _xhttp_split(**download) -> Profile:
+    extra = {"downloadSettings": {**_DOWNLOAD, **download}}
+    return Profile(protocol="vless", address="a.com", port=443, id="u", network="xhttp",
+                   security="tls", sni="a.com", path="/up", xhttp_extra=json.dumps(extra))
+
+
+def test_xhttp_download_settings_are_bound_to_the_physical_interface():
+    out = json.loads(render.build_text(_xhttp_split(), "eth0", TEMPLATE, include_tun=False))
+    proxy = next(o for o in out["outbounds"] if o["tag"] == "proxy")
+    download = proxy["streamSettings"]["xhttpSettings"]["extra"]["downloadSettings"]
+    assert download["sockopt"]["interface"] == "eth0"
+    assert download["address"] == "cdn.example.com"  # the rest is untouched
+
+
+def test_xhttp_download_keeps_a_user_chosen_sockopt():
+    p = _xhttp_split(sockopt={"interface": "wg0", "tcpFastOpen": True})
+    download = outbounds.build(p, "proxy")["streamSettings"]["xhttpSettings"]["extra"][
+        "downloadSettings"]
+    assert download["sockopt"] == {"interface": "wg0", "tcpFastOpen": True}
+
+
+def test_xray_test_accepts_a_bound_xhttp_download(tmp_path, monkeypatch):
+    _skip_if_no_binary()
+    monkeypatch.setattr(xraycheck.paths, "state_dir", lambda: tmp_path)
+    text = render.build_text(_xhttp_split(), "lo", TEMPLATE, include_tun=False)
+    assert xraycheck.check_config(text) is None

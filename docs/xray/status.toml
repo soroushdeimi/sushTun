@@ -342,7 +342,7 @@ status = "full"
 files = ["xrayui/core/outbounds/_common.py", "xrayui/core/importer.py", "xrayui/core/share.py"]
 link = "yes"
 sub = "= link"
-note = "extra is free JSON (Profile.xhttp_extra); a typo there is dropped silently (_common._parse_extra)"
+note = "extra is free JSON (Profile.xhttp_extra); a typo there is dropped silently (_common._parse_extra); extra.downloadSettings gets the physical interface like the main connection"
 
 [[key]]
 match = ["outbounds[].streamSettings.xhttpSettings.downloadSettings",

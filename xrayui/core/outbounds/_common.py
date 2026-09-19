@@ -86,6 +86,15 @@ def stream_settings(p: Profile) -> dict:
         if p.xhttp_mode:
             xhttp["mode"] = p.xhttp_mode
         extra = _parse_extra(p.xhttp_extra)
+        download = extra.get("downloadSettings")
+        if isinstance(download, dict):
+            # Xray dials the download half with its own sockopt only
+            # (splithttp/dialer.go, 26.3.27); unbound, it would route into
+            # our own TUN and loop.
+            sockopt = download.get("sockopt")
+            if not isinstance(sockopt, dict):
+                sockopt = download["sockopt"] = {}
+            sockopt.setdefault("interface", _PLACEHOLDER)
         if extra:
             xhttp["extra"] = extra
         stream["xhttpSettings"] = xhttp
