@@ -27,3 +27,15 @@ def test_list_skips_a_json_file_that_is_not_an_object(tmp_path, monkeypatch):
     got = store.list()
 
     assert [p.uid for p in got] == [kept.uid]
+
+
+def test_valid_pqv_accepts_only_an_unpadded_base64url_ml_dsa_65_key():
+    import base64
+    key = base64.urlsafe_b64encode(bytes(range(256)) * 7 + bytes(160)).rstrip(b"=").decode()
+    assert len(key) == 2603
+    assert profiles_mod.valid_pqv(key)
+    assert profiles_mod.valid_pqv(f"  {key}\n")
+    assert not profiles_mod.valid_pqv("")
+    assert not profiles_mod.valid_pqv(key[:-1])  # one byte short
+    assert not profiles_mod.valid_pqv(key + "=")  # padded
+    assert not profiles_mod.valid_pqv(key[:-1] + "+")  # standard, not url alphabet

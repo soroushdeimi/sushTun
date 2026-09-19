@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import json
 
-from ..profiles import Profile, normalize_pcs, valid_pcs
+from ..profiles import Profile, normalize_pcs, valid_pcs, valid_pqv
 
 _PLACEHOLDER = "__IFACE__"
 
@@ -57,6 +57,8 @@ def stream_settings(p: Profile) -> dict:
                          ("publicKey", p.pbk), ("shortId", p.sid), ("spiderX", p.spx)):
             if val:
                 reality[key] = val
+        if valid_pqv(p.pqv):
+            reality["mldsa65Verify"] = p.pqv.strip()
         stream["realitySettings"] = reality
 
     if p.network == "ws":

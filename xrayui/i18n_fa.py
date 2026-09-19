@@ -553,4 +553,12 @@ TRANSLATIONS_FA: dict[str, str] = {
     "No servers yet. Import a link, or add a subscription.":
         "هنوز سروری نیست. یک لینک وارد کنید یا یک اشتراک اضافه کنید.",
     "No servers match the filter.": "هیچ سروری با این فیلتر پیدا نشد.",
+
+    # -- ui/a-dialogs: REALITY post-quantum verify --------------------------
+    "Reality ML-DSA-65 verify": "تأیید ML-DSA-65 در Reality",
+    "Invalid ML-DSA-65 key": "کلید ML-DSA-65 نامعتبر است",
+    "The ML-DSA-65 verify key must be the server's public key: unpadded base64url, "
+    "2603 characters.":
+        "کلید تأیید ML-DSA-65 باید کلید عمومی سرور باشد: base64url بدون padding، "
+        "۲۶۰۳ کاراکتر.",
 }
