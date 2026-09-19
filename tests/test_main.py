@@ -36,6 +36,7 @@ def test_main_without_the_flag_does_not_set_autostart(monkeypatch):
     assert main_mod.main() == 0
     assert captured["autostart"] is False
 
+
 def test_a_second_launch_hands_over_before_asking_for_the_password(monkeypatch):
     captured = _stub_common(monkeypatch, ["sushtun"])
     knocks, elevations = [], []

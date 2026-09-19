@@ -1,4 +1,4 @@
-"""One sushTun per machine: a second launch shows the running window instead of starting another copy.
+"""One sushTun per machine: a second launch shows the running window and exits.
 
 Two copies share one state directory, one TUN and one resolver, so a second
 copy that quits runs the first one's teardown and cuts its tunnel. Each extra
@@ -10,7 +10,7 @@ from PySide6.QtCore import QObject, Signal
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 
 # One fixed name for every user: the elevated copy (root) listens and the
-# user's own unelevated launch knocks, and there is only one tunnel to own anyway.
+# user's unelevated launch knocks, and there is only one tunnel to own anyway.
 NAME = "sushtun-single-instance"
 _SHOW = b"show\n"
 
@@ -30,6 +30,8 @@ def notify_running(show: bool = True, name: str = NAME) -> bool:
 
 
 class InstanceServer(QObject):
+    """Listens for later launches and emits show_requested for each one."""
+
     show_requested = Signal()
 
     def __init__(self, name: str = NAME, parent: QObject | None = None) -> None:
