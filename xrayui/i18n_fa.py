@@ -564,6 +564,13 @@ TRANSLATIONS_FA: dict[str, str] = {
     "Congestion control": "کنترل ازدحام",
     "System default": "پیش‌فرض سیستم",
 
+    # -- ui/a-shell: UDP noise ----------------------------------------------
+    "UDP noise": "نویز UDP",
+    "Sends a few random packets before connecting. Hysteria2 servers only.":
+        "پیش از اتصال چند بسته‌ی تصادفی می‌فرستد. فقط برای سرورهای Hysteria2.",
+    "Packet size": "اندازه‌ی بسته",
+    "Delay (ms)": "تأخیر (ms)",
+
     # -- ui/a-dialogs: REALITY post-quantum verify --------------------------
     "Reality ML-DSA-65 verify": "تأیید ML-DSA-65 در Reality",
     "Invalid ML-DSA-65 key": "کلید ML-DSA-65 نامعتبر است",

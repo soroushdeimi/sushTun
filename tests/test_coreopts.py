@@ -359,3 +359,71 @@ def test_sockopt_xray_test_accepts_it(tmp_path, monkeypatch):
                                                      "tcp_congestion": "reno"}))
     assert "tcpCongestion" in text
     assert xraycheck.check_config(text) is None
+
+
+# -- UDP noise ------------------------------------------------------------------
+def _hy2(**over) -> Profile:
+    base = dict(protocol="hysteria2", address="a.example.com", port=443, id="hy2-auth",
+                sni="a.example.com")
+    base.update(over)
+    return Profile(**base)
+
+
+def _udp_masks(out: dict) -> list:
+    proxy = next(o for o in out["outbounds"] if o["tag"] == "proxy")
+    return proxy["streamSettings"]["finalmask"].get("udp", [])
+
+
+_NOISE_ON = {"enabled": True, "length": "10-20", "delay": "10-16"}
+
+
+def test_udp_noise_off_by_default():
+    assert _udp_masks(_render(_hy2(), core_cfg=_core())) == []
+
+
+def test_udp_noise_shape_for_hysteria2():
+    assert _udp_masks(_render(_hy2(), core_cfg=_core(udp_noise=_NOISE_ON))) == [
+        {"type": "noise", "settings": {"noise": [{"rand": "10-20", "delay": "10-16"}]}},
+    ]
+
+
+def test_udp_noise_goes_before_salamander():
+    masks = _udp_masks(_render(_hy2(hy2_obfs_password="obfs"),
+                               core_cfg=_core(udp_noise=_NOISE_ON)))
+    assert [m["type"] for m in masks] == ["noise", "salamander"]
+
+
+@pytest.mark.parametrize("protocol", ["vless", "wireguard"])
+def test_udp_noise_only_for_hysteria2(protocol):
+    p = _profile(protocol=protocol, pbk="3g3WHDGa8v18xcdb5DXWSm1p4wjM4Qzg93_VqhZC5Ck")
+    out = _render(p, core_cfg=_core(udp_noise=_NOISE_ON))
+    assert '"noise"' not in json.dumps(out)
+
+
+@pytest.mark.parametrize("field,bad,expected", [
+    ("length", "0", "10-20"),        # an empty junk packet
+    ("length", "10-5000", "10-20"),  # bigger than the MTU
+    ("length", "abc", "10-20"),
+    ("delay", "5-2000", "10-16"),
+    ("delay", "", "10-16"),
+])
+def test_udp_noise_invalid_fields_fall_back_to_defaults(field, bad, expected):
+    item = coreopts.build_udp_noise_mask({field: bad})["settings"]["noise"][0]
+    assert item["rand" if field == "length" else "delay"] == expected
+
+
+def test_udp_noise_applied_in_build_test_config():
+    from xrayui.core import speedtest
+    p = _hy2()
+    cfg = speedtest.build_test_config([p], [11701], "lo", core_cfg=_core(udp_noise=_NOISE_ON))
+    outbound = next(o for o in cfg["outbounds"] if o["tag"] == f"out-{p.uid}")
+    assert outbound["streamSettings"]["finalmask"]["udp"][0]["type"] == "noise"
+
+
+def test_udp_noise_xray_test_accepts_it(tmp_path, monkeypatch):
+    _skip_if_no_binary()
+    monkeypatch.setattr(xraycheck.paths, "state_dir", lambda: tmp_path)
+    text = render.build_text(_hy2(hy2_obfs_password="obfs"), "lo", TEMPLATE, include_tun=False,
+                             core_cfg=_core(udp_noise=_NOISE_ON))
+    assert '"noise"' in text
+    assert xraycheck.check_config(text) is None

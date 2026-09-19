@@ -480,6 +480,15 @@ sub = "= link"
 note = "Hysteria2 obfs=salamander only"
 
 [[key]]
+match = ["outbounds[].streamSettings.finalmask.udp[].settings{type=noise}.noise",
+         "outbounds[].streamSettings.finalmask.udp[].settings{type=noise}.noise[].rand",
+         "outbounds[].streamSettings.finalmask.udp[].settings{type=noise}.noise[].delay"]
+status = "partial"
+files = ["xrayui/core/coreopts.py", "xrayui/core/settings.py"]
+link = "no"
+note = "global setting (settings.core.udp_noise), Hysteria2 only: 26.3.27's WireGuard client never applies UDP masks. Effectiveness against filtering unmeasured"
+
+[[key]]
 match = ["outbounds[].streamSettings.finalmask.quicParams",
          "outbounds[].streamSettings.finalmask.quicParams.congestion",
          "outbounds[].streamSettings.finalmask.quicParams.brutalUp",
@@ -496,7 +505,7 @@ note = "ports ride the link as `mport`; up/down speeds and hop interval are form
 [[key]]
 match = ["outbounds[].streamSettings.finalmask.*"]
 status = "unsupported"
-note = "UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning"
+note = "noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning"
 
 # == inbounds sushTun runs locally ==========================================================
 

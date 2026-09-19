@@ -18,16 +18,16 @@ Baseline core: **26.3.27** (bundled). Keys that first appear later are listed as
 | log | 4 | 2 | 0 | 0 | 0 | 2 | 0 | 2 | 0 |
 | metrics | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3 | 0 |
 | observatory | 5 | 0 | 0 | 0 | 0 | 5 | 0 | 0 | 0 |
-| outbounds | 443 | 100 | 7 | 26 | 58 | 252 | 78 | 25 | 245 |
+| outbounds | 443 | 100 | 10 | 26 | 58 | 249 | 78 | 25 | 245 |
 | policy | 7 | 0 | 0 | 0 | 0 | 7 | 3 | 5 | 0 |
 | reverse | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 7 | 0 |
 | routing | 39 | 10 | 1 | 0 | 0 | 28 | 2 | 0 | 1 |
 | stats | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 |
 | transport | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 |
 | version | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3 | 0 |
-| **all** | **564** | **133** | **11** | **42** | **58** | **320** | **514** | **71** | **529** |
+| **all** | **564** | **133** | **14** | **42** | **58** | **317** | **514** | **71** | **529** |
 
-Client-side keys reachable today: **244 of 564** (43%); with a form (full or partial): **144** (25%).
+Client-side keys reachable today: **247 of 564** (43%); with a form (full or partial): **147** (26%).
 
 ## Client-side keys
 
@@ -274,15 +274,15 @@ Status: full = a form or setting writes it (and links carry it where they have a
 | `outbounds[].streamSettings.finalmask.quicParams.brutalDown` | <=26.3.27 | full | yes | = link | xrayui/core/outbounds/hysteria2.py, xrayui/core/importer.py, xrayui/core/share.py | ports ride the link as `mport`; up/down speeds and hop interval are form-only |
 | `outbounds[].streamSettings.finalmask.quicParams.brutalUp` | <=26.3.27 | full | yes | = link | xrayui/core/outbounds/hysteria2.py, xrayui/core/importer.py, xrayui/core/share.py | ports ride the link as `mport`; up/down speeds and hop interval are form-only |
 | `outbounds[].streamSettings.finalmask.quicParams.congestion` | <=26.3.27 | full | yes | = link | xrayui/core/outbounds/hysteria2.py, xrayui/core/importer.py, xrayui/core/share.py | ports ride the link as `mport`; up/down speeds and hop interval are form-only |
-| `outbounds[].streamSettings.finalmask.quicParams.debug` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.quicParams.disablePathMTUDiscovery` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.quicParams.initConnectionReceiveWindow` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.quicParams.initStreamReceiveWindow` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.quicParams.keepAlivePeriod` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.quicParams.maxConnectionReceiveWindow` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.quicParams.maxIdleTimeout` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.quicParams.maxIncomingStreams` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.quicParams.maxStreamReceiveWindow` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.quicParams.debug` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.quicParams.disablePathMTUDiscovery` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.quicParams.initConnectionReceiveWindow` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.quicParams.initStreamReceiveWindow` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.quicParams.keepAlivePeriod` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.quicParams.maxConnectionReceiveWindow` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.quicParams.maxIdleTimeout` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.quicParams.maxIncomingStreams` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.quicParams.maxStreamReceiveWindow` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
 | `outbounds[].streamSettings.finalmask.quicParams.udpHop` | <=26.3.27 | full | yes | = link | xrayui/core/outbounds/hysteria2.py, xrayui/core/importer.py, xrayui/core/share.py | ports ride the link as `mport`; up/down speeds and hop interval are form-only |
 | `outbounds[].streamSettings.finalmask.quicParams.udpHop.interval` | <=26.3.27 | full | yes | = link | xrayui/core/outbounds/hysteria2.py, xrayui/core/importer.py, xrayui/core/share.py | ports ride the link as `mport`; up/down speeds and hop interval are form-only |
 | `outbounds[].streamSettings.finalmask.quicParams.udpHop.ports` | <=26.3.27 | full | yes | = link | xrayui/core/outbounds/hysteria2.py, xrayui/core/importer.py, xrayui/core/share.py | ports ride the link as `mport`; up/down speeds and hop interval are form-only |
@@ -292,69 +292,69 @@ Status: full = a form or setting writes it (and links carry it where they have a
 | `outbounds[].streamSettings.finalmask.tcp[].settings{type=fragment}.length` | <=26.3.27 | full | no |  | xrayui/core/coreopts.py, xrayui/core/settings.py | TLS fragment: one global setting (settings.core.fragment) for TLS/REALITY profiles |
 | `outbounds[].streamSettings.finalmask.tcp[].settings{type=fragment}.maxSplit` | <=26.3.27 | full | no |  | xrayui/core/coreopts.py, xrayui/core/settings.py | TLS fragment: one global setting (settings.core.fragment) for TLS/REALITY profiles |
 | `outbounds[].streamSettings.finalmask.tcp[].settings{type=fragment}.packets` | <=26.3.27 | full | no |  | xrayui/core/coreopts.py, xrayui/core/settings.py | TLS fragment: one global setting (settings.core.fragment) for TLS/REALITY profiles |
-| `outbounds[].streamSettings.finalmask.tcp[].settings{type=header-custom}.clients` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.tcp[].settings{type=header-custom}.clients[][].delay` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.tcp[].settings{type=header-custom}.clients[][].packet` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.tcp[].settings{type=header-custom}.clients[][].rand` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.tcp[].settings{type=header-custom}.clients[][].randRange` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.tcp[].settings{type=header-custom}.clients[][].type` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.tcp[].settings{type=header-custom}.errors` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.tcp[].settings{type=header-custom}.errors[][].delay` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.tcp[].settings{type=header-custom}.errors[][].packet` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.tcp[].settings{type=header-custom}.errors[][].rand` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.tcp[].settings{type=header-custom}.errors[][].randRange` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.tcp[].settings{type=header-custom}.errors[][].type` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.tcp[].settings{type=header-custom}.servers` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.tcp[].settings{type=header-custom}.servers[][].delay` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.tcp[].settings{type=header-custom}.servers[][].packet` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.tcp[].settings{type=header-custom}.servers[][].rand` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.tcp[].settings{type=header-custom}.servers[][].randRange` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.tcp[].settings{type=header-custom}.servers[][].type` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.tcp[].settings{type=sudoku}.ascii` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.tcp[].settings{type=sudoku}.customTable` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.tcp[].settings{type=sudoku}.customTables` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.tcp[].settings{type=sudoku}.custom_table` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.tcp[].settings{type=sudoku}.custom_tables` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.tcp[].settings{type=sudoku}.paddingMax` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.tcp[].settings{type=sudoku}.paddingMin` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.tcp[].settings{type=sudoku}.padding_max` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.tcp[].settings{type=sudoku}.padding_min` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.tcp[].settings{type=sudoku}.password` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.tcp[].settings{type=header-custom}.clients` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.tcp[].settings{type=header-custom}.clients[][].delay` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.tcp[].settings{type=header-custom}.clients[][].packet` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.tcp[].settings{type=header-custom}.clients[][].rand` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.tcp[].settings{type=header-custom}.clients[][].randRange` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.tcp[].settings{type=header-custom}.clients[][].type` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.tcp[].settings{type=header-custom}.errors` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.tcp[].settings{type=header-custom}.errors[][].delay` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.tcp[].settings{type=header-custom}.errors[][].packet` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.tcp[].settings{type=header-custom}.errors[][].rand` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.tcp[].settings{type=header-custom}.errors[][].randRange` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.tcp[].settings{type=header-custom}.errors[][].type` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.tcp[].settings{type=header-custom}.servers` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.tcp[].settings{type=header-custom}.servers[][].delay` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.tcp[].settings{type=header-custom}.servers[][].packet` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.tcp[].settings{type=header-custom}.servers[][].rand` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.tcp[].settings{type=header-custom}.servers[][].randRange` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.tcp[].settings{type=header-custom}.servers[][].type` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.tcp[].settings{type=sudoku}.ascii` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.tcp[].settings{type=sudoku}.customTable` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.tcp[].settings{type=sudoku}.customTables` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.tcp[].settings{type=sudoku}.custom_table` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.tcp[].settings{type=sudoku}.custom_tables` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.tcp[].settings{type=sudoku}.paddingMax` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.tcp[].settings{type=sudoku}.paddingMin` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.tcp[].settings{type=sudoku}.padding_max` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.tcp[].settings{type=sudoku}.padding_min` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.tcp[].settings{type=sudoku}.password` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
 | `outbounds[].streamSettings.finalmask.tcp[].type` | <=26.3.27 | full | no |  | xrayui/core/coreopts.py, xrayui/core/settings.py | TLS fragment: one global setting (settings.core.fragment) for TLS/REALITY profiles |
 | `outbounds[].streamSettings.finalmask.udp` | <=26.3.27 | full | yes | = link | xrayui/core/outbounds/hysteria2.py, xrayui/core/importer.py, xrayui/core/share.py | Hysteria2 obfs=salamander only |
 | `outbounds[].streamSettings.finalmask.udp[].settings` | <=26.3.27 | full | yes | = link | xrayui/core/outbounds/hysteria2.py, xrayui/core/importer.py, xrayui/core/share.py | Hysteria2 obfs=salamander only |
-| `outbounds[].streamSettings.finalmask.udp[].settings{type=header-custom}.client` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.udp[].settings{type=header-custom}.client[].packet` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.udp[].settings{type=header-custom}.client[].rand` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.udp[].settings{type=header-custom}.client[].randRange` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.udp[].settings{type=header-custom}.client[].type` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.udp[].settings{type=header-custom}.server` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.udp[].settings{type=header-custom}.server[].packet` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.udp[].settings{type=header-custom}.server[].rand` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.udp[].settings{type=header-custom}.server[].randRange` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.udp[].settings{type=header-custom}.server[].type` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.udp[].settings{type=header-dns}.domain` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.udp[].settings{type=mkcp-aes128gcm}.password` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.udp[].settings{type=noise}.noise` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.udp[].settings{type=noise}.noise[].delay` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.udp[].settings{type=noise}.noise[].packet` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.udp[].settings{type=noise}.noise[].rand` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.udp[].settings{type=noise}.noise[].randRange` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.udp[].settings{type=noise}.noise[].type` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.udp[].settings{type=noise}.reset` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.udp[].settings{type=header-custom}.client` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.udp[].settings{type=header-custom}.client[].packet` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.udp[].settings{type=header-custom}.client[].rand` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.udp[].settings{type=header-custom}.client[].randRange` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.udp[].settings{type=header-custom}.client[].type` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.udp[].settings{type=header-custom}.server` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.udp[].settings{type=header-custom}.server[].packet` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.udp[].settings{type=header-custom}.server[].rand` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.udp[].settings{type=header-custom}.server[].randRange` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.udp[].settings{type=header-custom}.server[].type` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.udp[].settings{type=header-dns}.domain` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.udp[].settings{type=mkcp-aes128gcm}.password` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.udp[].settings{type=noise}.noise` | <=26.3.27 | partial | no |  | xrayui/core/coreopts.py, xrayui/core/settings.py | global setting (settings.core.udp_noise), Hysteria2 only: 26.3.27's WireGuard client never applies UDP masks. Effectiveness against filtering unmeasured |
+| `outbounds[].streamSettings.finalmask.udp[].settings{type=noise}.noise[].delay` | <=26.3.27 | partial | no |  | xrayui/core/coreopts.py, xrayui/core/settings.py | global setting (settings.core.udp_noise), Hysteria2 only: 26.3.27's WireGuard client never applies UDP masks. Effectiveness against filtering unmeasured |
+| `outbounds[].streamSettings.finalmask.udp[].settings{type=noise}.noise[].packet` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.udp[].settings{type=noise}.noise[].rand` | <=26.3.27 | partial | no |  | xrayui/core/coreopts.py, xrayui/core/settings.py | global setting (settings.core.udp_noise), Hysteria2 only: 26.3.27's WireGuard client never applies UDP masks. Effectiveness against filtering unmeasured |
+| `outbounds[].streamSettings.finalmask.udp[].settings{type=noise}.noise[].randRange` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.udp[].settings{type=noise}.noise[].type` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.udp[].settings{type=noise}.reset` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
 | `outbounds[].streamSettings.finalmask.udp[].settings{type=salamander}.password` | <=26.3.27 | full | yes | = link | xrayui/core/outbounds/hysteria2.py, xrayui/core/importer.py, xrayui/core/share.py | Hysteria2 obfs=salamander only |
-| `outbounds[].streamSettings.finalmask.udp[].settings{type=sudoku}.ascii` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.udp[].settings{type=sudoku}.customTable` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.udp[].settings{type=sudoku}.customTables` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.udp[].settings{type=sudoku}.custom_table` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.udp[].settings{type=sudoku}.custom_tables` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.udp[].settings{type=sudoku}.paddingMax` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.udp[].settings{type=sudoku}.paddingMin` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.udp[].settings{type=sudoku}.padding_max` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.udp[].settings{type=sudoku}.padding_min` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.udp[].settings{type=sudoku}.password` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.udp[].settings{type=xicmp}.id` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
-| `outbounds[].streamSettings.finalmask.udp[].settings{type=xicmp}.listenIp` | <=26.3.27 | unsupported |  |  |  | UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.udp[].settings{type=sudoku}.ascii` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.udp[].settings{type=sudoku}.customTable` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.udp[].settings{type=sudoku}.customTables` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.udp[].settings{type=sudoku}.custom_table` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.udp[].settings{type=sudoku}.custom_tables` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.udp[].settings{type=sudoku}.paddingMax` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.udp[].settings{type=sudoku}.paddingMin` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.udp[].settings{type=sudoku}.padding_max` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.udp[].settings{type=sudoku}.padding_min` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.udp[].settings{type=sudoku}.password` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.udp[].settings{type=xicmp}.id` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
+| `outbounds[].streamSettings.finalmask.udp[].settings{type=xicmp}.listenIp` | <=26.3.27 | unsupported |  |  |  | noise packet/randRange/type/reset, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning |
 | `outbounds[].streamSettings.finalmask.udp[].type` | <=26.3.27 | full | yes | = link | xrayui/core/outbounds/hysteria2.py, xrayui/core/importer.py, xrayui/core/share.py | Hysteria2 obfs=salamander only |
 | `outbounds[].streamSettings.grpcSettings` | <=26.3.27 | full | yes | = link | xrayui/core/outbounds/_common.py, xrayui/core/importer.py, xrayui/core/share.py |  |
 | `outbounds[].streamSettings.grpcSettings.authority` | <=26.3.27 | unsupported |  |  |  | multiMode (links: mode=multi), authority, user_agent, timeouts, window size |

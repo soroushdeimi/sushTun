@@ -238,6 +238,7 @@ class _AntiFilterPage(QWidget):
         self._frag_cfg = frag_cfg
         self._mux_cfg = mux_cfg
         self._sockopt_cfg = core_cfg.get("sockopt") or {}
+        self._noise_cfg = core_cfg.get("udp_noise") or {}
         self._build_ui()
 
     def _build_ui(self) -> None:
@@ -332,6 +333,21 @@ class _AntiFilterPage(QWidget):
         if self.tcp_congestion.count() > 1:
             tcp_group.add_row(tr("Congestion control"), self.tcp_congestion)
         layout.addWidget(tcp_group)
+
+        # UDP noise before a Hysteria2 handshake
+        noise_group = InsetGroup(self)
+        self.noise_enabled = Switch()
+        self.noise_enabled.setChecked(self._noise_cfg.get("enabled") is True)
+        noise_group.add_row(tr("UDP noise"), self.noise_enabled,
+                            tr("Sends a few random packets before connecting. "
+                               "Hysteria2 servers only."))
+        self.noise_length = QLineEdit(str(self._noise_cfg.get("length") or "10-20"))
+        self.noise_length.setLayoutDirection(Qt.LeftToRight)
+        noise_group.add_row(tr("Packet size"), self.noise_length)
+        self.noise_delay = QLineEdit(str(self._noise_cfg.get("delay") or "10-16"))
+        self.noise_delay.setLayoutDirection(Qt.LeftToRight)
+        noise_group.add_row(tr("Delay (ms)"), self.noise_delay)
+        layout.addWidget(noise_group)
         layout.addStretch(1)
 
     def collect(self) -> dict:
@@ -354,12 +370,18 @@ class _AntiFilterPage(QWidget):
                 "tcp_mptcp": self.tcp_mptcp.isChecked(),
                 "tcp_congestion": self.tcp_congestion.currentData() or "",
             },
+            "udp_noise": {
+                "enabled": self.noise_enabled.isChecked(),
+                "length": self.noise_length.text().strip() or "10-20",
+                "delay": self.noise_delay.text().strip() or "10-16",
+            },
         }
 
     def apply_to(self, target: dict) -> None:
         target["fragment"] = self.collect()["fragment"]
         target["mux"] = self.collect()["mux"]
         target["sockopt"] = self.collect()["sockopt"]
+        target["udp_noise"] = self.collect()["udp_noise"]
 
 
 class _LocalProxyPage(QWidget):
