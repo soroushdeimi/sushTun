@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.3.3
+
+### Fixed: sushTun did not open from the app menu
+- **With "Start minimized to the tray" on, no window ever appeared.** The
+  setting hid the window on every launch, not only at login, so opening
+  sushTun from the menu started it silently in the tray. Now only the launch
+  at login stays in the tray, and only when a tray icon is available. Opening
+  it yourself always shows the window.
+- **Every click started another copy.** Each launch asked for the password
+  again and started one more hidden copy, and a second copy quitting could cut
+  the first one's tunnel. sushTun now runs only once: opening it again brings
+  the running window to the front without asking for the password.
+
 ## v0.3.2
 
 ### Fixed: the Linux hotspot did not share the tunnel
