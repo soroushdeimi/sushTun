@@ -1149,7 +1149,7 @@ class MainWindow(QMainWindow):
         old_mtu = self.settings.get("tun_mtu")
         old_log = self.settings.get("log_level")
         old_core = copy.deepcopy(self.settings.get("core"))
-        dlg = SettingsWindow(self.settings, self)
+        dlg = SettingsWindow(self.settings, self, profiles=self.store.list())
         if dlg.exec():
             values = dlg.values()
             self.settings.update(values)

@@ -578,4 +578,20 @@ TRANSLATIONS_FA: dict[str, str] = {
     "2603 characters.":
         "کلید تأیید ML-DSA-65 باید کلید عمومی سرور باشد: base64url بدون padding، "
         "۲۶۰۳ کاراکتر.",
+
+    # -- ui/a-dialogs: multi-exit port ---------------------------------------
+    "Multi-exit port": "پورت چند خروجی",
+    "One local SOCKS port where the username picks the server.":
+        "یک پورت SOCKS محلی که نام کاربری، سرور خروجی را انتخاب می‌کند.",
+    "Add exit": "افزودن خروجی",
+    "Use socks5://USERNAME:PASSWORD@127.0.0.1:PORT. TCP only.":
+        "استفاده: socks5://USERNAME:PASSWORD@127.0.0.1:PORT. فقط TCP.",
+    "Some exits use a host name. With remote DNS through the tunnel, they can only be "
+    "reached while the main server is up.":
+        "برخی خروجی‌ها نام دامنه دارند. وقتی DNS از داخل تونل است، فقط زمانی در "
+        "دسترس‌اند که سرور اصلی وصل باشد.",
+    "username": "نام کاربری",
+    "Remove exit": "حذف خروجی",
+    "Multi-exit port: {why}": "پورت چند خروجی: {why}",
+    "(missing server)": "(سرور حذف شده)",
 }

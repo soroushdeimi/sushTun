@@ -7,6 +7,8 @@ preserved. Staged edits: nothing is saved until Done is clicked.
 from __future__ import annotations
 
 import copy
+import ipaddress
+import secrets
 import sys
 import time
 from pathlib import Path
@@ -32,6 +34,7 @@ from PySide6.QtWidgets import (
 
 from ..core import autostart, coreopts, render, xraycheck
 from ..core import backup as backup_mod
+from ..core import exits as exits_mod
 from ..core import geo as geo_mod
 from ..core import settings as app_settings
 from ..core.profiles import Profile
@@ -56,6 +59,7 @@ TOPICS = [
     ("local-proxy", "Local proxy", "servers", "#30d158"),
     ("geo-data", "Geo data", "routing", "#0a84ff"),
     ("startup", "Startup", "arrow-up", "#ff9f0a"),
+    ("exits", "Multi-exit port", "subscriptions", "#5e5ce6"),
     ("backup", "Backup", "archive", "#64d2ff"),
     ("language", "Language", "language", "#ff375f"),
 ]
@@ -382,6 +386,148 @@ class _AntiFilterPage(QWidget):
         target["mux"] = self.collect()["mux"]
         target["sockopt"] = self.collect()["sockopt"]
         target["udp_noise"] = self.collect()["udp_noise"]
+
+
+class _ExitsPage(QWidget):
+    """Multi-exit port: one local SOCKS port, the username picks the server.
+
+    Off by default; see core/exits.py for what gets rendered and why any bad
+    value only switches the feature off for that connection."""
+
+    def __init__(self, exits_cfg: dict, core_cfg: dict, dns_cfg: dict,
+                 profiles: list[Profile], parent=None) -> None:
+        super().__init__(parent)
+        self._exits_cfg = exits_cfg
+        self._core_cfg = core_cfg
+        self._remote_dns = bool(dns_cfg.get("remote_via_tunnel"))
+        self._profiles = {p.uid: p for p in profiles}
+        self._rows: list[tuple[QWidget, QLineEdit, QComboBox]] = []
+        self._build_ui()
+
+    def _build_ui(self) -> None:
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(18, 18, 18, 18)
+        title = QLabel(tr("Multi-exit port"))
+        title.setObjectName("H1")
+        layout.addWidget(title)
+
+        cfg = self._exits_cfg
+        group = InsetGroup(self)
+        self.enabled = Switch()
+        self.enabled.setChecked(cfg.get("enabled") is True)
+        group.add_row(tr("Multi-exit port"), self.enabled,
+                      tr("One local SOCKS port where the username picks the server."))
+        self.port = QSpinBox()
+        self.port.setRange(1024, 65535)
+        port = cfg.get("port")
+        self.port.setValue(port if isinstance(port, int) and 1024 <= port <= 65535 else 10809)
+        group.add_row(tr("Port"), self.port)
+        # A password is required (the username only means something with auth),
+        # so there is always one to show.
+        self.password = QLineEdit(str(cfg.get("password") or "") or secrets.token_urlsafe(9))
+        self.password.setEchoMode(QLineEdit.Password)
+        self.password.setLayoutDirection(Qt.LeftToRight)
+        self.btn_show = QPushButton(tr("Show"))
+        self.btn_show.setCheckable(True)
+        self.btn_show.toggled.connect(lambda on: self.password.setEchoMode(
+            QLineEdit.Normal if on else QLineEdit.Password))
+        pw_row = QWidget()
+        pw_layout = QHBoxLayout(pw_row)
+        pw_layout.setContentsMargins(0, 0, 0, 0)
+        pw_layout.addWidget(self.password, 1)
+        pw_layout.addWidget(self.btn_show)
+        group.add_row(tr("Password"), pw_row)
+        layout.addWidget(group)
+
+        # Made before the rows: adding a row updates it.
+        self.dns_warning = QLabel(tr(
+            "Some exits use a host name. With remote DNS through the tunnel, they can "
+            "only be reached while the main server is up."))
+        self.dns_warning.setObjectName("Muted")
+        self.dns_warning.setWordWrap(True)
+        self._rows_box = QVBoxLayout()
+        layout.addLayout(self._rows_box)
+        for item in cfg.get("items") or []:
+            if isinstance(item, dict):
+                self._add_row(str(item.get("user") or ""), item.get("profile_uid"))
+        self.btn_add = QPushButton(tr("Add exit"))
+        self.btn_add.clicked.connect(lambda: self._add_row("", None))
+        layout.addWidget(self.btn_add, 0, Qt.AlignLeading)
+
+        hint = QLabel(tr("Use socks5://USERNAME:PASSWORD@127.0.0.1:PORT. TCP only."))
+        hint.setObjectName("Muted")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        layout.addWidget(self.dns_warning)
+        self._update_warning()
+        layout.addStretch(1)
+
+    def _add_row(self, user: str, uid: str | None) -> None:
+        row = QWidget()
+        box = QHBoxLayout(row)
+        box.setContentsMargins(0, 0, 0, 0)
+        name = QLineEdit(user)
+        name.setPlaceholderText(tr("username"))
+        name.setLayoutDirection(Qt.LeftToRight)
+        server = QComboBox()
+        for p in self._profiles.values():
+            server.addItem(p.name or p.address, p.uid)
+        if uid and uid not in self._profiles:
+            server.addItem(tr("(missing server)"), uid)
+        if uid:
+            server.setCurrentIndex(max(server.findData(uid), 0))
+        server.currentIndexChanged.connect(self._update_warning)
+        remove = QPushButton()
+        remove.setIcon(icon("close"))
+        remove.setToolTip(tr("Remove exit"))
+        remove.setAccessibleName(tr("Remove exit"))
+        entry = (row, name, server)
+        remove.clicked.connect(lambda: self._remove_row(entry))
+        box.addWidget(name, 1)
+        box.addWidget(server, 2)
+        box.addWidget(remove)
+        self._rows.append(entry)
+        self._rows_box.addWidget(row)
+        self._update_warning()
+
+    def _remove_row(self, entry) -> None:
+        self._rows.remove(entry)
+        entry[0].setParent(None)
+        self._update_warning()
+
+    def _update_warning(self) -> None:
+        def is_host(uid) -> bool:
+            p = self._profiles.get(uid)
+            if p is None:
+                return False
+            try:
+                ipaddress.ip_address(p.address)
+            except ValueError:
+                return True
+            return False
+        self.dns_warning.setVisible(
+            self._remote_dns and any(is_host(server.currentData()) for _r, _n, server in self._rows))
+
+    def collect(self) -> dict:
+        return {
+            "enabled": self.enabled.isChecked(),
+            "port": self.port.value(),
+            "password": self.password.text(),
+            "items": [{"user": name.text().strip(), "profile_uid": server.currentData()}
+                      for _row, name, server in self._rows],
+        }
+
+    def problem(self) -> str | None:
+        """Why these values can't be saved, or None. Only checked while on."""
+        cfg = self.collect()
+        if not cfg["enabled"]:
+            return None
+        why = exits_mod.port_problem(cfg["port"], self._core_cfg)
+        if why is None and not cfg["password"]:
+            why = "a password is required"
+        if why is None:
+            why = exits_mod.items_problem(cfg["items"], set(self._profiles))
+        return tr("Multi-exit port: {why}", why=why) if why else None
 
 
 class _LocalProxyPage(QWidget):
@@ -783,7 +929,8 @@ class SettingsWindow(QDialog):
         self,
         settings: dict,
         parent=None,
-        topic: str = "general"
+        topic: str = "general",
+        profiles: list[Profile] | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle(tr("Settings"))
@@ -796,6 +943,7 @@ class SettingsWindow(QDialog):
         self.setObjectName("SettingsWindow")
         self._settings = copy.deepcopy(settings)
         self._original_settings = copy.deepcopy(settings)
+        self._profiles = list(profiles or [])
         self._busy = False
         self.pool = QThreadPool.globalInstance()
         self._workers: set = set()
@@ -883,6 +1031,8 @@ class SettingsWindow(QDialog):
         self._pages["local-proxy"] = _LocalProxyPage(core_cfg)
         self._pages["geo-data"] = _GeoDataPage(geo_cfg)
         self._pages["startup"] = _StartupPage(startup_cfg)
+        self._pages["exits"] = _ExitsPage(self._settings.get("exits") or {}, core_cfg,
+                                          self._settings.get("dns") or {}, self._profiles)
         self._pages["backup"] = _BackupPage()
         self._pages["language"] = _LanguagePage(self._language_was)
 
@@ -959,6 +1109,10 @@ class SettingsWindow(QDialog):
 
     def _on_done(self) -> None:
         if self._busy:
+            return
+        problem = self._pages["exits"].problem()
+        if problem:
+            self._show_status(problem)
             return
         self._busy = True
         self.btn_done.setEnabled(False)
@@ -1056,6 +1210,7 @@ class SettingsWindow(QDialog):
             "geo": self._pages["geo-data"].collect(),
             "core": core_cfg,
             "startup": self._pages["startup"].collect(),
+            "exits": self._pages["exits"].collect(),
             "updates": {
                 **self._settings.get("updates", {}),
                 "check": self._pages["general"].check_updates.isChecked(),

@@ -113,7 +113,7 @@ def test_values_exposes_the_settings_dialog_schema(qapp, defaults):
     win = SettingsWindow(defaults)
     assert set(win.values()) == {
         "ping_target", "sample_seconds", "tun_mtu", "log_level",
-        "language", "geo", "core", "startup", "updates",
+        "language", "geo", "core", "startup", "updates", "exits",
     }
 
 
