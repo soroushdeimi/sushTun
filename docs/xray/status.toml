@@ -1,0 +1,625 @@
+# sushTun's support for every client-side Xray key (class "client" in
+# classification.toml), read by scripts/xray_keys.py and
+# tests/test_xray_coverage.py.
+#
+# status:
+#   full         a form or setting writes it, and a share link carries it when
+#                links have a field for it
+#   partial      written, but with a fixed value or only some of its forms
+#   imported     reaches the config only inside raw JSON the user pastes or
+#                imports (the xhttp `extra` field, the DNS raw override)
+#   alias        another spelling of a key sushTun covers (the core accepts
+#                both); nothing to add
+#   unsupported  never written
+# link: yes = parsed from and written back to share links; import = parsed
+#   only; no = links have no field for it; n/a = not a per-server setting.
+# sub: subscriptions are parsed exactly like pasted links
+#   (importer.parse_subscription -> parse_share_text), so sub = link unless
+#   noted. JSON-format subscriptions are not supported.
+#
+# The first entry whose pattern matches wins. `*` matches anything. Entries
+# with status full or partial must name exact keys (no `*`): a new key under a
+# supported object must be looked at, not inherited as supported. `imported`
+# and `alias` may use `*` when the whole subtree really behaves that way (the
+# DNS raw override reaches any dns key). tests/test_xray_coverage.py enforces it.
+
+# == outbounds: the proxy outbound, per protocol ==================================
+
+[[key]]
+match = ["outbounds", "outbounds[].protocol"]
+status = "full"
+files = ["xrayui/core/profiles.py", "xrayui/core/outbounds/__init__.py"]
+link = "yes"
+sub = "= link"
+
+# -- vless ---------------------------------------------------------------------
+
+[[key]]
+match = ["outbounds[].settings{protocol=vless}.vnext",
+         "outbounds[].settings{protocol=vless}.vnext[].address",
+         "outbounds[].settings{protocol=vless}.vnext[].port",
+         "outbounds[].settings{protocol=vless}.vnext[].users",
+         "outbounds[].settings{protocol=vless}.vnext[].users[].id",
+         "outbounds[].settings{protocol=vless}.vnext[].users[].encryption",
+         "outbounds[].settings{protocol=vless}.vnext[].users[].flow"]
+status = "full"
+files = ["xrayui/core/outbounds/vless.py", "xrayui/core/importer.py", "xrayui/core/share.py"]
+link = "yes"
+sub = "= link"
+note = "encryption carries the VLESS post-quantum string as typed (not validated)"
+
+[[key]]
+match = ["outbounds[].settings{protocol=vless}.address", "outbounds[].settings{protocol=vless}.port",
+         "outbounds[].settings{protocol=vless}.id", "outbounds[].settings{protocol=vless}.encryption",
+         "outbounds[].settings{protocol=vless}.flow"]
+status = "alias"
+files = ["xrayui/core/outbounds/vless.py"]
+link = "n/a"
+note = "flat form of vnext[0]; sushTun writes vnext"
+
+[[key]]
+match = ["outbounds[].settings{protocol=vless}.*"]
+status = "unsupported"
+note = "level/email feed server-side policy; padding/seconds/xorMode/seed: UNVERIFIED meaning on a client"
+
+# -- vmess ---------------------------------------------------------------------
+
+[[key]]
+match = ["outbounds[].settings{protocol=vmess}.vnext",
+         "outbounds[].settings{protocol=vmess}.vnext[].address",
+         "outbounds[].settings{protocol=vmess}.vnext[].port",
+         "outbounds[].settings{protocol=vmess}.vnext[].users",
+         "outbounds[].settings{protocol=vmess}.vnext[].users[].id",
+         "outbounds[].settings{protocol=vmess}.vnext[].users[].security"]
+status = "full"
+files = ["xrayui/core/outbounds/vmess.py", "xrayui/core/importer.py", "xrayui/core/share.py"]
+link = "yes"
+sub = "= link"
+
+[[key]]
+match = ["outbounds[].settings{protocol=vmess}.address", "outbounds[].settings{protocol=vmess}.port",
+         "outbounds[].settings{protocol=vmess}.id", "outbounds[].settings{protocol=vmess}.security"]
+status = "alias"
+files = ["xrayui/core/outbounds/vmess.py"]
+link = "n/a"
+note = "flat form of vnext[0]"
+
+[[key]]
+match = ["outbounds[].settings{protocol=vmess}.*"]
+status = "unsupported"
+note = "experiments (VMess feature flags), level, email"
+
+# -- trojan / shadowsocks ------------------------------------------------------------
+
+[[key]]
+match = ["outbounds[].settings{protocol=trojan}.servers",
+         "outbounds[].settings{protocol=trojan}.servers[].address",
+         "outbounds[].settings{protocol=trojan}.servers[].port",
+         "outbounds[].settings{protocol=trojan}.servers[].password"]
+status = "full"
+files = ["xrayui/core/outbounds/trojan.py", "xrayui/core/importer.py", "xrayui/core/share.py"]
+link = "yes"
+sub = "= link"
+
+[[key]]
+match = ["outbounds[].settings{protocol=trojan}.address", "outbounds[].settings{protocol=trojan}.port",
+         "outbounds[].settings{protocol=trojan}.password"]
+status = "alias"
+files = ["xrayui/core/outbounds/trojan.py"]
+link = "n/a"
+
+[[key]]
+match = ["outbounds[].settings{protocol=trojan}.*"]
+status = "unsupported"
+note = "flow: the server side rejects Trojan flow (trojan.go); UNVERIFIED for the outbound"
+
+[[key]]
+match = ["outbounds[].settings{protocol=shadowsocks}.servers",
+         "outbounds[].settings{protocol=shadowsocks}.servers[].address",
+         "outbounds[].settings{protocol=shadowsocks}.servers[].port",
+         "outbounds[].settings{protocol=shadowsocks}.servers[].method",
+         "outbounds[].settings{protocol=shadowsocks}.servers[].password"]
+status = "full"
+files = ["xrayui/core/outbounds/shadowsocks.py", "xrayui/core/importer.py", "xrayui/core/share.py"]
+link = "yes"
+sub = "= link"
+
+[[key]]
+match = ["outbounds[].settings{protocol=shadowsocks}.address", "outbounds[].settings{protocol=shadowsocks}.port",
+         "outbounds[].settings{protocol=shadowsocks}.method", "outbounds[].settings{protocol=shadowsocks}.password"]
+status = "alias"
+files = ["xrayui/core/outbounds/shadowsocks.py"]
+link = "n/a"
+
+[[key]]
+match = ["outbounds[].settings{protocol=shadowsocks}.*"]
+status = "unsupported"
+note = "uot/uotVersion (UDP over TCP), level, email"
+
+# -- hysteria (Hysteria2 profiles) -----------------------------------------------------
+
+[[key]]
+match = ["outbounds[].settings{protocol=hysteria}.address", "outbounds[].settings{protocol=hysteria}.port",
+         "outbounds[].settings{protocol=hysteria}.version"]
+status = "full"
+files = ["xrayui/core/outbounds/hysteria2.py", "xrayui/core/importer.py", "xrayui/core/share.py"]
+link = "yes"
+sub = "= link"
+
+# -- wireguard -----------------------------------------------------------------------
+
+[[key]]
+match = ["outbounds[].settings{protocol=wireguard}",
+         "outbounds[].settings{protocol=wireguard}.secretKey",
+         "outbounds[].settings{protocol=wireguard}.address",
+         "outbounds[].settings{protocol=wireguard}.peers",
+         "outbounds[].settings{protocol=wireguard}.peers[].endpoint",
+         "outbounds[].settings{protocol=wireguard}.peers[].publicKey",
+         "outbounds[].settings{protocol=wireguard}.peers[].preSharedKey",
+         "outbounds[].settings{protocol=wireguard}.peers[].keepAlive",
+         "outbounds[].settings{protocol=wireguard}.reserved",
+         "outbounds[].settings{protocol=wireguard}.mtu"]
+status = "full"
+files = ["xrayui/core/outbounds/wireguard.py", "xrayui/core/importer.py", "xrayui/core/share.py"]
+link = "yes"
+sub = "= link"
+note = "also imported from a WireGuard .conf (importer.parse_wg_conf)"
+
+[[key]]
+match = ["outbounds[].settings{protocol=wireguard}.peers[].allowedIPs",
+         "outbounds[].settings{protocol=wireguard}.noKernelTun",
+         "outbounds[].settings{protocol=wireguard}.domainStrategy"]
+status = "partial"
+files = ["xrayui/core/outbounds/wireguard.py"]
+link = "no"
+note = "fixed values: allowedIPs 0.0.0.0/0 + ::/0, noKernelTun true, domainStrategy ForceIP"
+
+[[key]]
+match = ["outbounds[].settings{protocol=wireguard}.*"]
+status = "unsupported"
+note = "workers"
+
+# -- sushTun's own non-proxy outbounds -----------------------------------------------
+
+[[key]]
+match = ["outbounds[].settings{protocol=dns}.network", "outbounds[].settings{protocol=dns}.nonIPQuery"]
+status = "partial"
+files = ["config.template.json"]
+link = "n/a"
+note = "fixed: dns-out uses tcp and rejects non-IP queries"
+
+[[key]]
+match = ["outbounds[].settings{protocol=dns}.*"]
+status = "unsupported"
+link = "n/a"
+
+[[key]]
+match = ["outbounds[].settings{protocol=freedom}.*", "outbounds[].settings{protocol=direct}.*"]
+status = "unsupported"
+link = "n/a"
+note = "the direct outbound has no settings: fragment/noises for DIRECT traffic, redirect, domainStrategy are all open"
+
+[[key]]
+match = ["outbounds[].settings{protocol=blackhole}.*", "outbounds[].settings{protocol=block}.*"]
+status = "unsupported"
+link = "n/a"
+note = "block drops silently; an HTTP 403 response is not offered"
+
+[[key]]
+match = ["outbounds[].settings{protocol=loopback}.*", "outbounds[].settings{protocol=http}.*",
+         "outbounds[].settings{protocol=socks}.*"]
+status = "unsupported"
+note = "no socks://, http:// proxies or loopback outbounds (needed for chaining through a local proxy)"
+
+# -- per-outbound options ---------------------------------------------------------------
+
+[[key]]
+match = ["outbounds[].mux", "outbounds[].mux.enabled", "outbounds[].mux.concurrency",
+         "outbounds[].mux.xudpConcurrency", "outbounds[].mux.xudpProxyUDP443"]
+status = "full"
+files = ["xrayui/core/coreopts.py", "xrayui/core/settings.py"]
+link = "no"
+note = "global setting (settings.core.mux), applied only to vmess/trojan/shadowsocks (coreopts.mux_eligible)"
+
+[[key]]
+match = ["outbounds[].sendThrough", "outbounds[].targetStrategy"]
+status = "unsupported"
+link = "n/a"
+
+# == outbounds: streamSettings =============================================================
+
+[[key]]
+match = ["outbounds[].streamSettings", "outbounds[].streamSettings.network",
+         "outbounds[].streamSettings.security"]
+status = "full"
+files = ["xrayui/core/outbounds/_common.py", "xrayui/core/importer.py", "xrayui/core/share.py"]
+link = "yes"
+sub = "= link"
+note = "network h2/http is still written although the core removed that transport: see findings"
+
+[[key]]
+match = ["outbounds[].streamSettings.address", "outbounds[].streamSettings.port"]
+status = "unsupported"
+note = "UNVERIFIED purpose (a dial target override on streamSettings)"
+
+# -- tls ---------------------------------------------------------------------------------
+
+[[key]]
+match = ["outbounds[].streamSettings.tlsSettings",
+         "outbounds[].streamSettings.tlsSettings.serverName",
+         "outbounds[].streamSettings.tlsSettings.alpn",
+         "outbounds[].streamSettings.tlsSettings.fingerprint",
+         "outbounds[].streamSettings.tlsSettings.echConfigList",
+         "outbounds[].streamSettings.tlsSettings.pinnedPeerCertSha256",
+         "outbounds[].streamSettings.tlsSettings.verifyPeerCertByName"]
+status = "full"
+files = ["xrayui/core/outbounds/_common.py", "xrayui/core/outbounds/hysteria2.py",
+         "xrayui/core/coreopts.py", "xrayui/core/importer.py", "xrayui/core/share.py"]
+link = "yes"
+sub = "= link"
+note = "Hysteria2 drops echConfigList: the link's `ech` is parsed but hysteria2.py never writes it"
+
+[[key]]
+match = ["outbounds[].streamSettings.tlsSettings.*"]
+status = "unsupported"
+note = "min/maxVersion, cipherSuites, curvePreferences, disableSystemRoot, session resumption, echForceQuery, echSockopt, masterKeyLog (security-sensitive)"
+
+# -- reality -------------------------------------------------------------------------------
+
+[[key]]
+match = ["outbounds[].streamSettings.realitySettings",
+         "outbounds[].streamSettings.realitySettings.serverName",
+         "outbounds[].streamSettings.realitySettings.fingerprint",
+         "outbounds[].streamSettings.realitySettings.publicKey",
+         "outbounds[].streamSettings.realitySettings.shortId",
+         "outbounds[].streamSettings.realitySettings.spiderX"]
+status = "full"
+files = ["xrayui/core/outbounds/_common.py", "xrayui/core/importer.py", "xrayui/core/share.py"]
+link = "yes"
+sub = "= link"
+
+[[key]]
+match = ["outbounds[].streamSettings.realitySettings.*"]
+status = "unsupported"
+note = "mldsa65Verify (post-quantum signature check), password (UNVERIFIED: publicKey alias?), show, masterKeyLog"
+
+# -- transports ------------------------------------------------------------------------------
+
+[[key]]
+match = ["outbounds[].streamSettings.wsSettings", "outbounds[].streamSettings.wsSettings.path"]
+status = "full"
+files = ["xrayui/core/outbounds/_common.py", "xrayui/core/importer.py", "xrayui/core/share.py"]
+link = "yes"
+sub = "= link"
+
+[[key]]
+match = ["outbounds[].streamSettings.wsSettings.headers"]
+status = "partial"
+files = ["xrayui/core/outbounds/_common.py"]
+link = "yes"
+sub = "= link"
+note = "only Host, written as headers.Host rather than the `host` key (both accepted by 26.3.27, tested)"
+
+[[key]]
+match = ["outbounds[].streamSettings.wsSettings.*"]
+status = "unsupported"
+note = "host (covered via headers.Host), heartbeatPeriod"
+
+[[key]]
+match = ["outbounds[].streamSettings.grpcSettings", "outbounds[].streamSettings.grpcSettings.serviceName"]
+status = "full"
+files = ["xrayui/core/outbounds/_common.py", "xrayui/core/importer.py", "xrayui/core/share.py"]
+link = "yes"
+sub = "= link"
+
+[[key]]
+match = ["outbounds[].streamSettings.grpcSettings.*"]
+status = "unsupported"
+note = "multiMode (links: mode=multi), authority, user_agent, timeouts, window size"
+
+[[key]]
+match = ["outbounds[].streamSettings.httpupgradeSettings",
+         "outbounds[].streamSettings.httpupgradeSettings.path",
+         "outbounds[].streamSettings.httpupgradeSettings.host"]
+status = "full"
+files = ["xrayui/core/outbounds/_common.py", "xrayui/core/importer.py", "xrayui/core/share.py"]
+link = "yes"
+sub = "= link"
+
+[[key]]
+match = ["outbounds[].streamSettings.httpupgradeSettings.*"]
+status = "unsupported"
+note = "headers"
+
+[[key]]
+match = ["outbounds[].streamSettings.xhttpSettings",
+         "outbounds[].streamSettings.xhttpSettings.path",
+         "outbounds[].streamSettings.xhttpSettings.host",
+         "outbounds[].streamSettings.xhttpSettings.mode",
+         "outbounds[].streamSettings.xhttpSettings.extra"]
+status = "full"
+files = ["xrayui/core/outbounds/_common.py", "xrayui/core/importer.py", "xrayui/core/share.py"]
+link = "yes"
+sub = "= link"
+note = "extra is free JSON (Profile.xhttp_extra); a typo there is dropped silently (_common._parse_extra)"
+
+[[key]]
+match = ["outbounds[].streamSettings.xhttpSettings.downloadSettings",
+         "outbounds[].streamSettings.xhttpSettings.headers",
+         "outbounds[].streamSettings.xhttpSettings.noGRPCHeader",
+         "outbounds[].streamSettings.xhttpSettings.scMaxEachPostBytes",
+         "outbounds[].streamSettings.xhttpSettings.scMinPostsIntervalMs",
+         "outbounds[].streamSettings.xhttpSettings.seqKey",
+         "outbounds[].streamSettings.xhttpSettings.seqPlacement",
+         "outbounds[].streamSettings.xhttpSettings.sessionKey",
+         "outbounds[].streamSettings.xhttpSettings.sessionPlacement",
+         "outbounds[].streamSettings.xhttpSettings.uplinkChunkSize",
+         "outbounds[].streamSettings.xhttpSettings.uplinkDataKey",
+         "outbounds[].streamSettings.xhttpSettings.uplinkDataPlacement",
+         "outbounds[].streamSettings.xhttpSettings.uplinkHTTPMethod",
+         "outbounds[].streamSettings.xhttpSettings.xPaddingBytes",
+         "outbounds[].streamSettings.xhttpSettings.xPaddingHeader",
+         "outbounds[].streamSettings.xhttpSettings.xPaddingKey",
+         "outbounds[].streamSettings.xhttpSettings.xPaddingMethod",
+         "outbounds[].streamSettings.xhttpSettings.xPaddingObfsMode",
+         "outbounds[].streamSettings.xhttpSettings.xPaddingPlacement",
+         "outbounds[].streamSettings.xhttpSettings.xmux",
+         "outbounds[].streamSettings.xhttpSettings.xmux.cMaxReuseTimes",
+         "outbounds[].streamSettings.xhttpSettings.xmux.hKeepAlivePeriod",
+         "outbounds[].streamSettings.xhttpSettings.xmux.hMaxRequestTimes",
+         "outbounds[].streamSettings.xhttpSettings.xmux.hMaxReusableSecs",
+         "outbounds[].streamSettings.xhttpSettings.xmux.maxConcurrency",
+         "outbounds[].streamSettings.xhttpSettings.xmux.maxConnections"]
+status = "imported"
+files = ["xrayui/core/outbounds/_common.py"]
+link = "yes"
+sub = "= link"
+note = "only inside the pasted/linked `extra` JSON; no form field"
+
+[[key]]
+match = ["outbounds[].streamSettings.splithttpSettings", "outbounds[].streamSettings.splithttpSettings.*",
+         "outbounds[].streamSettings.rawSettings", "outbounds[].streamSettings.rawSettings.header",
+         "outbounds[].streamSettings.rawSettings.header{type=http}.request",
+         "outbounds[].streamSettings.rawSettings.header{type=http}.request.headers",
+         "outbounds[].streamSettings.rawSettings.header{type=http}.request.path"]
+status = "alias"
+files = ["xrayui/core/outbounds/_common.py"]
+link = "n/a"
+note = "splithttpSettings = old name of xhttpSettings; rawSettings = new name of tcpSettings"
+
+[[key]]
+match = ["outbounds[].streamSettings.tcpSettings", "outbounds[].streamSettings.tcpSettings.header",
+         "outbounds[].streamSettings.tcpSettings.header{type=http}.request",
+         "outbounds[].streamSettings.tcpSettings.header{type=http}.request.headers",
+         "outbounds[].streamSettings.tcpSettings.header{type=http}.request.path"]
+status = "full"
+files = ["xrayui/core/outbounds/_common.py", "xrayui/core/importer.py", "xrayui/core/share.py"]
+link = "yes"
+sub = "= link"
+note = "headerType=http with path and Host only"
+
+[[key]]
+match = ["outbounds[].streamSettings.tcpSettings.*", "outbounds[].streamSettings.rawSettings.*"]
+status = "unsupported"
+note = "request method and version"
+
+[[key]]
+match = ["outbounds[].streamSettings.kcpSettings", "outbounds[].streamSettings.kcpSettings.*"]
+status = "unsupported"
+note = "mKCP is not offered"
+
+[[key]]
+match = ["outbounds[].streamSettings.hysteriaSettings",
+         "outbounds[].streamSettings.hysteriaSettings.auth",
+         "outbounds[].streamSettings.hysteriaSettings.version"]
+status = "full"
+files = ["xrayui/core/outbounds/hysteria2.py", "xrayui/core/importer.py", "xrayui/core/share.py"]
+link = "yes"
+sub = "= link"
+
+[[key]]
+match = ["outbounds[].streamSettings.hysteriaSettings.up", "outbounds[].streamSettings.hysteriaSettings.down",
+         "outbounds[].streamSettings.hysteriaSettings.congestion", "outbounds[].streamSettings.hysteriaSettings.udphop",
+         "outbounds[].streamSettings.hysteriaSettings.udphop.ports", "outbounds[].streamSettings.hysteriaSettings.udphop.interval"]
+status = "alias"
+files = ["xrayui/core/outbounds/hysteria2.py"]
+link = "n/a"
+note = "older spellings; sushTun writes finalmask.quicParams (brutalUp/Down, congestion, udpHop)"
+
+[[key]]
+match = ["outbounds[].streamSettings.hysteriaSettings.*"]
+status = "unsupported"
+note = "udpIdleTimeout"
+
+# -- sockopt ------------------------------------------------------------------------------------
+
+[[key]]
+match = ["outbounds[].streamSettings.sockopt"]
+status = "partial"
+files = ["xrayui/core/outbounds/_common.py", "config.template.json"]
+link = "n/a"
+note = "only `interface` (internal) is written"
+
+[[key]]
+match = ["outbounds[].streamSettings.sockopt.*"]
+status = "unsupported"
+note = "dialerProxy (chaining) is only respected when present (coreopts.apply_fragment skips it), never written"
+
+# -- finalmask ------------------------------------------------------------------------------------
+
+[[key]]
+match = ["outbounds[].streamSettings.finalmask", "outbounds[].streamSettings.finalmask.tcp",
+         "outbounds[].streamSettings.finalmask.tcp[].type", "outbounds[].streamSettings.finalmask.tcp[].settings",
+         "outbounds[].streamSettings.finalmask.tcp[].settings{type=fragment}.packets",
+         "outbounds[].streamSettings.finalmask.tcp[].settings{type=fragment}.length",
+         "outbounds[].streamSettings.finalmask.tcp[].settings{type=fragment}.delay",
+         "outbounds[].streamSettings.finalmask.tcp[].settings{type=fragment}.maxSplit"]
+status = "full"
+files = ["xrayui/core/coreopts.py", "xrayui/core/settings.py"]
+link = "no"
+note = "TLS fragment: one global setting (settings.core.fragment) for TLS/REALITY profiles"
+
+[[key]]
+match = ["outbounds[].streamSettings.finalmask.udp", "outbounds[].streamSettings.finalmask.udp[].type",
+         "outbounds[].streamSettings.finalmask.udp[].settings",
+         "outbounds[].streamSettings.finalmask.udp[].settings{type=salamander}.password"]
+status = "full"
+files = ["xrayui/core/outbounds/hysteria2.py", "xrayui/core/importer.py", "xrayui/core/share.py"]
+link = "yes"
+sub = "= link"
+note = "Hysteria2 obfs=salamander only"
+
+[[key]]
+match = ["outbounds[].streamSettings.finalmask.quicParams",
+         "outbounds[].streamSettings.finalmask.quicParams.congestion",
+         "outbounds[].streamSettings.finalmask.quicParams.brutalUp",
+         "outbounds[].streamSettings.finalmask.quicParams.brutalDown",
+         "outbounds[].streamSettings.finalmask.quicParams.udpHop",
+         "outbounds[].streamSettings.finalmask.quicParams.udpHop.ports",
+         "outbounds[].streamSettings.finalmask.quicParams.udpHop.interval"]
+status = "full"
+files = ["xrayui/core/outbounds/hysteria2.py", "xrayui/core/importer.py", "xrayui/core/share.py"]
+link = "yes"
+sub = "= link"
+note = "ports ride the link as `mport`; up/down speeds and hop interval are form-only"
+
+[[key]]
+match = ["outbounds[].streamSettings.finalmask.*"]
+status = "unsupported"
+note = "UDP noise, header-*, sudoku, xdns, xicmp, mkcp-* masks; other QUIC tuning"
+
+# == inbounds sushTun runs locally ==========================================================
+
+[[key]]
+match = ["inbounds", "inbounds[].listen", "inbounds[].port"]
+status = "full"
+files = ["config.template.json", "xrayui/core/coreopts.py"]
+link = "n/a"
+note = "listen/port: the local SOCKS proxy (settings.core.socks_port, allow_lan)"
+
+[[key]]
+match = ["inbounds[].sniffing", "inbounds[].sniffing.enabled", "inbounds[].sniffing.routeOnly"]
+status = "full"
+files = ["xrayui/core/coreopts.py", "config.template.json"]
+link = "n/a"
+
+[[key]]
+match = ["inbounds[].sniffing.destOverride"]
+status = "partial"
+files = ["config.template.json"]
+link = "n/a"
+note = "fixed to http, tls, quic"
+
+[[key]]
+match = ["inbounds[].sniffing.*"]
+status = "unsupported"
+link = "n/a"
+note = "domainsExcluded, metadataOnly"
+
+[[key]]
+match = ["inbounds[].settings{protocol=tun}.MTU"]
+status = "full"
+files = ["xrayui/core/render.py", "xrayui/core/settings.py"]
+link = "n/a"
+note = "written as `mtu`; the core's decoder matches keys case-insensitively"
+
+[[key]]
+match = ["inbounds[].settings{protocol=tun}.*"]
+status = "unsupported"
+link = "n/a"
+
+[[key]]
+match = ["inbounds[].settings{protocol=socks}.auth", "inbounds[].settings{protocol=socks}.accounts",
+         "inbounds[].settings{protocol=socks}.accounts[].user", "inbounds[].settings{protocol=socks}.accounts[].pass"]
+status = "full"
+files = ["xrayui/core/coreopts.py"]
+link = "n/a"
+note = "password auth when the proxy is shared on the LAN"
+
+[[key]]
+match = ["inbounds[].settings{protocol=socks}.udp"]
+status = "partial"
+files = ["config.template.json"]
+link = "n/a"
+note = "fixed true"
+
+[[key]]
+match = ["inbounds[].settings{protocol=socks}.*", "inbounds[].settings{protocol=mixed}.*",
+         "inbounds[].settings{protocol=http}.*"]
+status = "unsupported"
+link = "n/a"
+note = "no local HTTP proxy for apps that cannot use SOCKS"
+
+# == routing =================================================================================
+
+[[key]]
+match = ["routing", "routing.domainStrategy", "routing.rules", "routing.rules[].domain",
+         "routing.rules[].ip", "routing.rules[].port", "routing.rules[].network",
+         "routing.rules[].protocol", "routing.rules[].process", "routing.rules[].outboundTag"]
+status = "full"
+files = ["xrayui/core/routing.py", "xrayui/core/routing_io.py", "xrayui/ui/routing_dialog.py"]
+link = "n/a"
+note = "rule sets import/export as JSON (routing_io.py), not through share links"
+
+[[key]]
+match = ["routing.rules[].inboundTag"]
+status = "partial"
+files = ["xrayui/core/dns.py", "config.template.json"]
+link = "n/a"
+note = "written by sushTun for its DNS rules only"
+
+[[key]]
+match = ["routing.*"]
+status = "unsupported"
+link = "n/a"
+note = "balancers (policy groups), balancerTag, source*/local* matching, attrs, ruleTag, webhook"
+
+# == dns =====================================================================================
+
+[[key]]
+match = ["dns", "dns.servers", "dns.servers[].address", "dns.servers[].domains",
+         "dns.servers[].skipFallback", "dns.servers[].port", "dns.queryStrategy", "dns.hosts",
+         "dns.enableParallelQuery", "dns.serveStale"]
+status = "full"
+files = ["xrayui/core/dns.py", "xrayui/ui/dns_dialog.py"]
+link = "n/a"
+
+[[key]]
+match = ["dns.servers[].tag"]
+status = "partial"
+files = ["xrayui/core/dns.py"]
+link = "n/a"
+note = "set by sushTun for its domestic/bootstrap servers only"
+
+[[key]]
+match = ["dns.*"]
+status = "imported"
+files = ["xrayui/core/dns.py"]
+link = "n/a"
+note = "only through the raw DNS override (settings.dns.raw_override): expectIPs/unexpectedIPs/finalQuery, per-server queryStrategy, clientIp, timeouts, caching, useSystemHosts"
+
+# == log, policy, observatory ===================================================================
+
+[[key]]
+match = ["log", "log.loglevel"]
+status = "full"
+files = ["xrayui/core/render.py", "xrayui/core/settings.py"]
+link = "n/a"
+
+[[key]]
+match = ["log.*"]
+status = "unsupported"
+link = "n/a"
+note = "dnsLog, maskAddress"
+
+[[key]]
+match = ["policy", "policy.*"]
+status = "unsupported"
+link = "n/a"
+note = "per-level timeouts and buffer size"
+
+[[key]]
+match = ["observatory", "observatory.*", "burstObservatory", "burstObservatory.*"]
+status = "unsupported"
+link = "n/a"
+note = "needed for policy groups"

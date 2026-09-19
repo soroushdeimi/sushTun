@@ -1,0 +1,286 @@
+# Which Xray keys a sushTun user can set, read by scripts/xray_keys.py.
+#
+# class = "client"   sushTun generates the section (outbounds, routing, dns, the
+#                    TUN and local inbounds, sockopt, policy, stats, observatory,
+#                    log) and a user can set the key without changing the server,
+#                    or a share link carries it. Values that only have to MATCH
+#                    the server (a REALITY public key, a finalmask password) count:
+#                    the user copies them from the provider like any link field.
+# class = "server"   only meaningful on a listening server. reason says why.
+# class = "internal" sushTun must own it for the tunnel to work, the core rejects
+#                    it, or it is outside what a client front end should expose.
+#                    reason says why.
+#
+# The first rule whose pattern matches wins: keep specific rules above general
+# ones. In `match`, `*` matches anything; every other character is literal.
+
+# -- top-level sections sushTun owns or does not expose ------------------------
+
+[[rule]]
+match = ["transport", "transport.*"]
+class = "internal"
+reason = "global transport was removed; the core rejects the key"
+
+[[rule]]
+match = ["version", "version.*"]
+class = "internal"
+reason = "a config-side core version gate; sushTun pins the bundled core itself"
+
+[[rule]]
+match = ["fakeDns", "fakeDns.*"]
+class = "internal"
+reason = "fakedns is refused on purpose (project rule; xrayui/core/dns.py)"
+
+[[rule]]
+match = ["api", "api.*"]
+class = "internal"
+reason = "sushTun runs the stats API for its own graph (xrayui/core/render.py _apply_stats)"
+
+[[rule]]
+match = ["metrics", "metrics.*"]
+class = "internal"
+reason = "a pprof/expvar debug endpoint for core developers, not a client setting"
+
+[[rule]]
+match = ["stats"]
+class = "internal"
+reason = "an on-switch sushTun sets for its traffic counters (render.py _apply_stats)"
+
+[[rule]]
+match = ["reverse", "reverse.*"]
+class = "internal"
+reason = "legacy bridge/portal, rejected by the core from 26.4.25; VLESS `reverse` replaces it"
+
+[[rule]]
+match = ["geodata", "geodata.*"]
+class = "internal"
+reason = "the core would fetch geo files itself; sushTun downloads and swaps them (xrayui/core/geo.py)"
+
+[[rule]]
+match = ["env", "env.*"]
+class = "internal"
+reason = "core environment variables; sushTun sets them on the child process (xrayui/core/proc.py)"
+
+# -- log ------------------------------------------------------------------------
+
+[[rule]]
+match = ["log.access", "log.error"]
+class = "internal"
+reason = "log file paths; sushTun reads xray.log from its data folder (paths.log_file)"
+
+[[rule]]
+match = ["log", "log.*"]
+class = "client"
+
+# -- policy ---------------------------------------------------------------------
+
+[[rule]]
+match = ["policy.system", "policy.system.*"]
+class = "internal"
+reason = "inbound/outbound counters sushTun switches on for its traffic graph"
+
+[[rule]]
+match = ["policy.levels.*.statsUser*"]
+class = "server"
+reason = "per-user traffic counters for a server's clients (users are identified by email)"
+
+[[rule]]
+match = ["policy", "policy.*"]
+class = "client"
+
+# -- observatory ------------------------------------------------------------------
+
+[[rule]]
+match = ["observatory", "observatory.*", "burstObservatory", "burstObservatory.*"]
+class = "client"
+
+# -- dns --------------------------------------------------------------------------
+
+[[rule]]
+match = ["dns.tag"]
+class = "internal"
+reason = "names the DNS module's own traffic for routing; sushTun routes DNS by inbound tag"
+
+[[rule]]
+match = ["dns", "dns.*"]
+class = "client"
+
+# -- routing ------------------------------------------------------------------------
+
+[[rule]]
+match = ["routing.rules[].user", "routing.rules[].vlessRoute"]
+class = "server"
+reason = "matches a server's own clients (by email / VLESS route); a client has one user"
+
+[[rule]]
+match = ["routing", "routing.*"]
+class = "client"
+
+# -- inbounds: only sushTun's local ones are client-side --------------------------
+
+[[rule]]
+match = ["inbounds[].streamSettings", "inbounds[].streamSettings.*"]
+class = "server"
+reason = "transport for a listening server; sushTun's inbounds are TUN/loopback without one"
+
+[[rule]]
+match = ["inbounds[].settings{protocol=tun}.name"]
+class = "internal"
+reason = "sushTun names the TUN xray0; routes, DNS and forwarding refer to that name"
+
+[[rule]]
+match = ["inbounds[].settings{protocol=tun}.gateway",
+         "inbounds[].settings{protocol=tun}.autoSystemRoutingTable",
+         "inbounds[].settings{protocol=tun}.autoOutboundsInterface"]
+class = "internal"
+reason = "the core would manage routes itself; sushTun owns routes so it can coexist with other VPNs (_net_posix.add_default_routes)"
+
+[[rule]]
+match = ["inbounds[].settings{protocol=tun}", "inbounds[].settings{protocol=tun}.*"]
+class = "client"
+
+[[rule]]
+match = ["inbounds[].settings{protocol=dokodemo-door}", "inbounds[].settings{protocol=dokodemo-door}.*",
+         "inbounds[].settings{protocol=tunnel}", "inbounds[].settings{protocol=tunnel}.*"]
+class = "internal"
+reason = "the dns-in plumbing (127.0.0.1:53) and the stats API inbound; changing it breaks DNS"
+
+[[rule]]
+match = ["inbounds[].settings{protocol=socks}", "inbounds[].settings{protocol=socks}.*",
+         "inbounds[].settings{protocol=mixed}", "inbounds[].settings{protocol=mixed}.*",
+         "inbounds[].settings{protocol=http}", "inbounds[].settings{protocol=http}.*"]
+class = "client"
+
+[[rule]]
+match = ["inbounds[].settings{protocol=*"]
+class = "server"
+reason = "a server protocol that accepts remote clients; sushTun only runs local inbounds"
+
+[[rule]]
+match = ["inbounds[].tag", "inbounds[].protocol", "inbounds[].settings"]
+class = "internal"
+reason = "sushTun wires its inbounds by tag (tun-in, dns-in, socks-in, api)"
+
+[[rule]]
+match = ["inbounds", "inbounds[].listen", "inbounds[].port", "inbounds[].sniffing",
+         "inbounds[].sniffing.*"]
+class = "client"
+
+[[rule]]
+match = ["inbounds[].*"]
+class = "server"
+reason = "a listener option for inbounds that accept remote clients"
+
+# -- outbounds: settings per protocol -----------------------------------------------
+
+[[rule]]
+match = ["outbounds[].proxySettings", "outbounds[].proxySettings.*"]
+class = "internal"
+reason = "superseded by streamSettings.sockopt.dialerProxy; rejected by the core from 26.9.8"
+
+[[rule]]
+match = ["outbounds[].tag", "outbounds[].settings"]
+class = "internal"
+reason = "sushTun names its outbounds (proxy, direct, dns-out, block); rules refer to them"
+
+[[rule]]
+match = ["outbounds[].settings{protocol=freedom}.noise", "outbounds[].settings{protocol=freedom}.noise.*",
+         "outbounds[].settings{protocol=direct}.noise", "outbounds[].settings{protocol=direct}.noise.*"]
+class = "internal"
+reason = "the old single-object form; the core rejects it (use `noises`)"
+
+[[rule]]
+match = ["outbounds[].settings{protocol=freedom}.proxyProtocol",
+         "outbounds[].settings{protocol=direct}.proxyProtocol"]
+class = "server"
+reason = "sends a PROXY-protocol header, for Xray fronting a backend that expects one"
+
+[[rule]]
+match = ["outbounds[].settings{protocol=vless}.reverse", "outbounds[].settings{protocol=vless}.reverse.*",
+         "outbounds[].settings{protocol=vless}.vnext[].users[].reverse",
+         "outbounds[].settings{protocol=vless}.vnext[].users[].reverse.*"]
+class = "server"
+reason = "VLESS reverse only works with a matching server-side reverse config; no link carries it"
+
+[[rule]]
+match = ["outbounds[].settings{protocol=vless}.testpre", "outbounds[].settings{protocol=vless}.testseed",
+         "outbounds[].settings{protocol=vless}.vnext[].users[].testpre",
+         "outbounds[].settings{protocol=vless}.vnext[].users[].testseed"]
+class = "internal"
+reason = "Vision test knobs (named test*); undocumented, not for users (UNVERIFIED meaning)"
+
+[[rule]]
+match = ["outbounds[].settings{protocol=*"]
+class = "client"
+
+[[rule]]
+match = ["outbounds", "outbounds[].protocol", "outbounds[].mux", "outbounds[].mux.*",
+         "outbounds[].sendThrough", "outbounds[].targetStrategy"]
+class = "client"
+
+# -- outbounds: streamSettings --------------------------------------------------------
+
+[[rule]]
+match = ["outbounds[].streamSettings.sockopt.interface"]
+class = "internal"
+reason = "sushTun binds proxy/direct/dns-out to the physical NIC (__IFACE__) so traffic cannot loop into the TUN"
+
+[[rule]]
+match = ["outbounds[].streamSettings.sockopt.tproxy", "outbounds[].streamSettings.sockopt.v6only",
+         "outbounds[].streamSettings.sockopt.acceptProxyProtocol",
+         "outbounds[].streamSettings.sockopt.trustedXForwardedFor",
+         "outbounds[].streamSettings.*.acceptProxyProtocol"]
+class = "server"
+reason = "a listener option; an outbound never accepts connections"
+
+[[rule]]
+match = ["outbounds[].streamSettings.kcpSettings.header", "outbounds[].streamSettings.kcpSettings.seed",
+         "outbounds[].streamSettings.tlsSettings.allowInsecure",
+         "outbounds[].streamSettings.tlsSettings.verifyPeerCertInNames",
+         "outbounds[].streamSettings.finalmask.udp[].settings{type=xdns}.domain",
+         "outbounds[].streamSettings.finalmask.udp[].settings{type=realm}.tlsConfig.allowInsecure",
+         "outbounds[].streamSettings.finalmask.udp[].settings{type=realm}.tlsConfig.verifyPeerCertInNames"]
+class = "internal"
+reason = "the core rejects it (PrintRemovedFeatureError); see 'rejected when built' below"
+
+[[rule]]
+match = ["outbounds[].streamSettings.tlsSettings.certificates", "outbounds[].streamSettings.tlsSettings.certificates[].*",
+         "outbounds[].streamSettings.tlsSettings.rejectUnknownSni",
+         "outbounds[].streamSettings.tlsSettings.echServerKeys",
+         "outbounds[].streamSettings.tlsSettings.ocspStapling",
+         "outbounds[].streamSettings.tlsSettings.minClientVer", "outbounds[].streamSettings.tlsSettings.maxClientVer"]
+class = "server"
+reason = "a TLS server's own certificate, keys or client limits"
+
+[[rule]]
+match = ["outbounds[].streamSettings.realitySettings.dest", "outbounds[].streamSettings.realitySettings.target",
+         "outbounds[].streamSettings.realitySettings.serverNames", "outbounds[].streamSettings.realitySettings.privateKey",
+         "outbounds[].streamSettings.realitySettings.shortIds", "outbounds[].streamSettings.realitySettings.maxTimeDiff",
+         "outbounds[].streamSettings.realitySettings.minClientVer", "outbounds[].streamSettings.realitySettings.maxClientVer",
+         "outbounds[].streamSettings.realitySettings.xver", "outbounds[].streamSettings.realitySettings.limitFallback*",
+         "outbounds[].streamSettings.realitySettings.mldsa65Seed", "outbounds[].streamSettings.realitySettings.type"]
+class = "server"
+reason = "a REALITY server's target, private key or client limits"
+
+[[rule]]
+match = ["outbounds[].streamSettings.hysteriaSettings.masquerade", "outbounds[].streamSettings.hysteriaSettings.masquerade.*"]
+class = "server"
+reason = "the web site a Hysteria server shows to probes"
+
+[[rule]]
+match = ["outbounds[].streamSettings.xhttpSettings.scMaxBufferedPosts", "outbounds[].streamSettings.xhttpSettings.scStreamUpServerSecs",
+         "outbounds[].streamSettings.xhttpSettings.serverMaxHeaderBytes", "outbounds[].streamSettings.xhttpSettings.noSSEHeader",
+         "outbounds[].streamSettings.splithttpSettings.scMaxBufferedPosts", "outbounds[].streamSettings.splithttpSettings.scStreamUpServerSecs",
+         "outbounds[].streamSettings.splithttpSettings.serverMaxHeaderBytes", "outbounds[].streamSettings.splithttpSettings.noSSEHeader"]
+class = "server"
+reason = "an XHTTP server-side limit or response header (UNVERIFIED per key against the XHTTP docs)"
+
+[[rule]]
+match = ["outbounds[].streamSettings.tcpSettings.header{type=http}.response", "outbounds[].streamSettings.tcpSettings.header{type=http}.response.*",
+         "outbounds[].streamSettings.rawSettings.header{type=http}.response", "outbounds[].streamSettings.rawSettings.header{type=http}.response.*"]
+class = "server"
+reason = "the HTTP response a disguised TCP server sends back"
+
+[[rule]]
+match = ["outbounds[].streamSettings", "outbounds[].streamSettings.*"]
+class = "client"
