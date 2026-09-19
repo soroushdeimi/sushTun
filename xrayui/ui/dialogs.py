@@ -34,7 +34,7 @@ from ..core import backup as backup_mod
 from ..core import geo as geo_mod
 from ..core import settings as app_settings
 from ..core.outbounds.hysteria2 import normalize_ports
-from ..core.profiles import Profile, normalize_pcs, valid_pcs
+from ..core.profiles import Profile, normalize_pcs, valid_pcs, valid_pqv
 from ..core.subscription import DEFAULT_USER_AGENT, Subscription
 from ..i18n import tr
 from .mac import InsetGroup, Switch
@@ -233,6 +233,7 @@ class ProfileEditDialog(QDialog):
         self.f_pbk = QLineEdit(p.pbk)
         self.f_sid = QLineEdit(p.sid)
         self.f_spx = QLineEdit(p.spx)
+        self.f_pqv = QLineEdit(p.pqv)
         self.f_path = QLineEdit(p.path)
         self.f_host = QLineEdit(p.host)
         self.f_service = QLineEdit(p.service_name)
@@ -270,8 +271,8 @@ class ProfileEditDialog(QDialog):
         # in an RTL layout -- only f_name (a freeform display name) doesn't
         # get this.
         for f in (self.f_address, self.f_id, self.f_encryption, self.f_flow, self.f_sni,
-                 self.f_fp, self.f_alpn, self.f_pbk, self.f_sid, self.f_spx, self.f_path,
-                 self.f_host, self.f_service, self.f_wg_local, self.f_wg_psk,
+                 self.f_fp, self.f_alpn, self.f_pbk, self.f_sid, self.f_spx, self.f_pqv,
+                 self.f_path, self.f_host, self.f_service, self.f_wg_local, self.f_wg_psk,
                  self.f_wg_reserved, self.f_hy2_pcs, self.f_hy2_obfs_password,
                  self.f_hy2_ports):
             f.setLayoutDirection(Qt.LeftToRight)
@@ -293,6 +294,7 @@ class ProfileEditDialog(QDialog):
         lab_alpn = self._add_row(form, "ALPN", self.f_alpn)
         lab_sid = self._add_row(form, tr("Reality sid"), self.f_sid)
         lab_spx = self._add_row(form, tr("Reality spiderX"), self.f_spx)
+        lab_pqv = self._add_row(form, tr("Reality ML-DSA-65 verify"), self.f_pqv)
         lab_path = self._add_row(form, tr("Path"), self.f_path)
         lab_host = self._add_row(form, tr("Host"), self.f_host)
         lab_service = self._add_row(form, tr("gRPC service"), self.f_service)
@@ -416,6 +418,7 @@ class ProfileEditDialog(QDialog):
             (lab_alpn, self.f_alpn, is_tls),
             (lab_sid, self.f_sid, is_reality),
             (lab_spx, self.f_spx, is_reality),
+            (lab_pqv, self.f_pqv, is_reality),
             (lab_path, self.f_path, has_path_host),
             (lab_host, self.f_host, has_path_host),
             (lab_service, self.f_service, is_grpc),
@@ -497,6 +500,13 @@ class ProfileEditDialog(QDialog):
                                     tr("Pinned cert SHA-256 must be 64 hex characters "
                                       "(colons and spaces are fine and will be removed)."))
                 return
+            pqv_raw = self.f_pqv.text().strip()
+            if (pqv_raw and self.f_security.currentText() == "reality"
+                    and not valid_pqv(pqv_raw)):
+                QMessageBox.warning(self, tr("Invalid ML-DSA-65 key"),
+                                    tr("The ML-DSA-65 verify key must be the server's public "
+                                       "key: unpadded base64url, 2603 characters."))
+                return
             p = self._profile
             # A stored default name (like a new rule set's "New set"), not
             # UI chrome -- left untranslated for the same reason those are.
@@ -517,6 +527,7 @@ class ProfileEditDialog(QDialog):
             p.pbk = self.f_pbk.text().strip()
             p.sid = self.f_sid.text().strip()
             p.spx = self.f_spx.text().strip()
+            p.pqv = self.f_pqv.text().strip()
             p.path = self.f_path.text().strip()
             p.host = self.f_host.text().strip()
             p.service_name = self.f_service.text().strip()

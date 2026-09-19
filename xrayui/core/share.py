@@ -33,6 +33,8 @@ def _transport_query(p: Profile) -> dict[str, str]:
         q["sid"] = p.sid
     if p.spx:
         q["spx"] = p.spx
+    if p.pqv:
+        q["pqv"] = p.pqv
     if p.path:
         q["path"] = p.path
     if p.host:

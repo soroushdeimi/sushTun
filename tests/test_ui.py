@@ -1580,3 +1580,34 @@ def test_hotspot_that_fails_to_start_turns_the_switch_back_off(window, monkeypat
     assert window.settings["gateway"]["enabled"] is False
     assert app_settings.load()["gateway"]["enabled"] is False
     assert "hotspot did not start" in window.step_label.text()
+
+
+def _pqv_key() -> str:
+    import base64
+    return base64.urlsafe_b64encode(bytes(1952)).rstrip(b"=").decode()
+
+
+def test_profile_edit_dialog_round_trips_reality_pqv(qapp):
+    p = Profile(name="r", address="a.com", port=443, id="u", network="tcp",
+                security="reality", pbk="PUB", sid="ab", sni="a.com")
+    dlg = ProfileEditDialog(p)
+    assert not dlg.f_pqv.isHidden()
+    assert dlg.f_pqv.text() == ""
+    dlg.f_pqv.setText(_pqv_key())
+    dlg._save()
+    assert dlg.result_profile().pqv == _pqv_key()
+
+
+def test_profile_edit_dialog_refuses_a_malformed_pqv(qapp, warnings):
+    p = Profile(name="r", address="a.com", port=443, id="u", network="tcp",
+                security="reality", pbk="PUB", sid="ab", sni="a.com")
+    dlg = ProfileEditDialog(p)
+    dlg.f_pqv.setText("not-a-key")
+    dlg._save()
+    assert dlg.result_profile().pqv == ""  # nothing was saved
+    assert warnings and "ML-DSA-65" in warnings[0]
+
+
+def test_profile_edit_dialog_hides_pqv_outside_reality(qapp):
+    p = Profile(name="t", address="a.com", port=443, id="u", network="tcp", security="tls")
+    assert ProfileEditDialog(p).f_pqv.isHidden()

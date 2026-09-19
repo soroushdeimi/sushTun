@@ -13,6 +13,8 @@ from .. import paths
 SUBSCRIPTIONS_FILENAME = "subscriptions.json"
 
 _PCS_HEX_RE = re.compile(r"^[0-9a-f]{64}$")
+# An ML-DSA-65 public key is 1952 bytes: 2603 characters of unpadded base64url.
+_PQV_RE = re.compile(r"^[A-Za-z0-9_-]{2603}$")
 
 
 def normalize_pcs(raw: str) -> str:
@@ -29,6 +31,13 @@ def valid_pcs(raw: str) -> bool:
     """Whether `raw` is (after normalizing) exactly 64 hex characters -- a
     full SHA-256, the only shape Xray's pinnedPeerCertSha256 accepts."""
     return bool(_PCS_HEX_RE.match(normalize_pcs(raw)))
+
+
+def valid_pqv(raw: str) -> bool:
+    """Whether `raw` is a REALITY mldsa65Verify key Xray will accept: the
+    server's ML-DSA-65 public key as unpadded base64url (1952 bytes). Xray
+    refuses to start on anything else, so the whole connection would fail."""
+    return bool(_PQV_RE.match((raw or "").strip()))
 
 
 @dataclass
@@ -48,6 +57,7 @@ class Profile:
     pbk: str = ""
     sid: str = ""
     spx: str = ""
+    pqv: str = ""  # REALITY mldsa65Verify (post-quantum), link query "pqv"
     path: str = ""
     host: str = ""
     service_name: str = ""

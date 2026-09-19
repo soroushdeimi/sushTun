@@ -370,3 +370,33 @@ def test_hysteria2_build_test_config_validates(tmp_path, monkeypatch):
     cfg = speedtest.build_test_config([_hy2()], [11500], "lo")
     cfg.pop("routing", None)
     assert xraycheck.check_config(json.dumps(cfg)) is None
+
+
+def _pqv_key() -> str:
+    import base64
+    return base64.urlsafe_b64encode(bytes(1952)).rstrip(b"=").decode()
+
+
+def _reality(**kw) -> Profile:
+    return Profile(protocol="vless", address="a.com", port=443, id="u", network="tcp",
+                   security="reality", sni="a.com", fp="chrome",
+                   pbk="Z84J2IelR9ch3k8VtlVhhs5ycBUlXA7wHBWcBrjqnAw", sid="ab", **kw)
+
+
+def test_reality_pqv_is_rendered_only_when_valid():
+    reality = outbounds.build(_reality(pqv=_pqv_key()), "proxy")["streamSettings"][
+        "realitySettings"]
+    assert reality["mldsa65Verify"] == _pqv_key()
+    for pqv in ("", "not-a-key", _pqv_key() + "="):
+        reality = outbounds.build(_reality(pqv=pqv), "proxy")["streamSettings"][
+            "realitySettings"]
+        # Xray refuses to start on a malformed key, so a bad one is dropped.
+        assert "mldsa65Verify" not in reality, pqv
+
+
+def test_xray_test_accepts_a_reality_pqv(tmp_path, monkeypatch):
+    _skip_if_no_binary()
+    monkeypatch.setattr(xraycheck.paths, "state_dir", lambda: tmp_path)
+    text = render.build_text(_reality(pqv=_pqv_key()), "lo", TEMPLATE, include_tun=False)
+    assert "mldsa65Verify" in text
+    assert xraycheck.check_config(text) is None

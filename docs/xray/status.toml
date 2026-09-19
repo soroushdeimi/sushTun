@@ -272,7 +272,8 @@ match = ["outbounds[].streamSettings.realitySettings",
          "outbounds[].streamSettings.realitySettings.fingerprint",
          "outbounds[].streamSettings.realitySettings.publicKey",
          "outbounds[].streamSettings.realitySettings.shortId",
-         "outbounds[].streamSettings.realitySettings.spiderX"]
+         "outbounds[].streamSettings.realitySettings.spiderX",
+         "outbounds[].streamSettings.realitySettings.mldsa65Verify"]
 status = "full"
 files = ["xrayui/core/outbounds/_common.py", "xrayui/core/importer.py", "xrayui/core/share.py"]
 link = "yes"
@@ -281,7 +282,7 @@ sub = "= link"
 [[key]]
 match = ["outbounds[].streamSettings.realitySettings.*"]
 status = "unsupported"
-note = "mldsa65Verify (post-quantum signature check), password (UNVERIFIED: publicKey alias?), show, masterKeyLog"
+note = "password (UNVERIFIED: publicKey alias?), show, masterKeyLog"
 
 # -- transports ------------------------------------------------------------------------------
 

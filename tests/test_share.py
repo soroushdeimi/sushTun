@@ -164,3 +164,14 @@ def test_wireguard_link_round_trips_base64_keys_with_slash_plus_and_equals():
         id="aB/c+d1EF/GHI=", pbk="pQ+R/ST8uVW=", wg_preshared="xY/z9+AB=",
     )
     assert _same(parse_wireguard(share.share_link(p)), p)
+
+
+def test_vless_link_round_trips_reality_pqv():
+    p = Profile(
+        name="PQ", protocol="vless", address="a.com", port=443, id="uid",
+        network="tcp", security="reality", sni="a.com", fp="chrome", pbk="PUB",
+        sid="ab", pqv="PQ-KEY_value",
+    )
+    link = share.share_link(p)
+    assert "pqv=PQ-KEY_value" in link
+    assert _same(parse_vless(link), p)

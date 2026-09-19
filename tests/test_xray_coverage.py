@@ -97,7 +97,8 @@ def _profiles() -> list[Profile]:
     tls = {"address": "a.example", "id": "x", "security": "tls", "sni": "a.example"}
     return [
         Profile(protocol="vless", address="a.example", id="x", security="reality", sni="a",
-                pbk="k", sid="1", fp="chrome", network="tcp", flow="xtls-rprx-vision"),
+                pbk="k", sid="1", fp="chrome", network="tcp", flow="xtls-rprx-vision",
+                pqv="A" * 2603),
         Profile(protocol="vless", network="ws", path="/", host="h", **tls),
         Profile(protocol="vless", network="xhttp", path="/", xhttp_mode="auto",
                 xhttp_extra='{"xmux": {"maxConcurrency": "16-32"}}', **tls),

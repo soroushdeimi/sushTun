@@ -18,16 +18,16 @@ Baseline core: **26.3.27** (bundled). Keys that first appear later are listed as
 | log | 4 | 2 | 0 | 0 | 0 | 2 | 0 | 2 | 0 |
 | metrics | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3 | 0 |
 | observatory | 5 | 0 | 0 | 0 | 0 | 5 | 0 | 0 | 0 |
-| outbounds | 443 | 99 | 7 | 26 | 58 | 253 | 78 | 25 | 245 |
+| outbounds | 443 | 100 | 7 | 26 | 58 | 252 | 78 | 25 | 245 |
 | policy | 7 | 0 | 0 | 0 | 0 | 7 | 3 | 5 | 0 |
 | reverse | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 7 | 0 |
 | routing | 39 | 10 | 1 | 0 | 0 | 28 | 2 | 0 | 1 |
 | stats | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 |
 | transport | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 |
 | version | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3 | 0 |
-| **all** | **564** | **132** | **11** | **42** | **58** | **321** | **514** | **71** | **529** |
+| **all** | **564** | **133** | **11** | **42** | **58** | **320** | **514** | **71** | **529** |
 
-Client-side keys reachable today: **243 of 564** (43%); with a form (full or partial): **143** (25%).
+Client-side keys reachable today: **244 of 564** (43%); with a form (full or partial): **144** (25%).
 
 ## Client-side keys
 
@@ -398,13 +398,13 @@ Status: full = a form or setting writes it (and links carry it where they have a
 | `outbounds[].streamSettings.rawSettings.header{type=http}.request.version` | <=26.3.27 | unsupported |  |  |  | request method and version |
 | `outbounds[].streamSettings.realitySettings` | <=26.3.27 | full | yes | = link | xrayui/core/outbounds/_common.py, xrayui/core/importer.py, xrayui/core/share.py |  |
 | `outbounds[].streamSettings.realitySettings.fingerprint` | <=26.3.27 | full | yes | = link | xrayui/core/outbounds/_common.py, xrayui/core/importer.py, xrayui/core/share.py |  |
-| `outbounds[].streamSettings.realitySettings.masterKeyLog` | <=26.3.27 | unsupported |  |  |  | mldsa65Verify (post-quantum signature check), password (UNVERIFIED: publicKey alias?), show, masterKeyLog |
-| `outbounds[].streamSettings.realitySettings.mldsa65Verify` | <=26.3.27 | unsupported |  |  |  | mldsa65Verify (post-quantum signature check), password (UNVERIFIED: publicKey alias?), show, masterKeyLog |
-| `outbounds[].streamSettings.realitySettings.password` | <=26.3.27 | unsupported |  |  |  | mldsa65Verify (post-quantum signature check), password (UNVERIFIED: publicKey alias?), show, masterKeyLog |
+| `outbounds[].streamSettings.realitySettings.masterKeyLog` | <=26.3.27 | unsupported |  |  |  | password (UNVERIFIED: publicKey alias?), show, masterKeyLog |
+| `outbounds[].streamSettings.realitySettings.mldsa65Verify` | <=26.3.27 | full | yes | = link | xrayui/core/outbounds/_common.py, xrayui/core/importer.py, xrayui/core/share.py |  |
+| `outbounds[].streamSettings.realitySettings.password` | <=26.3.27 | unsupported |  |  |  | password (UNVERIFIED: publicKey alias?), show, masterKeyLog |
 | `outbounds[].streamSettings.realitySettings.publicKey` | <=26.3.27 | full | yes | = link | xrayui/core/outbounds/_common.py, xrayui/core/importer.py, xrayui/core/share.py |  |
 | `outbounds[].streamSettings.realitySettings.serverName` | <=26.3.27 | full | yes | = link | xrayui/core/outbounds/_common.py, xrayui/core/importer.py, xrayui/core/share.py |  |
 | `outbounds[].streamSettings.realitySettings.shortId` | <=26.3.27 | full | yes | = link | xrayui/core/outbounds/_common.py, xrayui/core/importer.py, xrayui/core/share.py |  |
-| `outbounds[].streamSettings.realitySettings.show` | <=26.3.27 | unsupported |  |  |  | mldsa65Verify (post-quantum signature check), password (UNVERIFIED: publicKey alias?), show, masterKeyLog |
+| `outbounds[].streamSettings.realitySettings.show` | <=26.3.27 | unsupported |  |  |  | password (UNVERIFIED: publicKey alias?), show, masterKeyLog |
 | `outbounds[].streamSettings.realitySettings.spiderX` | <=26.3.27 | full | yes | = link | xrayui/core/outbounds/_common.py, xrayui/core/importer.py, xrayui/core/share.py |  |
 | `outbounds[].streamSettings.security` | <=26.3.27 | full | yes | = link | xrayui/core/outbounds/_common.py, xrayui/core/importer.py, xrayui/core/share.py | network h2/http is still written although the core removed that transport: see findings |
 | `outbounds[].streamSettings.sockopt` | <=26.3.27 | partial | n/a |  | xrayui/core/outbounds/_common.py, config.template.json | only `interface` (internal) is written |

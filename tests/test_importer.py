@@ -573,3 +573,18 @@ def test_mixed_subscription_includes_hysteria2():
     ).decode()
     profiles = importer.parse_subscription(blob)
     assert [p.protocol for p in profiles] == ["vless", "hysteria2"]
+
+
+def test_parse_reality_pqv_from_link_and_json():
+    link = ("vless://uid@example.com:443?security=reality&pbk=PUB&sid=ab&sni=a.com"
+            "&pqv=PQKEY&type=tcp#R")
+    assert importer.parse_vless(link).pqv == "PQKEY"
+    cfg = {"outbounds": [{
+        "tag": "proxy", "protocol": "vless",
+        "settings": {"vnext": [{"address": "1.2.3.4", "port": 443,
+                                "users": [{"id": "u", "encryption": "none"}]}]},
+        "streamSettings": {"network": "tcp", "security": "reality",
+                           "realitySettings": {"serverName": "a.com", "publicKey": "PUB",
+                                               "mldsa65Verify": "PQKEY"}},
+    }]}
+    assert importer.parse_json(json.dumps(cfg)).pqv == "PQKEY"
