@@ -571,6 +571,32 @@ TRANSLATIONS_FA: dict[str, str] = {
     "Packet size": "اندازه‌ی بسته",
     "Delay (ms)": "تأخیر (ms)",
 
+    # -- ui/a-shell: hotspot settings page ----------------------------------
+    "Network name": "نام شبکه",
+    "New": "جدید",
+    "Make a new random password": "ساخت یک رمز تصادفی تازه",
+    "WPA2": "WPA2",
+    "WPA3 (if your Wi-Fi card supports it)": "WPA3 (اگر کارت Wi-Fi پشتیبانی کند)",
+    "Automatic": "خودکار",
+    "2.4 GHz": "2.4 GHz",
+    "5 GHz": "5 GHz",
+    "Band": "باند",
+    "While this computer is on Wi-Fi, the hotspot uses the same band.":
+        "وقتی این کامپیوتر به Wi-Fi وصل است، هات‌اسپات از همان باند استفاده می‌کند.",
+    "Hide the network name": "پنهان کردن نام شبکه",
+    "Keep devices apart": "جدا نگه داشتن دستگاه‌ها",
+    "Devices on the hotspot can't reach each other.":
+        "دستگاه‌های روی هات‌اسپات به هم دسترسی ندارند.",
+    "The network name must be 1 to 32 bytes long.": "نام شبکه باید ۱ تا ۳۲ بایت باشد.",
+    "The hotspot password must be 8 to 63 plain characters (A-Z, 0-9, symbols).":
+        "رمز هات‌اسپات باید ۸ تا ۶۳ نویسه‌ی ساده باشد (A-Z، 0-9، نمادها).",
+    "Changes apply the next time the hotspot starts.":
+        "تغییرات از دفعه‌ی بعد که هات‌اسپات روشن شود اعمال می‌شوند.",
+    "Windows manages the hotspot: set its name and password in "
+    "Windows Settings → Network → Mobile hotspot.":
+        "هات‌اسپات را خود ویندوز مدیریت می‌کند: نام و رمز آن را در "
+        "Settings → Network → Mobile hotspot ویندوز تنظیم کنید.",
+
     # -- ui/a-dialogs: REALITY post-quantum verify --------------------------
     "Reality ML-DSA-65 verify": "تأیید ML-DSA-65 در Reality",
     "Invalid ML-DSA-65 key": "کلید ML-DSA-65 نامعتبر است",

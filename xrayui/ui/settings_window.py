@@ -58,6 +58,7 @@ TOPICS = [
     ("anti-filter", "Anti-filter", "anti-filter", "#bf5af2"),
     ("local-proxy", "Local proxy", "servers", "#30d158"),
     ("geo-data", "Geo data", "routing", "#0a84ff"),
+    ("hotspot", "Hotspot", "hotspot", "#34c759"),
     ("startup", "Startup", "arrow-up", "#ff9f0a"),
     ("exits", "Multi-exit port", "subscriptions", "#5e5ce6"),
     ("backup", "Backup", "archive", "#64d2ff"),
@@ -528,6 +529,108 @@ class _ExitsPage(QWidget):
         if why is None:
             why = exits_mod.items_problem(cfg["items"], set(self._profiles))
         return tr("Multi-exit port: {why}", why=why) if why else None
+
+
+class _HotspotPage(QWidget):
+    """Hotspot: name, password and Wi-Fi options for the Linux hotspot.
+
+    Windows runs its own Mobile hotspot, whose name and password live in
+    Windows Settings, so there this page only says so."""
+
+    def __init__(self, gateway_cfg: dict, parent=None) -> None:
+        super().__init__(parent)
+        self._gateway_cfg = gateway_cfg
+        self._editable = sys.platform.startswith("linux")
+        self._build_ui()
+
+    def _build_ui(self) -> None:
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(18, 18, 18, 18)
+
+        title = QLabel(tr("Hotspot"))
+        title.setObjectName("H1")
+        layout.addWidget(title)
+
+        cfg = self._gateway_cfg
+        group = InsetGroup(self)
+        self.ssid = QLineEdit(str(cfg.get("ssid") or "sushTun"))
+        group.add_row(tr("Network name"), self.ssid)
+
+        self.password = QLineEdit(str(cfg.get("password") or ""))
+        self.password.setEchoMode(QLineEdit.Password)
+        self.password.setLayoutDirection(Qt.LeftToRight)
+        self.btn_show = QPushButton(tr("Show"))
+        self.btn_show.setCheckable(True)
+        self.btn_show.toggled.connect(lambda on: self.password.setEchoMode(
+            QLineEdit.Normal if on else QLineEdit.Password))
+        self.btn_new = QPushButton(tr("New"))
+        self.btn_new.setToolTip(tr("Make a new random password"))
+        self.btn_new.clicked.connect(
+            lambda: self.password.setText(secrets.token_urlsafe(9)))
+        pw_row = QWidget()
+        pw_layout = QHBoxLayout(pw_row)
+        pw_layout.setContentsMargins(0, 0, 0, 0)
+        pw_layout.setSpacing(8)
+        pw_layout.addWidget(self.password, 1)
+        pw_layout.addWidget(self.btn_show)
+        pw_layout.addWidget(self.btn_new)
+        group.add_row(tr("Password"), pw_row)
+
+        self.security = QComboBox()
+        self.security.addItem(tr("WPA2"), "wpa2")
+        self.security.addItem(tr("WPA3 (if your Wi-Fi card supports it)"), "wpa3")
+        self.security.setCurrentIndex(max(self.security.findData(cfg.get("security")), 0))
+        group.add_row(tr("Security"), self.security)
+
+        self.band = QComboBox()
+        self.band.addItem(tr("Automatic"), "auto")
+        self.band.addItem(tr("2.4 GHz"), "bg")
+        self.band.addItem(tr("5 GHz"), "a")
+        self.band.setCurrentIndex(max(self.band.findData(cfg.get("band")), 0))
+        group.add_row(tr("Band"), self.band,
+                      tr("While this computer is on Wi-Fi, the hotspot uses the same band."))
+
+        self.hidden = Switch()
+        self.hidden.setChecked(cfg.get("hidden") is True)
+        group.add_row(tr("Hide the network name"), self.hidden)
+
+        self.isolation = Switch()
+        self.isolation.setChecked(cfg.get("isolation") is True)
+        group.add_row(tr("Keep devices apart"), self.isolation,
+                      tr("Devices on the hotspot can't reach each other."))
+        layout.addWidget(group)
+
+        note = QLabel(tr("Changes apply the next time the hotspot starts.")
+                      if self._editable else
+                      tr("Windows manages the hotspot: set its name and password in "
+                         "Windows Settings → Network → Mobile hotspot."))
+        note.setObjectName("Muted")
+        note.setWordWrap(True)
+        layout.addWidget(note)
+        group.setEnabled(self._editable)
+        layout.addStretch(1)
+
+    def problem(self) -> str | None:
+        """Why these values can't be saved, or None."""
+        if not self._editable:
+            return None
+        name = self.ssid.text().strip()
+        if not 1 <= len(name.encode("utf-8")) <= 32:
+            return tr("The network name must be 1 to 32 bytes long.")
+        pw = self.password.text()
+        # Empty is fine: a password is made the first time the hotspot starts.
+        if pw and not (8 <= len(pw) <= 63 and all(" " <= ch <= "~" for ch in pw)):
+            return tr("The hotspot password must be 8 to 63 plain characters (A-Z, 0-9, symbols).")
+        return None
+
+    def collect(self) -> dict:
+        """The whole gateway dict: its on/off keys are kept as they are."""
+        out = dict(self._gateway_cfg)
+        if self._editable:
+            out.update(ssid=self.ssid.text().strip(), password=self.password.text(),
+                       security=self.security.currentData(), band=self.band.currentData(),
+                       hidden=self.hidden.isChecked(), isolation=self.isolation.isChecked())
+        return out
 
 
 class _LocalProxyPage(QWidget):
@@ -1030,6 +1133,7 @@ class SettingsWindow(QDialog):
         self._pages["anti-filter"] = _AntiFilterPage(core_cfg)
         self._pages["local-proxy"] = _LocalProxyPage(core_cfg)
         self._pages["geo-data"] = _GeoDataPage(geo_cfg)
+        self._pages["hotspot"] = _HotspotPage(self._settings.get("gateway") or {})
         self._pages["startup"] = _StartupPage(startup_cfg)
         self._pages["exits"] = _ExitsPage(self._settings.get("exits") or {}, core_cfg,
                                           self._settings.get("dns") or {}, self._profiles)
@@ -1110,7 +1214,7 @@ class SettingsWindow(QDialog):
     def _on_done(self) -> None:
         if self._busy:
             return
-        problem = self._pages["exits"].problem()
+        problem = self._pages["exits"].problem() or self._pages["hotspot"].problem()
         if problem:
             self._show_status(problem)
             return
@@ -1211,6 +1315,7 @@ class SettingsWindow(QDialog):
             "core": core_cfg,
             "startup": self._pages["startup"].collect(),
             "exits": self._pages["exits"].collect(),
+            "gateway": self._pages["hotspot"].collect(),
             "updates": {
                 **self._settings.get("updates", {}),
                 "check": self._pages["general"].check_updates.isChecked(),
