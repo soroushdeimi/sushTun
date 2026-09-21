@@ -56,6 +56,11 @@ DOMESTIC_PRESETS: dict[str, list[str]] = {
 # this tag (or a prefix of it -- kept as one exact string here since this
 # app only ever needs one such rule).
 _DIRECT_DNS_TAG = "direct-dns"
+# Company / internal networks (settings dns.internal). Their queries go to that
+# network's own DNS server through this outbound, which has no interface
+# binding, so the OS routes them into whichever VPN owns that server's subnet.
+_INTERNAL_DNS_TAG = "internal-dns"
+INTERNAL_OUTBOUND = "internal"
 
 
 def _is_ip(value: str) -> bool:
@@ -101,6 +106,9 @@ REASON_UNRECOGNIZED = ("{value}: expected an IP, a hostname, or a scheme such as
                        "https:// tcp:// udp:// quic://")
 REASON_INVALID_PORT = "{value}: invalid port"
 REASON_USE_RESOLVER_IP = "{value}: use the resolver's IP address"
+REASON_INTERNAL_FORMAT = "{value}: write it as  domain = DNS server IP"
+REASON_INTERNAL_DOMAIN = "{value}: not a domain name"
+REASON_INTERNAL_SERVER_IP = "{value}: the DNS server must be an IP address"
 _REASON_REFUSED = {k: "{value}: " + v for k, v in _REFUSED.items()}
 
 
@@ -207,6 +215,45 @@ def hosts_from_lines(lines) -> dict[str, str | list[str]]:
         if name and values:
             hosts[name] = values[0] if len(values) == 1 else values
     return clean_hosts(hosts)
+
+
+def internal_reasons(lines) -> list[tuple[str, str]]:
+    """(value, English template) for every internal-network line that would be
+    dropped -- see clean_internal()."""
+    out: list[tuple[str, str]] = []
+    for raw in lines or []:
+        line = str(raw).strip()
+        if not line or line.startswith("#"):
+            continue
+        name, sep, rest = line.partition("=")
+        name = name.strip().lstrip("*.").rstrip(".")
+        servers = [v.strip() for v in rest.replace(",", " ").split() if v.strip()]
+        if not sep or not name or not servers:
+            out.append((line, REASON_INTERNAL_FORMAT))
+        elif not _valid_hostname(name) or "." not in name:
+            out.append((line, REASON_INTERNAL_DOMAIN))
+        elif not all(_is_ip(s) for s in servers):
+            # A server given as a name would need DNS to find DNS.
+            out.append((line, REASON_INTERNAL_SERVER_IP))
+    return out
+
+
+def clean_internal(lines) -> list[tuple[str, list[str]]]:
+    """Parse `domain = ip[, ip]` lines; drop every line internal_reasons flags."""
+    bad = {value for value, _ in internal_reasons(lines)}
+    out: list[tuple[str, list[str]]] = []
+    seen: set[str] = set()
+    for raw in lines or []:
+        line = str(raw).strip()
+        if not line or line.startswith("#") or line in bad:
+            continue
+        name, _, rest = line.partition("=")
+        name = name.strip().lstrip("*.").rstrip(".").lower()
+        if name in seen:
+            continue
+        seen.add(name)
+        out.append((name, [v.strip() for v in rest.replace(",", " ").split() if v.strip()]))
+    return out
 
 
 def hosts_to_lines(hosts) -> list[str]:
@@ -469,6 +516,16 @@ def build_dns_and_rules(
         entries = [_domestic_server_object(addr, direct_domains) for addr in domestic]
         block["servers"] = entries + (block.get("servers") or [])
         needs_direct_dns_rule = True
+
+    internal = clean_internal(d.get("internal"))
+    if internal:
+        # First in the list so they win for their domains. skipFallback: if
+        # that VPN is down the name fails instead of leaking to another resolver.
+        entries = [{"address": ip, "domains": [f"domain:{name}"], "skipFallback": True,
+                    "tag": _INTERNAL_DNS_TAG} for name, ips in internal for ip in ips]
+        block["servers"] = entries + (block.get("servers") or [])
+        rules.append({"type": "field", "inboundTag": [_INTERNAL_DNS_TAG],
+                      "outboundTag": INTERNAL_OUTBOUND})
 
     if d.get("remote_via_tunnel"):
         block["tag"] = "dns-module"
