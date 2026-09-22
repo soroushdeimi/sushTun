@@ -33,10 +33,12 @@ def qapp():
 
 
 @pytest.fixture
-def themed(qapp):
+def themed(qapp, flush_widgets):
     old = qapp.styleSheet()
+    flush_widgets()
     qapp.setStyleSheet(theme.STYLESHEET)
     yield qapp
+    flush_widgets()
     qapp.setStyleSheet(old)
 
 

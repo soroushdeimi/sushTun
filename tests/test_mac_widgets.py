@@ -38,10 +38,11 @@ from xrayui.ui.mac import (  # noqa: E402
 
 
 @pytest.fixture(scope="module")
-def qapp():
+def qapp(flush_widgets):
     app = QApplication.instance() or QApplication([])
     # The real theme: without it, widgets render with Qt's light default
     # palette and pixel checks (visible icons, card surfaces) lie.
+    flush_widgets()
     app.setStyleSheet(theme.build_stylesheet())
     return app
 

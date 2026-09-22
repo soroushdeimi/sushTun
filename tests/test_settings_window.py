@@ -720,13 +720,16 @@ def test_done_is_refused_while_the_hotspot_page_is_invalid(qapp, defaults, monke
     assert "8 to 63" in win._status_label.text()
 
 
-def test_hotspot_page_on_windows_only_explains(qapp, defaults, monkeypatch):
+def test_hotspot_page_on_windows_allows_an_empty_name(qapp, defaults, monkeypatch):
+    # On Windows the page is editable, and an empty name means "keep the name
+    # Windows already uses", so it must not block Done.
     monkeypatch.setattr(sw_mod.sys, "platform", "win32")
     win = SettingsWindow(defaults)
     page = win._pages["hotspot"]
-    page.ssid.setText("")  # disabled there; must not block Done or change anything
+    assert page.ssid.isEnabled()
+    page.ssid.setText("")
     assert page.problem() is None
-    assert win.values()["gateway"] == defaults["gateway"]
+    assert win.values()["gateway"]["ssid"] == ""
 
 
 
