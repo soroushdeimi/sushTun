@@ -39,6 +39,7 @@ from ..core import backup as backup_mod
 from ..core import exits as exits_mod
 from ..core import forwards as forwards_mod
 from ..core import geo as geo_mod
+from ..core import hotspot as hotspot_mod
 from ..core import settings as app_settings
 from ..core import updates as updates_mod
 from ..core.profiles import Profile
@@ -594,6 +595,11 @@ class _HotspotPage(QWidget):
         self._gateway_cfg = gateway_cfg
         self._win = sys.platform == "win32"
         self._editable = self._win or sys.platform.startswith("linux")
+        # Windows: what its own Mobile hotspot uses (read in the background),
+        # and whether the user changed anything on this page since.
+        self._windows: dict | None = None
+        self._edited: set[str] = set()
+        self._read_worker = None
         self._build_ui()
 
     def _build_ui(self) -> None:
@@ -605,6 +611,9 @@ class _HotspotPage(QWidget):
         layout.addWidget(title)
 
         cfg = self._gateway_cfg
+        if self._win and cfg.get("apply_on_windows") is not True:
+            # Until Windows answers, empty values mean keep its current settings.
+            cfg = {}
         group = InsetGroup(self)
         self.ssid = QLineEdit(str(cfg.get("ssid") or ("" if self._win else "sushTun")))
         if self._win:
@@ -636,12 +645,16 @@ class _HotspotPage(QWidget):
         group.add_row(tr("Password"), pw_row)
 
         self.security = QComboBox()
+        if self._win:
+            self.security.addItem(tr("Keep Windows setting"), "")
         self.security.addItem(tr("WPA2"), "wpa2")
         self.security.addItem(tr("WPA3 (if your Wi-Fi card supports it)"), "wpa3")
         self.security.setCurrentIndex(max(self.security.findData(cfg.get("security")), 0))
         group.add_row(tr("Security"), self.security)
 
         self.band = QComboBox()
+        if self._win:
+            self.band.addItem(tr("Keep Windows setting"), "")
         self.band.addItem(tr("Automatic"), "auto")
         self.band.addItem(tr("2.4 GHz"), "bg")
         self.band.addItem(tr("5 GHz"), "a")
@@ -676,8 +689,59 @@ class _HotspotPage(QWidget):
         label.setObjectName("Muted")
         label.setWordWrap(True)
         layout.addWidget(label)
+        self.read_note = QLabel(tr("Couldn't read Windows' hotspot settings. Empty fields "
+                                   "keep what Windows already uses."))
+        self.read_note.setObjectName("Muted")
+        self.read_note.setWordWrap(True)
+        self.read_note.hide()
+        layout.addWidget(self.read_note)
         group.setEnabled(self._editable)
         layout.addStretch(1)
+        if self._win:
+            self.ssid.textEdited.connect(lambda: self._edited.add("ssid"))
+            self.password.textEdited.connect(lambda: self._edited.add("password"))
+            self.security.activated.connect(lambda: self._edited.add("security"))
+            self.band.activated.connect(lambda: self._edited.add("band"))
+            self.btn_new.clicked.connect(lambda: self._edited.add("password"))
+            self._read_windows()
+
+    def _read_windows(self) -> None:
+        # PowerShell takes a second or two: never on the UI thread.
+        worker = Worker(hotspot_mod.tethering_config)
+        worker.signals.finished.connect(self._on_windows_config)
+        worker.signals.error.connect(self._on_windows_config)
+        self._read_worker = worker  # QRunnable is not kept alive by the pool
+        QThreadPool.globalInstance().start(worker)
+
+    def _on_windows_config(self, data) -> None:
+        """Show what Windows' own hotspot uses, unless the user already typed."""
+        self._read_worker = None
+        if not isinstance(data, dict):
+            self.read_note.show()
+            return
+        self._windows = {
+            "ssid": str(data.get("ssid") or ""),
+            "password": str(data.get("password") or ""),
+            "security": {v: k for k, v in hotspot_mod.WIN_AUTH.items()}.get(
+                str(data.get("auth")), ""),
+            "band": {v: k for k, v in hotspot_mod.WIN_BANDS.items()}.get(
+                str(data.get("band")), ""),
+        }
+        # A saved edit is still waiting for the next hotspot start.
+        if self._gateway_cfg.get("apply_on_windows") is True:
+            return
+        for key, widget in (("ssid", self.ssid), ("password", self.password),
+                            ("security", self.security), ("band", self.band)):
+            if key in self._edited:
+                continue
+            if isinstance(widget, QLineEdit):
+                widget.setText(self._windows[key])
+            else:
+                widget.setCurrentIndex(max(widget.findData(self._windows[key]), 0))
+
+    def _fields(self) -> dict:
+        return {"ssid": self.ssid.text().strip(), "password": self.password.text(),
+                "security": self.security.currentData(), "band": self.band.currentData()}
 
     def problem(self) -> str | None:
         """Why these values can't be saved, or None."""
@@ -697,8 +761,13 @@ class _HotspotPage(QWidget):
         """The whole gateway dict: its on/off keys are kept as they are."""
         out = dict(self._gateway_cfg)
         if self._editable:
-            out.update(ssid=self.ssid.text().strip(), password=self.password.text(),
-                       security=self.security.currentData(), band=self.band.currentData())
+            out.update(self._fields())
+        if self._win:
+            # Push into Windows only what the user changed here; a change still
+            # waiting from last time stays pending.
+            changed = any(self._fields()[key] != (self._windows or {}).get(key, "")
+                          for key in self._edited)
+            out["apply_on_windows"] = self._gateway_cfg.get("apply_on_windows") is True or changed
         if self.hidden is not None and self.isolation is not None:
             out.update(hidden=self.hidden.isChecked(),
                        isolation=self.isolation.isChecked())

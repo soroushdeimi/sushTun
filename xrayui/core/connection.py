@@ -280,6 +280,10 @@ class Connection:
         first; an empty field keeps what Windows already has. Getting this
         wrong must not cost the user gateway mode, so a refusal is logged and
         the hotspot starts on its old name and password."""
+        # The saved defaults are never empty, so pushing them unasked renamed a
+        # hotspot the user had set up in Windows. Only an edit on the page does.
+        if cfg.get("apply_on_windows") is not True:
+            return
         ssid, password = str(cfg.get("ssid") or ""), str(cfg.get("password") or "")
         security, band = str(cfg.get("security") or ""), str(cfg.get("band") or "")
         if not (ssid or password or security or band):
@@ -287,6 +291,9 @@ class Connection:
         if hotspot.configure_tethering(ssid, password, security=security, band=band):
             self._log(f'Hotspot name and password set ("{ssid}").' if ssid
                       else "Hotspot settings applied.")
+            settings = app_settings.load()
+            settings["gateway"]["apply_on_windows"] = False
+            app_settings.save(settings)
         else:
             self._log("WARNING: Windows kept its own hotspot name and password.")
 

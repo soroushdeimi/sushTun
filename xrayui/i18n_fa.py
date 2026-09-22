@@ -681,4 +681,8 @@ TRANSLATIONS_FA: dict[str, str] = {
         "بگذار دستگاه‌های دیگر شبکه هم از این انتقال استفاده کنند.",
     "Port forwarding: {why}": "انتقال پورت: {why}",
     "Through the tunnel": "از داخل تونل",
+    # -- ui/a-shell: Windows hotspot read ------------------------------------
+    "Keep Windows setting": "حفظ تنظیم ویندوز",
+    "Couldn't read Windows' hotspot settings. Empty fields keep what Windows already uses.":
+        "تنظیمات هات‌اسپات ویندوز خوانده نشد. فیلدهای خالی همان مقدار ویندوز را نگه می‌دارند.",
 }

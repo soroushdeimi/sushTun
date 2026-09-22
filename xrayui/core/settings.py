@@ -76,6 +76,10 @@ DEFAULTS: dict = {
         "band": "auto",
         "hidden": False,
         "isolation": False,
+        # Windows: Settings → Hotspot changes to push into Windows' own Mobile
+        # hotspot. Set only when the user edits the page; cleared once applied,
+        # so Windows' own settings stay the truth otherwise.
+        "apply_on_windows": False,
     },
     "alerts": {
         "data_percent": 10,

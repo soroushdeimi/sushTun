@@ -518,3 +518,42 @@ def test_start_gateway_passes_the_hotspot_options(monkeypatch, tmp_path):
     assert seen == {"security": "wpa3", "band_choice": "a", "hidden": True, "isolation": True}
 
 
+# -- Windows: Settings → Hotspot reaches Windows only when the user asked ---------------
+def test_windows_hotspot_is_left_alone_until_the_user_edits_it(monkeypatch, tmp_path):
+    from xrayui.core import connection
+    conn = _gateway_conn(monkeypatch, tmp_path)
+    calls = []
+    monkeypatch.setattr(connection.hotspot, "configure_tethering",
+                        lambda *a, **k: calls.append((a, k)) or True)
+    conn._configure_windows_hotspot({"ssid": "sushTun", "password": "", "security": "wpa2",
+                                     "band": "auto", "apply_on_windows": False})
+    assert calls == []
+
+
+def test_a_windows_edit_is_applied_once(monkeypatch, tmp_path):
+    from xrayui.core import connection
+    from xrayui.core import settings as app_settings
+    conn = _gateway_conn(monkeypatch, tmp_path)
+    settings = app_settings.load()
+    settings["gateway"].update(ssid="Home AP", apply_on_windows=True)
+    app_settings.save(settings)
+    calls = []
+    monkeypatch.setattr(connection.hotspot, "configure_tethering",
+                        lambda *a, **k: calls.append((a, k)) or True)
+    conn._configure_windows_hotspot(app_settings.load()["gateway"])
+    conn._configure_windows_hotspot(app_settings.load()["gateway"])
+    assert len(calls) == 1 and calls[0][0][0] == "Home AP"
+    assert app_settings.load()["gateway"]["apply_on_windows"] is False  # applied once
+
+
+
+def test_failed_windows_apply_keeps_the_edit_pending(monkeypatch, tmp_path):
+    from xrayui.core import connection
+    from xrayui.core import settings as app_settings
+    conn = _gateway_conn(monkeypatch, tmp_path)
+    settings = app_settings.load()
+    settings["gateway"].update(ssid="Retry name", apply_on_windows=True)
+    app_settings.save(settings)
+    monkeypatch.setattr(connection.hotspot, "configure_tethering", lambda *a, **k: False)
+    conn._configure_windows_hotspot(app_settings.load()["gateway"])
+    assert app_settings.load()["gateway"]["apply_on_windows"] is True
