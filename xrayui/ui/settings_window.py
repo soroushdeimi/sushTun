@@ -33,14 +33,16 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .. import __version__
 from ..core import autostart, coreopts, render, xraycheck
 from ..core import backup as backup_mod
 from ..core import exits as exits_mod
 from ..core import forwards as forwards_mod
 from ..core import geo as geo_mod
 from ..core import settings as app_settings
+from ..core import updates as updates_mod
 from ..core.profiles import Profile
-from ..i18n import tr
+from ..i18n import ltr, tr
 from .icons import icon
 from .mac import InsetGroup, Switch
 from .titlebar import TrafficLight, _LightGroup
@@ -175,9 +177,14 @@ class SettingsSidebarItem(QPushButton):
 class _GeneralPage(QWidget):
     """General settings: ping target, throughput sample, log level, MTU, check updates."""
 
+    # The main window owns installing an update, so a found release is handed
+    # up rather than acted on here.
+    updateAvailable = Signal(object)
+
     def __init__(self, settings: dict, parent=None) -> None:
         super().__init__(parent)
         self._settings = settings
+        self._check_worker = None
         self._build_ui()
 
     def _build_ui(self) -> None:
@@ -219,8 +226,46 @@ class _GeneralPage(QWidget):
         self.check_updates.setChecked(bool((self._settings.get("updates") or {}).get("check", True)))
         group.add_row(tr("Check for updates"), self.check_updates)
 
+        # The version and a way to check right now, next to the switch that
+        # decides whether sushTun checks on its own: someone who has just
+        # heard about a release should not have to wait a day for it.
+        self.btn_check_now = QPushButton(tr("Check now"))
+        self.btn_check_now.clicked.connect(self._check_now)
+        self.update_status = QLabel("")
+        self.update_status.setObjectName("Muted")
+        self.update_status.setWordWrap(True)
+        version_row = QWidget()
+        vr = QHBoxLayout(version_row)
+        vr.setContentsMargins(0, 0, 0, 0)
+        vr.setSpacing(8)
+        vr.addWidget(self.update_status, 1)
+        vr.addWidget(self.btn_check_now)
+        group.add_row(tr("Version {version}", version=ltr(__version__)), version_row)
+
         layout.addWidget(group)
         layout.addStretch(1)
+
+    def _check_now(self) -> None:
+        self.btn_check_now.setEnabled(False)
+        self.update_status.setText(tr("Checking…"))
+        worker = Worker(updates_mod.latest_release)
+        worker.signals.finished.connect(self._on_checked)
+        worker.signals.error.connect(lambda _msg: self._on_checked(None))
+        self._check_worker = worker  # QRunnable is not kept alive by the pool
+        QThreadPool.globalInstance().start(worker)
+
+    def _on_checked(self, release) -> None:
+        self._check_worker = None
+        self.btn_check_now.setEnabled(True)
+        if release is None:
+            self.update_status.setText(tr("Could not reach GitHub."))
+            return
+        if not updates_mod.is_newer(release.tag, __version__):
+            self.update_status.setText(tr("You're up to date."))
+            return
+        self.update_status.setText(
+            tr("sushTun {tag} is available", tag=ltr(release.tag)))
+        self.updateAvailable.emit(release)
 
     def collect(self) -> dict:
         return {
@@ -535,15 +580,20 @@ class _ExitsPage(QWidget):
 
 
 class _HotspotPage(QWidget):
-    """Hotspot: name, password and Wi-Fi options for the Linux hotspot.
+    """Hotspot: name, password and Wi-Fi options.
 
-    Windows runs its own Mobile hotspot, whose name and password live in
-    Windows Settings, so there this page only says so."""
+    Linux drives NetworkManager, so every option here is ours to set. Windows
+    runs one Mobile Hotspot for the whole machine and the app rewrites its
+    configuration through the same WinRT surface the Settings app uses --
+    which covers the name, password, security and band, but has no notion of
+    a hidden network or of keeping clients apart, so those two rows are Linux
+    only."""
 
     def __init__(self, gateway_cfg: dict, parent=None) -> None:
         super().__init__(parent)
         self._gateway_cfg = gateway_cfg
-        self._editable = sys.platform.startswith("linux")
+        self._win = sys.platform == "win32"
+        self._editable = self._win or sys.platform.startswith("linux")
         self._build_ui()
 
     def _build_ui(self) -> None:
@@ -556,12 +606,18 @@ class _HotspotPage(QWidget):
 
         cfg = self._gateway_cfg
         group = InsetGroup(self)
-        self.ssid = QLineEdit(str(cfg.get("ssid") or "sushTun"))
+        self.ssid = QLineEdit(str(cfg.get("ssid") or ("" if self._win else "sushTun")))
+        if self._win:
+            # Empty means "leave the hotspot named the way Windows has it",
+            # which beats showing a name the user never chose.
+            self.ssid.setPlaceholderText(tr("Keep the name Windows already uses"))
         group.add_row(tr("Network name"), self.ssid)
 
         self.password = QLineEdit(str(cfg.get("password") or ""))
         self.password.setEchoMode(QLineEdit.Password)
         self.password.setLayoutDirection(Qt.LeftToRight)
+        if self._win:
+            self.password.setPlaceholderText(tr("Keep the password Windows already uses"))
         self.btn_show = QPushButton(tr("Show"))
         self.btn_show.setCheckable(True)
         self.btn_show.toggled.connect(lambda on: self.password.setEchoMode(
@@ -591,25 +647,35 @@ class _HotspotPage(QWidget):
         self.band.addItem(tr("5 GHz"), "a")
         self.band.setCurrentIndex(max(self.band.findData(cfg.get("band")), 0))
         group.add_row(tr("Band"), self.band,
+                      None if self._win else
                       tr("While this computer is on Wi-Fi, the hotspot uses the same band."))
 
-        self.hidden = Switch()
-        self.hidden.setChecked(cfg.get("hidden") is True)
-        group.add_row(tr("Hide the network name"), self.hidden)
+        # Windows' hotspot API exposes neither of these, so offering them
+        # would be a switch that silently does nothing.
+        self.hidden = self.isolation = None
+        if not self._win:
+            self.hidden = Switch()
+            self.hidden.setChecked(cfg.get("hidden") is True)
+            group.add_row(tr("Hide the network name"), self.hidden)
 
-        self.isolation = Switch()
-        self.isolation.setChecked(cfg.get("isolation") is True)
-        group.add_row(tr("Keep devices apart"), self.isolation,
-                      tr("Devices on the hotspot can't reach each other."))
+            self.isolation = Switch()
+            self.isolation.setChecked(cfg.get("isolation") is True)
+            group.add_row(tr("Keep devices apart"), self.isolation,
+                          tr("Devices on the hotspot can't reach each other."))
         layout.addWidget(group)
 
-        note = QLabel(tr("Changes apply the next time the hotspot starts.")
-                      if self._editable else
-                      tr("Windows manages the hotspot: set its name and password in "
-                         "Windows Settings → Network → Mobile hotspot."))
-        note.setObjectName("Muted")
-        note.setWordWrap(True)
-        layout.addWidget(note)
+        if self._win:
+            note = tr("Windows applies these the next time the hotspot starts, "
+                      "to its Mobile hotspot as a whole.")
+        elif self._editable:
+            note = tr("Changes apply the next time the hotspot starts.")
+        else:
+            note = tr("Sharing the tunnel over a hotspot isn't available "
+                      "on this system.")
+        label = QLabel(note)
+        label.setObjectName("Muted")
+        label.setWordWrap(True)
+        layout.addWidget(label)
         group.setEnabled(self._editable)
         layout.addStretch(1)
 
@@ -618,7 +684,8 @@ class _HotspotPage(QWidget):
         if not self._editable:
             return None
         name = self.ssid.text().strip()
-        if not 1 <= len(name.encode("utf-8")) <= 32:
+        # On Windows an empty name is a choice: keep the hotspot's own.
+        if not (self._win and not name) and not 1 <= len(name.encode("utf-8")) <= 32:
             return tr("The network name must be 1 to 32 bytes long.")
         pw = self.password.text()
         # Empty is fine: a password is made the first time the hotspot starts.
@@ -631,8 +698,10 @@ class _HotspotPage(QWidget):
         out = dict(self._gateway_cfg)
         if self._editable:
             out.update(ssid=self.ssid.text().strip(), password=self.password.text(),
-                       security=self.security.currentData(), band=self.band.currentData(),
-                       hidden=self.hidden.isChecked(), isolation=self.isolation.isChecked())
+                       security=self.security.currentData(), band=self.band.currentData())
+        if self.hidden is not None and self.isolation is not None:
+            out.update(hidden=self.hidden.isChecked(),
+                       isolation=self.isolation.isChecked())
         return out
 
 
@@ -1141,6 +1210,10 @@ class _LanguagePage(QWidget):
 class SettingsWindow(QDialog):
     """System Settings style settings window with sidebar navigation."""
 
+    # General → Check now found one. Installing it belongs to the main window,
+    # which is the only thing that can quit the app afterwards.
+    updateAvailable = Signal(object)
+
     def __init__(
         self,
         settings: dict,
@@ -1243,6 +1316,7 @@ class SettingsWindow(QDialog):
 
         self._pages = {}
         self._pages["general"] = _GeneralPage(self._settings)
+        self._pages["general"].updateAvailable.connect(self.updateAvailable)
         self._pages["anti-filter"] = _AntiFilterPage(core_cfg)
         self._pages["local-proxy"] = _LocalProxyPage(core_cfg)
         self._pages["geo-data"] = _GeoDataPage(geo_cfg)

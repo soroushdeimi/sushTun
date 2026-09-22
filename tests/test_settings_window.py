@@ -729,3 +729,48 @@ def test_hotspot_page_on_windows_only_explains(qapp, defaults, monkeypatch):
     assert win.values()["gateway"] == defaults["gateway"]
 
 
+
+
+# -- General → Check now ----------------------------------------------------
+
+def _general(win):
+    return win._pages["general"]
+
+
+def test_check_now_says_when_there_is_nothing_to_do(qapp, defaults, monkeypatch):
+    """Silence after pressing a button reads as a broken button."""
+    from xrayui import __version__
+
+    win = SettingsWindow(defaults)
+    try:
+        page = _general(win)
+        page._on_checked(sw_mod.updates_mod.Release(tag=f"v{__version__}", url="https://x"))
+        assert "up to date" in page.update_status.text().lower()
+        assert page.btn_check_now.isEnabled()
+    finally:
+        win.close()
+
+
+def test_check_now_reports_a_failure_instead_of_going_quiet(qapp, defaults):
+    win = SettingsWindow(defaults)
+    try:
+        page = _general(win)
+        page._on_checked(None)
+        assert page.update_status.text()
+        assert page.btn_check_now.isEnabled()
+    finally:
+        win.close()
+
+
+def test_a_found_release_is_handed_to_the_window_not_installed_here(qapp, defaults):
+    """Installing means quitting the app, which only the main window can do."""
+    win = SettingsWindow(defaults)
+    seen = []
+    win.updateAvailable.connect(seen.append)
+    try:
+        release = sw_mod.updates_mod.Release(tag="v99.0.0", url="https://x")
+        _general(win)._on_checked(release)
+        assert [r.tag for r in seen] == ["v99.0.0"]
+        assert "v99.0.0" in _general(win).update_status.text()
+    finally:
+        win.close()

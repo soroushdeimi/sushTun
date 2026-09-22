@@ -465,6 +465,9 @@ TRANSLATIONS_FA: dict[str, str] = {
         "درخواست‌ها به‌صورت رمزنگاری‌نشده از شبکه محلی خارج می‌شوند.",
     "Connected.": "متصل شد.",
     "Starting Windows hotspot...": "در حال راه‌اندازی هات‌اسپات ویندوز...",
+    "Hotspot settings applied.": "تنظیمات هات‌اسپات اعمال شد.",
+    "WARNING: Windows kept its own hotspot name and password.":
+        "هشدار: ویندوز نام و رمز هات‌اسپات خودش را نگه داشت.",
     "Starting Wi-Fi hotspot...": "در حال راه‌اندازی هات‌اسپات Wi-Fi...",
     "Gateway mode on — hotspot clients now use the tunnel.":
         "حالت دروازه روشن است — کلاینت‌های هات‌اسپات اکنون از تونل استفاده می‌کنند.",
@@ -487,7 +490,40 @@ TRANSLATIONS_FA: dict[str, str] = {
     "Allow other devices on your network": "اجازه به دستگاه‌های دیگر در شبکه شما",
     "Routing": "مسیریابی",
     "{what} — reconnect to apply.": "{what} — برای اعمال، دوباره متصل شوید.",
-    "Copy download link": "کپی لینک دانلود",
+    # -- ui/update_dialog + General: in-app update --------------------------
+    "Update sushTun": "به‌روزرسانی sushTun",
+    "Download and install": "دانلود و نصب",
+    "You have version {version}.": "نسخه‌ی فعلی شما {version} است.",
+    "No release notes.": "توضیحاتی برای این نسخه ثبت نشده است.",
+    "What's new": "تازه‌ها",
+    "Download progress": "پیشرفت دانلود",
+    "Later": "بعداً",
+    "Open the download page": "باز کردن صفحه‌ی دانلود",
+    "You installed sushTun from a .deb package — update it with "
+    "apt so the package stays consistent.":
+        "شما sushTun را از بسته‌ی .deb نصب کرده‌اید — آن را با apt به‌روزرسانی "
+        "کنید تا بسته سالم بماند.",
+    "This copy can't update itself. Download {version} and replace "
+    "it by hand.":
+        "این نسخه نمی‌تواند خودش را به‌روزرسانی کند. {version} را دانلود کنید "
+        "و دستی جایگزین کنید.",
+    "Stopping…": "در حال توقف…",
+    "Downloading {name}…": "در حال دانلود {name}…",
+    "Downloaded {done} of {total}": "{done} از {total} دانلود شد",
+    "Downloaded {done}": "{done} دانلود شد",
+    "Update cancelled.": "به‌روزرسانی لغو شد.",
+    "Update failed: {error}": "به‌روزرسانی ناموفق بود: {error}",
+    "unknown error": "خطای ناشناخته",
+    "Try again": "تلاش دوباره",
+    "Downloaded and checked. sushTun will close to finish.":
+        "دانلود و بررسی شد. sushTun برای تکمیل بسته می‌شود.",
+    "Restart and install": "راه‌اندازی دوباره و نصب",
+    "Installing…": "در حال نصب…",
+    "Check now": "بررسی کن",
+    "Checking…": "در حال بررسی…",
+    "Could not reach GitHub.": "دسترسی به GitHub ممکن نشد.",
+    "You're up to date.": "شما به‌روز هستید.",
+    "Version {version}": "نسخه {version}",
 
     # -- ui/a-foundation: connection header ----------------------------------
     "Connected": "متصل",
@@ -592,10 +628,14 @@ TRANSLATIONS_FA: dict[str, str] = {
         "رمز هات‌اسپات باید ۸ تا ۶۳ نویسه‌ی ساده باشد (A-Z، 0-9، نمادها).",
     "Changes apply the next time the hotspot starts.":
         "تغییرات از دفعه‌ی بعد که هات‌اسپات روشن شود اعمال می‌شوند.",
-    "Windows manages the hotspot: set its name and password in "
-    "Windows Settings → Network → Mobile hotspot.":
-        "هات‌اسپات را خود ویندوز مدیریت می‌کند: نام و رمز آن را در "
-        "Settings → Network → Mobile hotspot ویندوز تنظیم کنید.",
+    "Keep the name Windows already uses": "همان نامی که ویندوز دارد بماند",
+    "Keep the password Windows already uses": "همان رمزی که ویندوز دارد بماند",
+    "Windows applies these the next time the hotspot starts, "
+    "to its Mobile hotspot as a whole.":
+        "ویندوز این‌ها را از دفعه‌ی بعد که هات‌اسپات روشن شود، روی کل "
+        "Mobile hotspot خودش اعمال می‌کند.",
+    "Sharing the tunnel over a hotspot isn't available on this system.":
+        "اشتراک تونل از طریق هات‌اسپات روی این سیستم در دسترس نیست.",
 
     # -- ui/a-dialogs: REALITY post-quantum verify --------------------------
     "Reality ML-DSA-65 verify": "تأیید ML-DSA-65 در Reality",

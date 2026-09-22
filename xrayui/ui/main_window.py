@@ -204,6 +204,7 @@ class MainWindow(QMainWindow):
         self._handle = None
         self._edge_cursor = False
         self._quitting = False
+        self._update_release = None
         self._told_about_tray = False
         self._current_page = PAGE_SERVERS
 
@@ -915,26 +916,48 @@ class MainWindow(QMainWindow):
             return
         self._run_async(updates_mod.latest_release, self._on_update_checked)
 
+    def check_updates_now(self, done=None) -> None:
+        """Check because the user asked, ignoring both the switch and the
+        once-a-day limit. `done(release_or_none)` is called either way, so
+        Settings can say "you're up to date" instead of nothing at all."""
+        def finished(result=None, error=None):
+            self._on_update_checked(result=result, error=error)
+            if done is not None:
+                fresh = result if result and updates_mod.is_newer(
+                    result.tag, __version__) else None
+                done(fresh)
+
+        self._run_async(updates_mod.latest_release, finished)
+
     def _on_update_checked(self, result=None, error=None) -> None:
         self.settings.setdefault("updates", {})["last_check"] = time.time()
         app_settings.save(self.settings)
         if error or not result:
             return
-        tag, url = result
-        if not updates_mod.is_newer(tag, __version__):
+        self._update_release = result
+        if not updates_mod.is_newer(result.tag, __version__):
             return
         self.alert_banner.show_alert(
-            "warning", tr("sushTun {tag} is available", tag=tag),
-            action_label=tr("Copy download link"),
-            action=lambda: QApplication.clipboard().setText(url))
+            "warning", tr("sushTun {tag} is available", tag=ltr(result.tag)),
+            action_label=tr("Update now"), action=self.open_update_dialog)
         if (self.tray
-                and self.settings["updates"].get("notified_version") != tag):
+                and self.settings["updates"].get("notified_version") != result.tag):
             self.tray.showMessage(
                 "sushTun",
-                tr("sushTun {tag} is available", tag=tag),
+                tr("sushTun {tag} is available", tag=ltr(result.tag)),
                 QSystemTrayIcon.Information, 8000)
-            self.settings["updates"]["notified_version"] = tag
+            self.settings["updates"]["notified_version"] = result.tag
             app_settings.save(self.settings)
+
+    def open_update_dialog(self, release=None, parent=None) -> None:
+        """Show what's new and, where the build allows it, install it."""
+        release = release or self._update_release
+        if release is None:
+            return
+        from .update_dialog import run_update_flow
+        if run_update_flow(release, parent or self):
+            self.alert_banner.setVisible(False)
+            self._quit()
 
     # ── connection --------------------------------------------------------
 
@@ -1153,6 +1176,10 @@ class MainWindow(QMainWindow):
         old_forwards = copy.deepcopy(self.settings.get("forwards"))
         old_gateway = copy.deepcopy(self.settings.get("gateway"))
         dlg = SettingsWindow(self.settings, self, profiles=self.store.list())
+        # Parented to the settings window so the update sits on top of it
+        # rather than behind, and so closing it does not strand the dialog.
+        dlg.updateAvailable.connect(
+            lambda release: self.open_update_dialog(release, parent=dlg))
         if dlg.exec():
             values = dlg.values()
             self.settings.update(values)
@@ -1362,11 +1389,15 @@ class MainWindow(QMainWindow):
         gw = self.settings["gateway"]
         gw["enabled"] = checked
         # Made here, not at start, so the sidebar can show it at once and a
-        # later save of these settings cannot blank it out again.
-        if checked and len(gw.get("password") or "") < 8:  # WPA2: 8-63 chars
-            gw["password"] = secrets.token_urlsafe(9)
+        # later save of these settings cannot blank it out again. Not on
+        # Windows: there the hotspot already has a name and password of its
+        # own, and inventing one would silently rewrite it.
+        if checked and not hotspot.IS_WIN and len(gw.get("password") or "") < 8:
+            gw["password"] = secrets.token_urlsafe(9)  # WPA2: 8-63 chars
         app_settings.save(self.settings)
-        self.sidebar.set_hotspot_state(checked, gw.get("ssid") or "sushTun", gw["password"])
+        self.sidebar.set_hotspot_state(
+            checked, gw.get("ssid") or ("" if hotspot.IS_WIN else "sushTun"),
+            gw.get("password") or "")
         if not self.conn.is_connected():
             self.step_label.setText(
                 tr("Hotspot sharing on — it starts when you connect.")

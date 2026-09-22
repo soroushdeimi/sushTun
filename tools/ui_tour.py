@@ -859,10 +859,47 @@ def _st_main_update(ctx: Ctx) -> None:
     win = ctx.ensure_window()
     win.alert_banner.show_alert(
         "warning", ctx.i18n.tr("sushTun {tag} is available", tag="v9.9.9"),
-        action_label=ctx.i18n.tr("Copy download link"), action=lambda: None,
+        action_label=ctx.i18n.tr("Update now"), action=lambda: None,
     )
     ctx.shot(win, "main_update_banner", "Update-available banner", expected=ctx.requested)
     win.alert_banner.setVisible(False)
+
+
+def _fake_release():
+    from xrayui.core import updates as updates_mod
+    return updates_mod.Release(
+        tag="v9.9.9", url="https://github.com/soroushdeimi/sushTun/releases/tag/v9.9.9",
+        notes="### Fixed\n- The hotspot on Windows\n\n### New\n- In-app update",
+        assets={"sushTun-linux": "https://example.invalid/sushTun-linux",
+                "SHA256SUMS": "https://example.invalid/SHA256SUMS"})
+
+
+def _st_update_dialog(ctx: Ctx) -> None:
+    """The three things the update dialog ever shows, without a network in
+    sight: what is new, downloading, and ready to restart."""
+    from xrayui.ui import update_dialog as ud
+    win = ctx.ensure_window()
+    real = ud.updates_mod.asset_for_this_build
+    ud.updates_mod.asset_for_this_build = lambda _r: "sushTun-linux"
+    try:
+        dlg = ud.UpdateDialog(_fake_release(), win)
+        dlg.show()
+        ctx.app.processEvents()
+        ctx.shot(dlg, "update_dialog", "Update dialog, what's new")
+
+        dlg._on_progress(41 * 1024 * 1024, 168 * 1024 * 1024)
+        dlg.progress.setVisible(True)
+        dlg.status.setVisible(True)
+        ctx.app.processEvents()
+        ctx.shot(dlg, "update_dialog_downloading", "Update dialog, downloading")
+
+        dlg._on_downloaded(path="/tmp/sushTun-linux")
+        ctx.app.processEvents()
+        ctx.shot(dlg, "update_dialog_ready", "Update dialog, ready to restart")
+        ctx.tour.check_focus_order(dlg, "update_dialog")
+        dlg.close()
+    finally:
+        ud.updates_mod.asset_for_this_build = real
 
 
 def _st_server_multiselect(ctx: Ctx) -> None:
@@ -1296,6 +1333,7 @@ def _st_default_buttons(ctx: Ctx) -> None:
     from xrayui.ui.rule_editor import RuleEditorDialog, default_rule
     from xrayui.ui.server_table import QrDialog
     from xrayui.ui.settings_window import SettingsWindow
+    from xrayui.ui.update_dialog import UpdateDialog
 
     win = ctx.ensure_window()
     checks = [
@@ -1311,6 +1349,7 @@ def _st_default_buttons(ctx: Ctx) -> None:
          "subscription_edit"),
         (lambda: ImportDialog(win), "import_dialog"),
         (lambda: QrDialog("Frankfurt Reality", "vless://x@y:443#f"), "qr_dialog"),
+        (lambda: UpdateDialog(_fake_release(), win), "update_dialog"),
     ]
     for factory, label in checks:
         ctx.tour.check_dialog_keyboard(factory, label)
@@ -1321,6 +1360,7 @@ TOUR_STATES: list[State] = [
     State("main_connected_reconnect", "Fake-connected, Reconnect now visible", _st_main_connected),
     State("main_alert_banner", "Quota alert banner", _st_main_alert),
     State("main_update_banner", "Update-available banner", _st_main_update),
+    State("update_dialog", "Update dialog: what's new, downloading, ready", _st_update_dialog),
     State("server_table_multiselect", "Server table, two rows selected", _st_server_multiselect),
     State("server_table_context_menu", "Right-click menu on selected servers",
           _st_server_context_menu),
