@@ -54,6 +54,9 @@ if ONEDIR:
         exclude_binaries=True,
         name="sushtun",
         console=False,
+        # The Windows installer packages this tree too, and an installed
+        # sushTun needs the same elevation the portable one asks for.
+        uac_admin=IS_WIN,
         upx=False,
         icon=exe_icon,
     )

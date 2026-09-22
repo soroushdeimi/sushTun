@@ -44,6 +44,38 @@ jobs:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact }}
 
+  # The installable Windows package, separate from the portable one-file
+  # build. Packages the one-dir tree: the one-file exe re-extracts ~170 MB to
+  # %TEMP% on every launch, which is not a price an installed app should pay.
+  windows-installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip -r requirements-dev.txt
+      - name: Fetch redistributables
+        run: python scripts/fetch_deps.py
+      - name: Build one-dir
+        run: pyinstaller tools/build.spec
+        env:
+          SUSHTUN_ONEDIR: "1"
+      - name: Read version
+        id: version
+        shell: bash
+        run: echo "value=$(python -c 'import xrayui; print(xrayui.__version__)')" >> "$GITHUB_OUTPUT"
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+      - name: Build installer
+        run: iscc /DAppVersion=${{ steps.version.outputs.value }} tools\installer.iss
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sushTun-setup
+          path: dist/sushTun-Setup-*.exe
+
   # The installable package, separate from the portable one-file build.
   deb:
     runs-on: ubuntu-latest
@@ -71,7 +103,7 @@ jobs:
   # Publishing runs once, after every build: jobs racing to create the same
   # release drops assets from whichever loses.
   publish:
-    needs: [build, deb]
+    needs: [build, windows-installer, deb]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
@@ -82,6 +114,11 @@ jobs:
           merge-multiple: true
       - name: List artifacts
         run: ls -la artifacts
+      # The in-app updater refuses to install anything it cannot match against
+      # this file (xrayui/core/updates.py), so it ships with every release.
+      - name: Write SHA256SUMS
+        working-directory: artifacts
+        run: sha256sum * > SHA256SUMS
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
