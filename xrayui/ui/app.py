@@ -5,6 +5,7 @@ from PySide6.QtWidgets import QApplication
 
 from .. import i18n, paths
 from ..core import settings as app_settings
+from ..core import updates as updates_mod
 from . import single_instance, theme
 from .icon import app_icon
 from .main_window import MainWindow
@@ -50,6 +51,9 @@ def run(argv: list[str], elevated: bool = True, autostart: bool = False) -> int:
     # check in __main__; the later one hands over here instead.
     if single_instance.notify_running(show=not autostart):
         return 0
+    # Windows only frees the name of the executable an update renamed aside
+    # once the process that was running it has gone -- which is now.
+    updates_mod.clean_previous()
     app = QApplication(argv)
     load_bundled_fonts()
     app.setApplicationName("sushTun")

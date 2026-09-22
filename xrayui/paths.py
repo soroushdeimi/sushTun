@@ -5,11 +5,13 @@ import os
 import sys
 from pathlib import Path
 
-# The .deb drops this marker next to the installed executable. /opt is not a
-# place to write settings, so installed builds keep their data in a system
-# directory instead (the app runs as root; profiles hold credentials).
+# Both installers -- the .deb and the Windows setup -- drop this marker next
+# to the executable they install. Neither /opt nor Program Files is a place to
+# write settings, so installed builds keep their data in a system directory
+# instead (the app runs elevated; profiles hold credentials).
 INSTALLED_MARKER = ".installed"
 INSTALLED_DATA_DIR = Path("/var/lib/sushtun")
+IS_WIN = sys.platform == "win32"
 
 
 def _frozen() -> bool:
@@ -20,15 +22,25 @@ def installed() -> bool:
     return _frozen() and (Path(sys.executable).resolve().parent / INSTALLED_MARKER).exists()
 
 
+def _installed_data_dir() -> Path:
+    if IS_WIN:
+        # C:\ProgramData\sushTun: machine-wide, like the install itself, and
+        # writable by the elevated process. %PROGRAMDATA% is set on every
+        # supported Windows, but fall back rather than crash if it is not.
+        root = os.environ.get("PROGRAMDATA") or os.environ.get("ALLUSERSPROFILE")
+        return Path(root) / "sushTun" if root else Path.home() / "sushTun"
+    if os.geteuid() == 0:
+        return INSTALLED_DATA_DIR
+    # A refused password prompt still opens an unelevated window; give it
+    # somewhere it may write instead of crashing on /var/lib.
+    xdg = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
+    return Path(xdg) / "sushtun"
+
+
 def base_dir() -> Path:
     # Writable, persistent location: next to the exe, or the project root in dev.
     if installed():
-        if os.geteuid() == 0:
-            return INSTALLED_DATA_DIR
-        # A refused password prompt still opens an unelevated window; give it
-        # somewhere it may write instead of crashing on /var/lib.
-        xdg = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
-        return Path(xdg) / "sushtun"
+        return _installed_data_dir()
     if _frozen():
         return Path(sys.executable).resolve().parent
     return Path(__file__).resolve().parent.parent
