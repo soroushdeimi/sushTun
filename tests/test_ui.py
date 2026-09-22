@@ -60,6 +60,13 @@ def defaults():
     return copy.deepcopy(app_settings.DEFAULTS)
 
 
+class _NoSignal:
+    """Stands in for SettingsWindow.updateAvailable in the fake dialogs below."""
+
+    def connect(self, *_args, **_kwargs):
+        pass
+
+
 @pytest.fixture
 def warnings(monkeypatch):
     """Capture QMessageBox.warning text instead of blocking on a modal."""
@@ -442,6 +449,8 @@ def test_open_settings_reloads_profiles_and_tray_after_a_restore(window, monkeyp
     window._reload_profiles()
 
     class FakeDialog:
+        updateAvailable = _NoSignal()
+
         def __init__(self, *a, **k):
             pass
 
@@ -1676,6 +1685,8 @@ def test_settings_that_xray_reads_at_startup_ask_for_a_reconnect(
     monkeypatch.setattr(window, "_needs_reconnect", lambda what: reconnects.append(what))
 
     class _Dlg:
+        updateAvailable = _NoSignal()
+
         def __init__(self, *a, **k):
             pass
 

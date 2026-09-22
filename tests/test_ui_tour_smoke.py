@@ -44,7 +44,7 @@ def _restore(mod, snap: dict[str, object]) -> None:
         setattr(mod, name, value)
 
 
-def test_ui_tour_smoke_runs_fast_and_restores_global_state(tmp_path):
+def test_ui_tour_smoke_runs_fast_and_restores_global_state(tmp_path, flush_widgets):
     _QMB = ["warning", "critical", "information", "question"]
     _METRICS = ["ping", "tcp_connect_delay", "throughput_sample", "query_stats",
                 "baseline_sample", "diagnostics"]
@@ -59,6 +59,7 @@ def test_ui_tour_smoke_runs_fast_and_restores_global_state(tmp_path):
         "paths": _snap(paths, ["base_dir", "state_dir", "profiles_dir"]),
     }
     app = QApplication.instance() or QApplication([])
+    flush_widgets()  # the tour changes the app-wide stylesheet
     old_layout = app.layoutDirection()
     old_ss = app.styleSheet()
     old_lang = i18n.current()

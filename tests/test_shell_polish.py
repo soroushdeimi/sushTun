@@ -227,7 +227,8 @@ def test_sidebar_rows_are_clear_and_pinned_to_the_bottom(qapp, tmp_path, monkeyp
         win.close()
 
 
-def test_button_rows_are_level_and_the_lights_stay_close(qapp, tmp_path, monkeypatch):
+def test_button_rows_are_level_and_the_lights_stay_close(qapp, tmp_path, monkeypatch,
+                                                         flush_widgets):
     from PySide6.QtWidgets import QPushButton
 
     from xrayui import paths
@@ -238,6 +239,7 @@ def test_button_rows_are_level_and_the_lights_stay_close(qapp, tmp_path, monkeyp
     monkeypatch.setattr(paths, "profiles_dir", lambda: tmp_path / "profiles")
     paths.ensure_dirs()
     old = qapp.styleSheet()
+    flush_widgets()
     qapp.setStyleSheet(theme.STYLESHEET)
     win = MainWindow(elevated=False)
     try:
@@ -260,4 +262,5 @@ def test_button_rows_are_level_and_the_lights_stay_close(qapp, tmp_path, monkeyp
         assert "_arrow_down.svg" in theme.STYLESHEET
     finally:
         win.close()
+        flush_widgets()
         qapp.setStyleSheet(old)
