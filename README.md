@@ -50,7 +50,9 @@ dependencies.
   configure on the device itself. On Linux sushTun starts the hotspot through
   NetworkManager alongside the Wi-Fi you are connected to when the card supports it,
   and Settings → Hotspot holds its name, password, WPA2/WPA3, band, a hidden network,
-  and whether joined devices can see each other.
+  and whether joined devices can see each other. On Windows the same page sets the
+  name, password, security and band of the Mobile hotspot Windows itself runs; a
+  field left blank keeps what Windows has.
 - **Multi-exit port** — one local SOCKS port where the **username picks the exit
   server**: `socks5://de:PASSWORD@127.0.0.1:10809` leaves through the server you named
   "de" while everything else keeps using the main tunnel. A chosen exit wins over the
@@ -148,14 +150,41 @@ Grab the latest build for your platform from the
 ready-to-run binary — no Python or dependencies required. The portable build
 keeps its settings and profiles next to the file itself.
 
-On Debian/Ubuntu you can install it instead of running the portable binary:
-the `sushtun_<version>_amd64.deb` asset adds sushTun to the app menu with its
-icon, and keeps settings and profiles in `/var/lib/sushtun`.
+On Windows you can install it instead: the `sushTun-Setup-<version>.exe` asset
+adds sushTun to the Start menu, installs into `Program Files`, and keeps
+settings and profiles in `%ProgramData%\sushTun`. Uninstall it from
+Settings → Apps, which also removes that data.
+
+On Debian/Ubuntu the `sushtun_<version>_amd64.deb` asset does the same job:
+it adds sushTun to the app menu with its icon, and keeps settings and profiles
+in `/var/lib/sushtun`.
 
 ```bash
 sudo apt install ./sushtun_*_amd64.deb   # then launch "sushTun" from the app menu
 sudo apt remove sushtun                  # uninstall (purge also deletes your data)
 ```
+
+Neither installer replaces the portable build — they are separate downloads,
+and you can keep using whichever suits you.
+
+### Updating
+
+sushTun checks for a new release once a day (Settings → General turns this
+off, and has a **Check now** button). When there is one, a banner offers
+**Update now**: that opens a window with the release notes and a single
+button, which downloads the new version, checks it against the `SHA256SUMS`
+published with the release, and restarts sushTun on it. Nothing is written
+until the download has arrived whole and matched.
+
+The Windows installer build updates itself by running the new installer; the
+portable builds replace their own executable. A copy installed from the `.deb`
+is left to `apt`, since overwriting files dpkg owns would leave the package
+inconsistent — there the same window points you at the release page.
+
+> The checksum is published in the same release as the download, so it catches
+> a truncated or tampered-with *download*, not a compromised GitHub account.
+> The releases are not code-signed, so Windows SmartScreen may warn the first
+> time you run a new build.
 
 sushTun requests elevated privileges on launch, since changing routes, DNS, and
 the network device requires admin (Windows), root via `pkexec`/`sudo` (Linux),

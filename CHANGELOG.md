@@ -1,5 +1,50 @@
 # Changelog
 
+## v0.5.0
+
+sushTun can now install its own updates, and Windows gets a real installer next to
+the portable build. The hotspot on Windows, which never worked, does.
+
+### New: update from inside the app
+sushTun could tell you a new version existed; now it can fetch it. The banner's
+button opens a window with the release notes and one button that downloads the
+new version, checks it against the `SHA256SUMS` now published with every
+release, and restarts sushTun on it. Settings → General gained the version
+number and a **Check now** button, so you no longer wait up to a day to be told.
+- Nothing is written until the download has arrived whole and matched its
+  checksum, and the download can be cancelled at any point.
+- The portable builds replace their own executable. The Windows installer build
+  runs the new installer. A `.deb` install is left to `apt` — overwriting files
+  dpkg owns would leave the package inconsistent — and is pointed at the
+  release page instead.
+- Quitting is what hands over to the new version, so the routes and DNS are put
+  back before anything else touches them.
+
+### New: a Windows installer
+`sushTun-Setup-<version>.exe` installs sushTun into `Program Files` with a
+Start-menu entry, an optional desktop icon and an uninstaller, and keeps
+settings and profiles in `%ProgramData%\sushTun` rather than beside the
+executable. It packages the one-dir build, so it starts at once instead of
+unpacking ~170 MB on every launch. The portable `sushTun-windows.exe` is
+unchanged and still published next to it.
+
+### Fixed: the hotspot on Windows
+- **Settings → Hotspot did nothing on Windows.** The page was greyed out and said to
+  use Windows Settings instead. It now writes the name, password, security and band
+  straight into the Mobile hotspot Windows runs, through the same interface its own
+  Settings app uses. A field left blank keeps what Windows already has, and Windows
+  picks the values up the next time the hotspot starts. Hiding the network and keeping
+  devices apart stay Linux-only — Windows has no equivalent.
+- **Turning the hotspot on reported failure and moved on too early.** Windows
+  PowerShell hands back WinRT async operations with no readable status, so sushTun
+  read nothing, called it a failure, and pointed connection sharing at a hotspot that
+  had not finished coming up. It now waits for the hotspot to actually be on, and for
+  its adapter to appear, before sharing the tunnel with it; if it never comes up,
+  gateway mode says so instead of failing quietly.
+- The switch no longer invents a password on Windows, which would have silently
+  renamed the hotspot's own.
+
+
 ## v0.4.0
 
 Everything new here is optional and off until you turn it on. With all of it off,
