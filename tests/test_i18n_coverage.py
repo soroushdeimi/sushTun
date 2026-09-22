@@ -94,6 +94,8 @@ _ON_STEP_KEYS = {
     "lookups will leave unencrypted via the local network.",
     "Connected.",
     "Starting Windows hotspot...",
+    "Hotspot settings applied.",
+    "WARNING: Windows kept its own hotspot name and password.",
     "Starting Wi-Fi hotspot...",
     "Gateway mode on — hotspot clients now use the tunnel.",
     "Building runtime config (macOS: SOCKS + tun2socks bridge)...",

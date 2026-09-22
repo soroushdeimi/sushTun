@@ -251,9 +251,14 @@ class Connection:
 
     def _start_gateway(self, cfg: dict) -> None:
         if IS_WIN:
+            self._configure_windows_hotspot(cfg)
             if cfg.get("start_hotspot", True) and hotspot.tethering_state() != "On":
                 self._log("Starting Windows hotspot...")
-                hotspot.start_tethering()
+                if not hotspot.start_tethering():
+                    raise RuntimeError("Windows would not start the hotspot")
+                # Tethering reports "On" a moment before the adapter ICS has
+                # to share shows up in the connection list.
+                hotspot.wait_for_hotspot_adapter()
             hotspot.enable(public_name=network.TUN_NAME)
         else:
             ssid, password = _hotspot_credentials()
@@ -267,6 +272,23 @@ class Connection:
         self._gateway_on = True
         self.state.set_gateway(True)
         self._log("Gateway mode on — hotspot clients now use the tunnel.")
+
+    def _configure_windows_hotspot(self, cfg: dict) -> None:
+        """Push Settings → Hotspot into Windows' own access point settings.
+
+        Windows only reads them when the hotspot starts, so this has to happen
+        first; an empty field keeps what Windows already has. Getting this
+        wrong must not cost the user gateway mode, so a refusal is logged and
+        the hotspot starts on its old name and password."""
+        ssid, password = str(cfg.get("ssid") or ""), str(cfg.get("password") or "")
+        security, band = str(cfg.get("security") or ""), str(cfg.get("band") or "")
+        if not (ssid or password or security or band):
+            return
+        if hotspot.configure_tethering(ssid, password, security=security, band=band):
+            self._log(f'Hotspot name and password set ("{ssid}").' if ssid
+                      else "Hotspot settings applied.")
+        else:
+            self._log("WARNING: Windows kept its own hotspot name and password.")
 
     def stop_gateway(self) -> None:
         """Turn sharing off without dropping the tunnel."""

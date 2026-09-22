@@ -107,9 +107,80 @@ def test_tunnel_gets_a_resolver_before_sharing(monkeypatch):
     assert any("dnsservers" in " ".join(c) and "127.0.0.1" in " ".join(c) for c in calls)
 
 
+def test_waiting_picks_up_a_hotspot_that_was_still_coming_up(monkeypatch):
+    """StartTetheringAsync reports "On" before 'Local Area Connection* N'
+    exists, and ICS cannot be pointed at an adapter that isn't there yet."""
+    _stub(monkeypatch, [REAL_OUTPUT, REAL_OUTPUT, WITH_HOTSPOT])
+    monkeypatch.setattr(hotspot.time, "sleep", lambda _s: None)
+    assert hotspot.wait_for_hotspot_adapter() == "Local Area Connection* 3"
+
+
+def test_waiting_gives_up_rather_than_hanging(monkeypatch):
+    _stub(monkeypatch, REAL_OUTPUT)
+    monkeypatch.setattr(hotspot.time, "sleep", lambda _s: None)
+    assert hotspot.wait_for_hotspot_adapter(timeout=0) is None
+
+
+# -- Windows Mobile Hotspot (WinRT tethering) ------------------------------
+# Verbatim from GetCurrentAccessPointConfiguration() on a Windows 11 box.
+AP_CONFIG = ('{"ssid":"DESKTOP-1VNQCEE 9299","password":"m98&83Q0",'
+             '"band":"Auto","auth":"Wpa2"}')
+
+
+def test_access_point_configuration_is_parsed(monkeypatch):
+    _stub(monkeypatch, AP_CONFIG)
+    assert hotspot.tethering_config() == {
+        "ssid": "DESKTOP-1VNQCEE 9299", "password": "m98&83Q0",
+        "band": "Auto", "auth": "Wpa2"}
+
+
+def test_unreadable_access_point_configuration_is_none(monkeypatch):
+    _stub(monkeypatch, "no-profile", returncode=1)
+    assert hotspot.tethering_config() is None
+
+
+def test_settings_are_translated_into_windows_names(monkeypatch):
+    """Settings → Hotspot speaks nmcli's vocabulary; WinRT has its own."""
+    seen = {}
+    _stub(monkeypatch, "")
+    monkeypatch.setattr(
+        hotspot.proc, "powershell",
+        lambda _s, env=None, **k: (seen.update(env or {}),
+                                   types.SimpleNamespace(stdout="", returncode=0))[1])
+    assert hotspot.configure_tethering("Phone", "secretpass", security="wpa3", band="a")
+    assert seen["AP_SSID"] == "Phone" and seen["AP_PASS"] == "secretpass"
+    assert seen["AP_BAND"] == "FiveGigahertz" and seen["AP_AUTH"] == "Wpa3"
+
+
+def test_blank_and_unknown_choices_keep_what_windows_has(monkeypatch):
+    """An empty field means 'leave it alone', and so does a value WinRT
+    has no name for -- neither may blank out the hotspot's own settings."""
+    seen = {}
+    _stub(monkeypatch, "")
+    monkeypatch.setattr(
+        hotspot.proc, "powershell",
+        lambda _s, env=None, **k: (seen.update(env or {}),
+                                   types.SimpleNamespace(stdout="", returncode=0))[1])
+    hotspot.configure_tethering(band="sixtyghz")
+    assert seen["AP_SSID"] == "" and seen["AP_PASS"] == ""
+    assert seen["AP_BAND"] == "" and seen["AP_AUTH"] == ""
+
+
+def test_tethering_start_reports_the_state_windows_reached(monkeypatch):
+    """The script polls TetheringOperationalState and exits non-zero if it
+    never gets there -- reading the async op's .Status always yielded $null
+    under Windows PowerShell, so start always claimed to have failed."""
+    _stub(monkeypatch, "On")
+    assert hotspot.start_tethering()
+    _stub(monkeypatch, "Off", returncode=1)
+    assert not hotspot.start_tethering()
+
+
 def test_no_op_off_windows(monkeypatch):
     monkeypatch.setattr(hotspot, "IS_WIN", False)
     assert hotspot.list_connections() == []
+    assert hotspot.tethering_config() is None
+    assert not hotspot.configure_tethering("Phone", "secretpass")
     with pytest.raises(RuntimeError, match="only implemented on Windows"):
         hotspot.enable()
 

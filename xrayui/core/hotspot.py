@@ -73,21 +73,87 @@ foreach ($c in $m.EnumEveryConnection) {
 
 # Modern adapters reject the legacy hostednetwork API, so drive the same
 # Mobile Hotspot surface the Settings app uses.
+#
+# Windows PowerShell 5.1 hands WinRT async operations back as a bare
+# System.__ComObject: it has no .Status to read, and it cannot be cast to
+# IAsyncOperation to await either. Reading .Status therefore always yielded
+# $null, so every call below reported failure and returned before Windows had
+# finished -- the hotspot was still coming up when ICS went looking for its
+# adapter. So fire the operation, keep a reference to it, and poll the manager
+# for the effect it should have had.
 _TETHER_PS = """
 $action = $env:TETHER_ACTION
 [void][Windows.Networking.Connectivity.NetworkInformation, Windows.Networking, ContentType=WindowsRuntime]
 [void][Windows.Networking.NetworkOperators.NetworkOperatorTetheringManager, Windows.Networking, ContentType=WindowsRuntime]
-$profile = [Windows.Networking.Connectivity.NetworkInformation]::GetInternetConnectionProfile()
-if (-not $profile) { Write-Output 'no-profile'; exit 1 }
-$mgr = [Windows.Networking.NetworkOperators.NetworkOperatorTetheringManager]::CreateFromConnectionProfile($profile)
+$prof = [Windows.Networking.Connectivity.NetworkInformation]::GetInternetConnectionProfile()
+if (-not $prof) { Write-Output 'no-profile'; exit 1 }
+$mgr = [Windows.Networking.NetworkOperators.NetworkOperatorTetheringManager]::CreateFromConnectionProfile($prof)
 if ($action -eq 'status') { Write-Output $mgr.TetheringOperationalState; exit 0 }
 
-$task = if ($action -eq 'start') { $mgr.StartTetheringAsync() } else { $mgr.StopTetheringAsync() }
-$deadline = (Get-Date).AddSeconds(20)
-while ($task.Status -eq 0 -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 250 }
-if ($task.Status -ne 1) { Write-Output "async-status=$($task.Status)"; exit 1 }
-Write-Output $mgr.TetheringOperationalState
+$want = if ($action -eq 'start') { 'On' } else { 'Off' }
+$state = "$($mgr.TetheringOperationalState)"
+if ($state -eq $want) { Write-Output $state; exit 0 }
+$op = if ($action -eq 'start') { $mgr.StartTetheringAsync() } else { $mgr.StopTetheringAsync() }
+$deadline = (Get-Date).AddSeconds(30)
+do {
+  Start-Sleep -Milliseconds 400
+  $state = "$($mgr.TetheringOperationalState)"
+} while ($state -ne $want -and (Get-Date) -lt $deadline)
+Write-Output $state
+if ($state -ne $want) { exit 1 }
 """
+
+# Read or rewrite the Mobile Hotspot's name, password and radio. Windows keeps
+# one access point configuration for the machine -- the same one the Settings
+# app edits -- so this is what "customise the hotspot" means here.
+_AP_PS = """
+[void][Windows.Networking.Connectivity.NetworkInformation, Windows.Networking, ContentType=WindowsRuntime]
+[void][Windows.Networking.NetworkOperators.NetworkOperatorTetheringManager, Windows.Networking, ContentType=WindowsRuntime]
+[void][Windows.Networking.NetworkOperators.NetworkOperatorTetheringAccessPointConfiguration, Windows.Networking, ContentType=WindowsRuntime]
+$prof = [Windows.Networking.Connectivity.NetworkInformation]::GetInternetConnectionProfile()
+if (-not $prof) { Write-Output 'no-profile'; exit 1 }
+$mgr = [Windows.Networking.NetworkOperators.NetworkOperatorTetheringManager]::CreateFromConnectionProfile($prof)
+$cur = $mgr.GetCurrentAccessPointConfiguration()
+if ($env:AP_ACTION -eq 'read') {
+  [pscustomobject]@{
+    ssid = $cur.Ssid; password = $cur.Passphrase
+    band = "$($cur.Band)"; auth = "$($cur.AuthenticationKind)"
+  } | ConvertTo-Json -Compress
+  exit 0
+}
+
+$cfg = New-Object Windows.Networking.NetworkOperators.NetworkOperatorTetheringAccessPointConfiguration
+$cfg.Ssid = if ($env:AP_SSID) { $env:AP_SSID } else { $cur.Ssid }
+$cfg.Passphrase = if ($env:AP_PASS) { $env:AP_PASS } else { $cur.Passphrase }
+# A band or authentication kind the radio does not offer is dropped instead of
+# failing the whole call, so a WPA3 pick on a WPA2-only card still saves the
+# name and password.
+$cfg.Band = $cur.Band
+if ($env:AP_BAND) {
+  $b = [Windows.Networking.NetworkOperators.TetheringWiFiBand]::($env:AP_BAND)
+  if ($cur.IsBandSupported($b)) { $cfg.Band = $b }
+}
+$cfg.AuthenticationKind = $cur.AuthenticationKind
+if ($env:AP_AUTH) {
+  $a = [Windows.Networking.NetworkOperators.TetheringWiFiAuthenticationKind]::($env:AP_AUTH)
+  if ($cur.IsAuthenticationKindSupported($a)) { $cfg.AuthenticationKind = $a }
+}
+$op = $mgr.ConfigureAccessPointAsync($cfg)
+$deadline = (Get-Date).AddSeconds(20)
+do {
+  Start-Sleep -Milliseconds 300
+  $now = $mgr.GetCurrentAccessPointConfiguration()
+  $applied = $now.Ssid -eq $cfg.Ssid -and $now.Passphrase -eq $cfg.Passphrase
+} while (-not $applied -and (Get-Date) -lt $deadline)
+if (-not $applied) { Write-Output 'not-applied'; exit 1 }
+Write-Output "$($now.Ssid)"
+"""
+
+# Settings → Hotspot speaks nmcli's vocabulary; Windows has its own names for
+# the same two choices. A value with no Windows equivalent maps to None, which
+# leaves that part of the configuration as it is.
+WIN_BANDS = {"auto": "Auto", "bg": "TwoPointFourGigahertz", "a": "FiveGigahertz"}
+WIN_AUTH = {"wpa2": "Wpa2", "wpa3": "Wpa3"}
 
 
 @dataclass
@@ -188,13 +254,58 @@ def tethering_state() -> str:
 
 
 def start_tethering() -> bool:
-    r = proc.powershell(_TETHER_PS, env={"TETHER_ACTION": "start"}, timeout=60)
+    """Turn the Mobile Hotspot on, and only return once it is on."""
+    r = proc.powershell(_TETHER_PS, env={"TETHER_ACTION": "start"}, timeout=90)
     return r.returncode == 0
 
 
 def stop_tethering() -> bool:
-    r = proc.powershell(_TETHER_PS, env={"TETHER_ACTION": "stop"}, timeout=60)
+    r = proc.powershell(_TETHER_PS, env={"TETHER_ACTION": "stop"}, timeout=90)
     return r.returncode == 0
+
+
+def tethering_config() -> dict | None:
+    """The Mobile Hotspot's current name, password, band and security, or None
+    if Windows won't say (no internet connection profile, mostly)."""
+    if not IS_WIN:
+        return None
+    r = proc.powershell(_AP_PS, env={"AP_ACTION": "read"}, timeout=30)
+    if r.returncode != 0:
+        return None
+    try:
+        data = json.loads(r.stdout.strip())
+    except ValueError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def configure_tethering(ssid: str = "", password: str = "", *,
+                        security: str = "", band: str = "") -> bool:
+    """Rewrite the Mobile Hotspot's access point configuration.
+
+    Every argument is optional and an empty one keeps what Windows has, so a
+    user who only renamed the network keeps their existing password. Windows
+    applies this to the hotspot as a whole, exactly as its own Settings app
+    does, and a running hotspot has to be restarted to pick it up."""
+    if not IS_WIN:
+        return False
+    env = {"AP_ACTION": "apply", "AP_SSID": ssid, "AP_PASS": password,
+           "AP_BAND": WIN_BANDS.get(band, ""), "AP_AUTH": WIN_AUTH.get(security, "")}
+    return proc.powershell(_AP_PS, env=env, timeout=60).returncode == 0
+
+
+def wait_for_hotspot_adapter(timeout: float = 15.0) -> str | None:
+    """The hotspot's ICS adapter, once Windows has created it.
+
+    StartTetheringAsync returns before 'Local Area Connection* N' shows up in
+    the connection list, and ICS cannot be pointed at an adapter that isn't
+    there yet."""
+    deadline = time.monotonic() + timeout
+    while True:
+        found = find_hotspot_adapter()
+        if found or time.monotonic() >= deadline:
+            return found
+        time.sleep(1.0)
 
 
 # -- Linux -----------------------------------------------------------------
