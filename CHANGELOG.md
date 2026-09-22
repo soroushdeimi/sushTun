@@ -1,6 +1,12 @@
 # Changelog
 
+## v0.5.1
+
+- Fixed Windows installer launch issues via UAC and relaunch after in-app updates.
+- Fixed a rare UI segfault and several broken tests in the update dialog.
+
 ## v0.5.0
+
 
 sushTun can now install its own updates, and Windows gets a real installer next to
 the portable build. The hotspot on Windows, which never worked, does.
