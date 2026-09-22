@@ -18,6 +18,8 @@ from . import proc
 from . import tun2socks as t2s
 from ._net_common import TUN_ADDRESS, TUN_NAME, TUN_NETMASK, DnsState, Interface
 
+WG_TUN_NAME = "sushTun"
+
 IS_MAC = sys.platform == "darwin"
 TUN_PREFIX_LEN = 30
 _RESOLV = "/etc/resolv.conf"
@@ -36,7 +38,8 @@ def _link_types() -> dict[str, str]:
 
 def _linux_detect() -> Interface | None:
     routes = json.loads(proc.run(["ip", "-j", "route", "show", "default"]).stdout or "[]")
-    routes = [r for r in routes if r.get("dev") != TUN_NAME and r.get("gateway")]
+    routes = [r for r in routes
+              if r.get("dev") not in (TUN_NAME, WG_TUN_NAME) and r.get("gateway")]
     if not routes:
         return None
     # The uplink is the physical link, not simply the lowest-metric default:
@@ -307,6 +310,38 @@ def wait_for_tun(name: str = TUN_NAME, timeout: float = 30.0,
             return None
         time.sleep(1.0)
     return None
+
+
+def remove_host_route(ip: str) -> None:
+    if IS_MAC:
+        proc.run(["route", "-n", "delete", "-host", ip])
+    else:
+        proc.run(["ip", "route", "del", ip])
+
+
+def _iface_name_from_index(tun_index: int) -> str | None:
+    links = json.loads(proc.run(["ip", "-j", "link", "show"]).stdout or "[]")
+    for link in links:
+        if link.get("ifindex") == tun_index:
+            return link.get("ifname")
+    return None
+
+
+def add_prefix_route(prefix: str, tun_index: int) -> None:
+    if IS_MAC:
+        from . import wireguard as wg_mod
+        proc.run(["route", "-n", "add", "-net", prefix, "-interface", wg_mod.MAC_DEVICE])
+        return
+    dev = _iface_name_from_index(tun_index) or WG_TUN_NAME
+    proc.run(["ip", "route", "add", prefix, "dev", dev])
+
+
+def remove_prefix_route(prefix: str, tun_index: int) -> None:
+    if IS_MAC:
+        from . import wireguard as wg_mod
+        proc.run(["route", "-n", "delete", "-net", prefix, "-interface", wg_mod.MAC_DEVICE])
+        return
+    proc.run(["ip", "route", "del", prefix])
 
 
 def foreign_tunnel(iface: str) -> str | None:

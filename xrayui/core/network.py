@@ -1,12 +1,15 @@
 """Windows network orchestration: interface detection, DNS, routes, TUN."""
 from __future__ import annotations
 
+import ipaddress
 import sys
 import time
 from collections.abc import Callable
 
 from . import proc
 from ._net_common import TUN_ADDRESS, TUN_NAME, TUN_NETMASK, DnsState, Interface
+
+WG_TUN_NAME = "sushTun"
 
 TUN_METRIC = 1
 
@@ -17,7 +20,7 @@ DEFAULT_SPLIT = (("0.0.0.0", "128.0.0.0"), ("128.0.0.0", "128.0.0.0"))
 _DETECT_PS = """
 $candidate = $null
 foreach ($route in (Get-NetRoute -DestinationPrefix '0.0.0.0/0' -AddressFamily IPv4 -ErrorAction SilentlyContinue)) {
-  if ($route.NextHop -eq '0.0.0.0' -or $route.NextHop -eq '::' -or $route.InterfaceAlias -eq 'xray0') { continue }
+  if ($route.NextHop -eq '0.0.0.0' -or $route.NextHop -eq '::' -or $route.InterfaceAlias -eq 'xray0' -or $route.InterfaceAlias -eq 'sushTun') { continue }
   if (-not $candidate -or $route.RouteMetric -lt $candidate.RouteMetric) { $candidate = $route }
 }
 if ($candidate) {
@@ -216,6 +219,33 @@ def remove_routes(server_ip: str | None = None) -> None:
         proc.run(["route", "delete", server_ip, "mask", "255.255.255.255"])
 
 
+def remove_host_route(ip: str) -> None:
+    proc.run(["route", "delete", ip, "mask", "255.255.255.255"])
+
+
+def _is_ipv6(prefix: str) -> bool:
+    return ":" in prefix.split("/")[0]
+
+
+def add_prefix_route(prefix: str, tun_index: int) -> None:
+    if _is_ipv6(prefix):
+        proc.run(["netsh", "interface", "ipv6", "add", "route", prefix,
+                  f"interface={tun_index}", "store=active"])
+    else:
+        net = ipaddress.ip_network(prefix, strict=False)
+        proc.run(["route", "add", str(net.network_address), "mask", str(net.netmask),
+                  "0.0.0.0", "if", str(tun_index), "metric", "5"])
+
+
+def remove_prefix_route(prefix: str, tun_index: int) -> None:
+    if _is_ipv6(prefix):
+        proc.run(["netsh", "interface", "ipv6", "delete", "route", prefix,
+                  f"interface={tun_index}"])
+    else:
+        net = ipaddress.ip_network(prefix, strict=False)
+        proc.run(["route", "delete", str(net.network_address), "mask", str(net.netmask)])
+
+
 def wait_for_tun(name: str = TUN_NAME, timeout: float = 30.0,
                  alive: Callable[[], bool] | None = None) -> int | None:
     """The TUN adapter's index, or None. Gives up early once `alive` says
@@ -260,3 +290,7 @@ if sys.platform != "win32":
     wait_for_tun = _posix.wait_for_tun
     foreign_tunnel = _posix.foreign_tunnel
     repair_tun_dns = _posix.repair_tun_dns
+    add_host_route = _posix.add_host_route
+    remove_host_route = _posix.remove_host_route
+    add_prefix_route = _posix.add_prefix_route
+    remove_prefix_route = _posix.remove_prefix_route
