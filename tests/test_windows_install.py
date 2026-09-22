@@ -101,7 +101,10 @@ def test_the_installer_removes_the_data_directory_when_uninstalling():
 def test_the_installer_can_replace_a_running_copy():
     """The in-app updater runs this over a live sushTun."""
     text = ISS.read_text(encoding="utf-8")
-    assert "CloseApplications=yes" in text and "RestartApplications=yes" in text
+    assert "CloseApplications=yes" in text
+    # The restart manager only restarts apps registered with
+    # RegisterApplicationRestart; sushTun is brought back by [Run] instead.
+    assert "RestartApplications=no" in text
 
 
 # -- the release publishes what the updater looks for ----------------------
@@ -124,3 +127,31 @@ def test_every_self_updating_platform_has_an_artifact_in_the_workflow():
     text = RELEASE_YML.read_text(encoding="utf-8")
     for name in (*updates.PORTABLE_ASSETS.values(), updates.PORTABLE_LINUX):
         assert name in text, f"release.yml publishes no {name}"
+
+
+def _run_entries() -> list[str]:
+    text = ISS.read_text(encoding="utf-8")
+    section = text.split("\n[Run]\n", 1)[1].split("\n[", 1)[0]  # the header, not a comment
+    return [line for line in section.splitlines() if line.startswith("Filename:")]
+
+
+def test_the_finish_page_launch_can_raise_the_uac_prompt():
+    # postinstall runs it as the non-admin user; the manifest requires admin,
+    # and only ShellExecute (shellexec) can prompt instead of failing with 740.
+    finish = next(e for e in _run_entries() if "postinstall" in e)
+    assert "shellexec" in finish and "skipifsilent" in finish
+
+
+def test_an_update_brings_sushtun_back_through_the_installer():
+    relaunch = next(e for e in _run_entries() if "RelaunchAfterUpdate" in e)
+    assert "runascurrentuser" in relaunch and "postinstall" not in relaunch
+    assert "{param:RELAUNCH|0}" in ISS.read_text(encoding="utf-8")
+
+
+def test_the_updater_asks_the_installer_to_relaunch(monkeypatch, tmp_path):
+    started: list[list[str]] = []
+    monkeypatch.setattr(updates.subprocess, "Popen",
+                        lambda args, **_k: started.append(list(args)))
+    updates._run_installer(tmp_path / "sushTun-setup.exe")
+    assert started and started[0][1:] == ["/SILENT", "/NORESTART", "/CLOSEAPPLICATIONS",
+                                          "/RELAUNCH=1"]

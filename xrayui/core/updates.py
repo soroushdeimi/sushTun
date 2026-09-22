@@ -294,12 +294,12 @@ def _run_installer(setup: Path) -> None:
 
     /SILENT still shows a progress window, which is the only sign the user
     gets that anything is happening once sushTun has quit. CLOSEAPPLICATIONS
-    and RESTARTAPPLICATIONS let the restart manager close this process and
-    bring it back on the new version."""
+    lets the restart manager close this process. It cannot bring it back:
+    that only works for apps registered with RegisterApplicationRestart. So
+    /RELAUNCH=1 asks the installer's own [Run] entry to start the new version."""
     try:
         subprocess.Popen(  # noqa: S603 (our own download, checksum-verified)
-            [str(setup), "/SILENT", "/NORESTART", "/CLOSEAPPLICATIONS",
-             "/RESTARTAPPLICATIONS"],
+            [str(setup), "/SILENT", "/NORESTART", "/CLOSEAPPLICATIONS", "/RELAUNCH=1"],
             creationflags=proc.CREATE_NO_WINDOW | getattr(subprocess, "DETACHED_PROCESS", 0),
         )
     except OSError as exc:

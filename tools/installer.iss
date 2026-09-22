@@ -44,9 +44,10 @@ WizardStyle=modern
 Compression=lzma2/max
 SolidCompression=yes
 ; Lets the in-app updater run this over a running copy: the restart manager
-; closes sushTun and /RESTARTAPPLICATIONS brings it back on the new version.
+; closes sushTun. It can only restart apps that called RegisterApplicationRestart,
+; which sushTun does not, so the /RELAUNCH=1 entry in [Run] brings it back instead.
 CloseApplications=yes
-RestartApplications=yes
+RestartApplications=no
 
 [Languages]
 Name: "en"; MessagesFile: "compiler:Default.isl"
@@ -63,9 +64,22 @@ Name: "{group}\{cm:UninstallProgram,{#AppName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
+; The Finish page's "Launch sushTun" box. postinstall runs it as the original,
+; non-admin user, and sushtun.exe's manifest requires admin: CreateProcess
+; cannot raise a UAC prompt (error 740), ShellExecute can, so shellexec.
+Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent shellexec
+; After an in-app update (/RELAUNCH=1): bring sushTun back on the new version.
+; Setup was started by the elevated app, so its own admin token is the one to use.
+Filename: "{app}\{#AppExe}"; Flags: nowait runascurrentuser; Check: RelaunchAfterUpdate
 
 [Code]
+// Only the in-app updater passes /RELAUNCH=1; a normal install asks on the
+// Finish page instead.
+function RelaunchAfterUpdate: Boolean;
+begin
+  Result := ExpandConstant('{param:RELAUNCH|0}') = '1';
+end;
+
 // The marker xrayui/paths.py looks for. With it present the app keeps its
 // settings, profiles and logs in %PROGRAMDATA%\sushTun instead of next to the
 // executable, because Program Files is not writable and must not be.
