@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.6.0
+
+- Added Windows hotspot support: reads current Windows hotspot settings in the background and allows applying changes to Windows.
+
 ## v0.5.1
 
 - Fixed Windows installer launch issues via UAC and relaunch after in-app updates.

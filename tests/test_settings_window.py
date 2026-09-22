@@ -683,7 +683,8 @@ def test_hotspot_page_keeps_the_on_off_keys_and_saves_the_options(qapp, defaults
     page.isolation.setChecked(True)
     assert win.values()["gateway"] == {
         "enabled": True, "start_hotspot": False, "ssid": "Home AP", "password": "joinme123",
-        "security": "wpa3", "band": "a", "hidden": True, "isolation": True}
+        "security": "wpa3", "band": "a", "hidden": True, "isolation": True,
+        "apply_on_windows": False}
 
 
 def test_hotspot_page_new_makes_a_valid_password(qapp, defaults, monkeypatch):
@@ -777,3 +778,83 @@ def test_a_found_release_is_handed_to_the_window_not_installed_here(qapp, defaul
         assert "v99.0.0" in _general(win).update_status.text()
     finally:
         win.close()
+
+
+# -- Windows: read the Mobile hotspot, push back only what the user changed ------------
+_WINDOWS_AP = {"ssid": "Soroush-PC", "password": "windowspass1", "band": "FiveGigahertz",
+               "auth": "Wpa3"}
+
+
+def _windows_page(qapp, defaults, monkeypatch, config):
+    monkeypatch.setattr(sw_mod.sys, "platform", "win32")
+    monkeypatch.setattr(sw_mod.hotspot_mod, "tethering_config", lambda: config)
+    win = SettingsWindow(defaults)
+    page = win._pages["hotspot"]
+    _pump(lambda: page._read_worker is None)
+    return win, page
+
+
+def test_windows_page_shows_what_windows_uses_and_pushes_nothing_unedited(
+    qapp, defaults, monkeypatch,
+):
+    win, page = _windows_page(qapp, defaults, monkeypatch, dict(_WINDOWS_AP))
+    assert page.ssid.text() == "Soroush-PC"
+    assert page.password.text() == "windowspass1"
+    assert page.security.currentData() == "wpa3" and page.band.currentData() == "a"
+    assert win.values()["gateway"]["apply_on_windows"] is False
+
+
+def test_windows_page_pushes_a_real_edit(qapp, defaults, monkeypatch):
+    win, page = _windows_page(qapp, defaults, monkeypatch, dict(_WINDOWS_AP))
+    page.ssid.setText("Home AP")
+    page.ssid.textEdited.emit("Home AP")   # what typing does
+    gateway = win.values()["gateway"]
+    assert gateway["apply_on_windows"] is True and gateway["ssid"] == "Home AP"
+
+
+def test_windows_page_that_cannot_read_windows_says_so(qapp, defaults, monkeypatch):
+    defaults["gateway"]["ssid"] = ""
+    win, page = _windows_page(qapp, defaults, monkeypatch, None)
+    assert not page.read_note.isHidden()
+    assert win.values()["gateway"]["apply_on_windows"] is False
+
+
+def test_a_pending_windows_change_stays_pending(qapp, defaults, monkeypatch):
+    defaults["gateway"]["apply_on_windows"] = True
+    defaults["gateway"].update(ssid="Pending name", password="pendingpass", security="wpa2")
+    win, page = _windows_page(qapp, defaults, monkeypatch, dict(_WINDOWS_AP))
+    assert win.values()["gateway"]["apply_on_windows"] is True
+    assert page.ssid.text() == "Pending name"
+    assert page.password.text() == "pendingpass"
+    assert page.security.currentData() == "wpa2"
+
+
+
+@pytest.mark.parametrize("response", [None, "read failed", {}])
+def test_unread_windows_fields_never_offer_saved_defaults(qapp, defaults, monkeypatch, response):
+    win, page = _windows_page(qapp, defaults, monkeypatch, response)
+    assert page.ssid.text() == page.password.text() == ""
+    assert page.security.currentData() == page.band.currentData() == ""
+    QTest.keyClicks(page.ssid, "New name")
+    gateway = win.values()["gateway"]
+    assert gateway["apply_on_windows"] is True
+    assert gateway["password"] == gateway["security"] == gateway["band"] == ""
+
+
+def test_delayed_windows_read_preserves_typing_and_fills_other_fields(qapp, defaults, monkeypatch):
+    monkeypatch.setattr(sw_mod.sys, "platform", "win32")
+    monkeypatch.setattr(sw_mod._HotspotPage, "_read_windows", lambda self: None)
+    win = SettingsWindow(defaults)
+    page = win._pages["hotspot"]
+    QTest.keyClicks(page.ssid, "Typed first")
+    page._on_windows_config(dict(_WINDOWS_AP))
+    assert page.ssid.text() == "Typed first"
+    assert page.password.text() == _WINDOWS_AP["password"]
+    assert win.values()["gateway"]["apply_on_windows"] is True
+
+
+def test_reverting_a_windows_edit_does_not_apply(qapp, defaults, monkeypatch):
+    win, page = _windows_page(qapp, defaults, monkeypatch, dict(_WINDOWS_AP))
+    QTest.keyClicks(page.ssid, "x")
+    QTest.keyClick(page.ssid, Qt.Key_Backspace)
+    assert win.values()["gateway"]["apply_on_windows"] is False
