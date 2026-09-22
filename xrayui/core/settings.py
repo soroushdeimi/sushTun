@@ -36,6 +36,8 @@ DEFAULTS: dict = {
         "parallel_query": False,
         "serve_stale": False,
         "raw_override": "",
+        # Company / internal networks: `domain = DNS server IP` lines (dns.py).
+        "internal": [],
     },
     "routing": {
         # The flat toggles below are "Simple" mode -- unreshaped, so no

@@ -567,3 +567,63 @@ def test_xray_test_accepts_the_fully_rendered_config(tmp_path, monkeypatch, dns_
         dns_cfg=_dns(**dns_over),
     )
     assert xraycheck.check_config(text) is None
+
+
+# -- company / internal networks -------------------------------------------------------
+MAHSAN = "mahsan.co = 192.168.92.21, 192.168.92.11"
+
+
+def test_internal_lines_are_parsed_and_bad_ones_dropped():
+    lines = [MAHSAN, "*.shetab.org = 10.20.3.7", "# a comment", "",
+             "no-server.example", "not a domain = 1.2.3.4",
+             "corp.example = dns.corp.example",     # a name would need DNS to find DNS
+             "mahsan.co = 9.9.9.9"]                 # a second line for the same domain
+    assert dns_mod.clean_internal(lines) == [
+        ("mahsan.co", ["192.168.92.21", "192.168.92.11"]), ("shetab.org", ["10.20.3.7"])]
+    reasons = [tmpl for _v, tmpl in dns_mod.internal_reasons(lines)]
+    assert reasons == [dns_mod.REASON_INTERNAL_FORMAT, dns_mod.REASON_INTERNAL_DOMAIN,
+                       dns_mod.REASON_INTERNAL_SERVER_IP]
+
+
+def test_internal_servers_come_first_and_never_fall_back():
+    block, rules = dns_mod.build_dns_and_rules(_dns(internal=[MAHSAN]), [], PROXY_IP)
+    assert block["servers"][:2] == [
+        {"address": ip, "domains": ["domain:mahsan.co"], "skipFallback": True,
+         "tag": "internal-dns"} for ip in ("192.168.92.21", "192.168.92.11")]
+    assert {"type": "field", "inboundTag": ["internal-dns"],
+            "outboundTag": "internal"} in rules
+
+
+def test_internal_queries_leave_through_an_unbound_outbound():
+    # No interface binding: the OS has to route them into the company VPN,
+    # which owns a more specific route to its DNS server than our /1s.
+    out = _render(dns_cfg=_dns(internal=[MAHSAN]))
+    internal = [o for o in out["outbounds"] if o["tag"] == "internal"]
+    assert internal == [{"tag": "internal", "protocol": "freedom"}]
+    for o in out["outbounds"]:
+        if o["tag"] in ("proxy", "direct", "dns-out"):
+            assert o["streamSettings"]["sockopt"]["interface"] == "Wi-Fi"
+
+
+def test_no_internal_networks_add_nothing():
+    out = _render(dns_cfg=_dns())
+    assert all(o["tag"] != "internal" for o in out["outbounds"])
+    assert "internal-dns" not in json.dumps(out)
+
+
+def test_internal_networks_work_with_remote_dns_through_the_tunnel():
+    block, rules = dns_mod.build_dns_and_rules(
+        _dns(internal=[MAHSAN], remote_via_tunnel=True), [], PROXY_IP)
+    assert block["servers"][0]["tag"] == "internal-dns"
+    tags = [r["inboundTag"][0] for r in rules]
+    assert "internal-dns" in tags and "dns-module" in tags
+
+
+def test_xray_test_accepts_internal_networks(tmp_path, monkeypatch):
+    _skip_if_no_binary()
+    from xrayui.core import xraycheck
+    monkeypatch.setattr(xraycheck.paths, "state_dir", lambda: tmp_path)
+    text = render.build_text(parse_vless(SAMPLE), "lo", TEMPLATE, include_tun=False,
+                             dns_cfg=_dns(internal=[MAHSAN, "shetab.org = 10.20.3.7"]))
+    assert '"internal-dns"' in text
+    assert xraycheck.check_config(text) is None

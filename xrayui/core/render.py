@@ -116,6 +116,10 @@ def build_text(
         direct_domains = routing_mod.direct_domains(routing_rules or [])
         dns_block, dns_routing_rules = dns_mod.build_dns_and_rules(
             dns_cfg, direct_domains, profile.address, server_ip=server_ip)
+        if any(r.get("outboundTag") == dns_mod.INTERNAL_OUTBOUND for r in dns_routing_rules):
+            # No interface binding: the OS must route these into the company VPN.
+            cfg.setdefault("outbounds", []).append(
+                {"tag": dns_mod.INTERNAL_OUTBOUND, "protocol": "freedom"})
         if dns_routing_rules:
             # Before _apply_routing: routing.rules only holds the
             # template's own rules right now, so this is where "after the
