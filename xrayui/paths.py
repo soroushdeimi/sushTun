@@ -12,6 +12,7 @@ from pathlib import Path
 INSTALLED_MARKER = ".installed"
 INSTALLED_DATA_DIR = Path("/var/lib/sushtun")
 IS_WIN = sys.platform == "win32"
+IS_MAC = sys.platform == "darwin"
 
 
 def _frozen() -> bool:
@@ -29,6 +30,13 @@ def _installed_data_dir() -> Path:
         # supported Windows, but fall back rather than crash if it is not.
         root = os.environ.get("PROGRAMDATA") or os.environ.get("ALLUSERSPROFILE")
         return Path(root) / "sushTun" if root else Path.home() / "sushTun"
+    if IS_MAC:
+        # The .app: writing next to the executable would put settings inside
+        # the bundle, which breaks its code signature and is not writable in
+        # /Applications anyway. Application Support is where this belongs.
+        if os.geteuid() == 0:
+            return Path("/Library/Application Support/sushTun")
+        return Path.home() / "Library" / "Application Support" / "sushTun"
     if os.geteuid() == 0:
         return INSTALLED_DATA_DIR
     # A refused password prompt still opens an unelevated window; give it
