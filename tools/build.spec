@@ -1,5 +1,6 @@
 # PyInstaller one-file spec (cross-platform). Build with: pyinstaller tools/build.spec
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -35,6 +36,12 @@ if _fonts.is_dir():
 
 ico = ROOT / "assets" / "icon.ico"
 exe_icon = str(ico) if ico.exists() else None
+# Written into the .app's Info.plist, so Finder and "About" show the real
+# version instead of 0.0.0. Read, not imported: the spec runs before the
+# package is importable.
+_init = (ROOT / "xrayui" / "__init__.py").read_text(encoding="utf-8")
+_m = re.search(r'__version__\s*=\s*"([^"]+)"', _init)
+VERSION = _m.group(1) if _m else "0.0.0"
 
 a = Analysis(
     [str(ROOT / "app_main.py")],
@@ -61,6 +68,31 @@ if ONEDIR:
         icon=exe_icon,
     )
     coll = COLLECT(exe, a.binaries, a.datas, name="sushtun", upx=False)
+    if IS_MAC:
+        # macOS needs an .app, not a bare Unix executable: a downloaded raw
+        # binary loses its +x bit, so Finder shows it as a document with a
+        # question mark and a double-click does nothing. Built from the
+        # one-dir tree for the same reason the Windows installer is -- the
+        # one-file build re-extracts ~170 MB to /tmp on every launch.
+        icns = ROOT / "assets" / "icon.icns"
+        app = BUNDLE(
+            coll,
+            name="sushTun.app",
+            icon=str(icns) if icns.exists() else None,
+            bundle_identifier="com.soroushdeimi.sushtun",
+            version=VERSION,
+            info_plist={
+                "CFBundleName": "sushTun",
+                "CFBundleDisplayName": "sushTun",
+                "CFBundleShortVersionString": VERSION,
+                "CFBundleVersion": VERSION,
+                # Qt 6 needs 12; saying so keeps older Macs from launching a
+                # build that would only crash on a missing symbol.
+                "LSMinimumSystemVersion": "12.0",
+                "NSHighResolutionCapable": True,
+                "LSApplicationCategoryType": "public.app-category.utilities",
+            },
+        )
 else:
     exe = EXE(
         pyz,

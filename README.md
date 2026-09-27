@@ -164,7 +164,16 @@ sudo apt install ./sushtun_*_amd64.deb   # then launch "sushTun" from the app me
 sudo apt remove sushtun                  # uninstall (purge also deletes your data)
 ```
 
-Neither installer replaces the portable build — they are separate downloads,
+On macOS open `sushTun-macos.dmg` and drag sushTun into Applications; it keeps
+settings and profiles in `/Library/Application Support/sushTun`. The build is
+for Apple Silicon, and it is signed only ad-hoc — there is no Apple Developer
+ID behind it — so macOS refuses the first launch. Allow it once in **System
+Settings → Privacy & Security → Open Anyway**; the old right-click → Open
+trick no longer works there. The raw `sushTun-macos` file next to the .dmg is
+the portable build: it is a Unix executable, so a download strips its execute
+bit and Finder shows it as a document until you `chmod +x` it.
+
+None of the installers replace the portable build — they are separate downloads,
 and you can keep using whichever suits you.
 
 ### Updating
@@ -196,7 +205,7 @@ or an `osascript` prompt (macOS).
 |----------|--------|
 | Windows | Fully supported |
 | Linux   | Uses Xray's native TUN inbound, the same model as Windows. Connect path is experimental and being hardened. |
-| macOS   | Xray has no native TUN inbound here, so sushTun runs it with a SOCKS inbound and bridges that to a real TUN device via [tun2socks](https://github.com/xjasonlyu/tun2socks). Unverified on real hardware — experimental. |
+| macOS   | Xray has no native TUN inbound here, so sushTun runs it with a SOCKS inbound and bridges that to a real TUN device via [tun2socks](https://github.com/xjasonlyu/tun2socks). Ships as an Apple Silicon `.dmg`. Unverified on real hardware — experimental. |
 
 ## Building from source
 

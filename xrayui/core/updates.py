@@ -143,12 +143,20 @@ def installed_deb() -> bool:
     return not IS_WIN and not IS_MAC and paths.installed()
 
 
+def installed_macos_app() -> bool:
+    """The macOS .app from the .dmg. Overwriting the executable inside the
+    bundle would break the signature sealed over it, and Gatekeeper then
+    refuses to launch the app at all -- worse than not updating. The same
+    dialog sends these copies to the release page for the new .dmg."""
+    return IS_MAC and paths.installed()
+
+
 def asset_for_this_build(release: Release) -> str | None:
     """The release asset this copy should install, or None when it cannot
     install anything itself and the user has to be sent to the release page."""
     if not getattr(sys, "frozen", False):
         return None  # a source checkout updates with git, not with a binary
-    if installed_deb():
+    if installed_deb() or installed_macos_app():
         return None
     name = (SETUP_ASSET.format(version=release.version) if installed_windows()
             else PORTABLE_ASSETS.get(sys.platform, PORTABLE_LINUX))
