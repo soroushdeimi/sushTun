@@ -507,6 +507,8 @@ TRANSLATIONS_FA: dict[str, str] = {
     "it by hand.":
         "این نسخه نمی‌تواند خودش را به‌روزرسانی کند. {version} را دانلود کنید "
         "و دستی جایگزین کنید.",
+    "Couldn't open a browser. The page is {url}":
+        "مرورگر باز نشد. نشانی صفحه: {url}",
     "Stopping…": "در حال توقف…",
     "Downloading {name}…": "در حال دانلود {name}…",
     "Downloaded {done} of {total}": "{done} از {total} دانلود شد",

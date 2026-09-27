@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.7.1
+
+- Fixed the update button on Linux. sushTun runs elevated there, and a root process cannot reach the desktop session, so the release-page button closed the window having opened nothing at all. Links now go out through the session that started sushTun, and one that still cannot be opened is shown in the dialog so it can be copied.
+
 ## v0.7.0
 
 - Fixed a deadlock that could take DNS down entirely a few seconds after connecting: Xray had to resolve its own server's hostname through the tunnel it could not open until that name resolved, and every lookup on the machine then failed with "context deadline exceeded". The server's address is now pinned for the resolver in every DNS mode.

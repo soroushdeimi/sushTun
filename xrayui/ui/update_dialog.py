@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import threading
 
-from PySide6.QtCore import QThreadPool, QUrl, Signal
+from PySide6.QtCore import Qt, QThreadPool, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QDialog,
@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 )
 
 from .. import __version__
+from ..core import desktop
 from ..core import updates as updates_mod
 from ..i18n import ltr, tr
 from .workers import Worker
@@ -74,7 +75,10 @@ class UpdateDialog(QDialog):
         layout.addWidget(self.subtitle)
 
         self.notes = QTextBrowser()
-        self.notes.setOpenExternalLinks(True)
+        # Not setOpenExternalLinks: that hands the link to Qt, which cannot
+        # reach the user's browser from this elevated process (core/desktop.py).
+        self.notes.setOpenExternalLinks(False)
+        self.notes.anchorClicked.connect(lambda link: self._open(link.toString()))
         self.notes.setMarkdown(self._release.notes or tr("No release notes."))
         self.notes.setAccessibleName(tr("What's new"))
         layout.addWidget(self.notes, 1)
@@ -88,6 +92,9 @@ class UpdateDialog(QDialog):
         self.status = QLabel("")
         self.status.setObjectName("Muted")
         self.status.setWordWrap(True)
+        # A link this dialog could not open is shown here instead, and a URL
+        # is only useful if it can be selected and copied.
+        self.status.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.status.setVisible(False)
         layout.addWidget(self.status)
 
@@ -135,10 +142,24 @@ class UpdateDialog(QDialog):
             return
         self.reject()
 
+    def _open(self, url: str) -> bool:
+        """Open a link, from a process the desktop will not talk to.
+
+        Elevated on Linux, Qt reaches neither the portal nor xdg-open, and its
+        failure is silent -- the button looked dead. Try the user's own session
+        first, and when nothing works say so instead of closing on a no-op.
+        """
+        if desktop.open_url(url) or QDesktopServices.openUrl(QUrl(url)):
+            return True
+        self.status.setText(tr("Couldn't open a browser. The page is {url}",
+                               url=ltr(url)))
+        self.status.setVisible(True)
+        return False
+
     def _on_primary(self) -> None:
         if not self._asset:
-            QDesktopServices.openUrl(QUrl(self._release.url))
-            self.accept()
+            if self._open(self._release.url):
+                self.accept()
             return
         if self._downloaded is not None:
             self._install()

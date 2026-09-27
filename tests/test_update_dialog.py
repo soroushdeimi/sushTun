@@ -13,9 +13,12 @@ else:
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication  # noqa: E402
+from PySide6.QtCore import QUrl  # noqa: E402
+from PySide6.QtWidgets import QApplication, QDialog  # noqa: E402
 
+from xrayui.core import desktop as desktop_mod  # noqa: E402
 from xrayui.core import updates as updates_mod  # noqa: E402
+from xrayui.ui import update_dialog as update_dialog_mod  # noqa: E402
 from xrayui.ui.update_dialog import UpdateDialog  # noqa: E402
 
 RELEASE = updates_mod.Release(
@@ -64,6 +67,54 @@ def test_a_build_that_cannot_replace_itself_is_sent_to_the_release_page(qapp, no
     try:
         assert "download page" in dlg.btn_primary.text().lower()
         assert dlg.subtitle.text() != ""
+    finally:
+        dlg.close()
+
+
+def test_the_release_page_button_opens_through_the_users_session(
+        qapp, monkeypatch, not_installable):
+    # Elevated on Linux, Qt's own opener reaches nothing, so the .deb's only
+    # button used to close the dialog having done nothing at all.
+    opened = []
+    monkeypatch.setattr(desktop_mod, "open_url",
+                        lambda url: bool(opened.append(url)) or True)
+    dlg = UpdateDialog(RELEASE)
+    try:
+        dlg._on_primary()
+        assert opened == [RELEASE.url]
+        assert dlg.result() == QDialog.Accepted
+    finally:
+        dlg.close()
+
+
+def test_a_link_that_cannot_be_opened_is_shown_instead_of_swallowed(
+        qapp, monkeypatch, not_installable):
+    monkeypatch.setattr(desktop_mod, "open_url", lambda _url: False)
+    monkeypatch.setattr(update_dialog_mod.QDesktopServices, "openUrl",
+                        staticmethod(lambda _url: False))
+    dlg = UpdateDialog(RELEASE)
+    try:
+        dlg._on_primary()
+        assert RELEASE.url in dlg.status.text()
+        # isVisible is False while the dialog itself was never shown; what
+        # matters is that the label is no longer explicitly hidden.
+        assert not dlg.status.isHidden()
+        assert dlg.result() != QDialog.Accepted  # still open, still answerable
+    finally:
+        dlg.close()
+
+
+def test_release_note_links_go_through_the_same_opener(qapp, monkeypatch, installable):
+    # setOpenExternalLinks would hand these straight to Qt, which fails the
+    # same way; the dialog routes them itself.
+    opened = []
+    monkeypatch.setattr(desktop_mod, "open_url",
+                        lambda url: bool(opened.append(url)) or True)
+    dlg = UpdateDialog(RELEASE)
+    try:
+        assert not dlg.notes.openExternalLinks()
+        dlg.notes.anchorClicked.emit(QUrl("https://example.com/changelog"))
+        assert opened == ["https://example.com/changelog"]
     finally:
         dlg.close()
 
