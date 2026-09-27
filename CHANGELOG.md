@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.7.0
+
+- Fixed a deadlock that could take DNS down entirely a few seconds after connecting: Xray had to resolve its own server's hostname through the tunnel it could not open until that name resolved, and every lookup on the machine then failed with "context deadline exceeded". The server's address is now pinned for the resolver in every DNS mode.
+- A subscription link pasted into Import is kept as a subscription and refreshed, instead of failing with "No valid profiles found".
+- macOS ships as a signed app bundle inside a .dmg, with the usual drag-to-Applications window, instead of a raw Unix executable that Finder showed as a document. An installed bundle keeps its settings in Application Support and updates from the release page.
+
 ## v0.6.0
 
 - Added Windows hotspot support: reads current Windows hotspot settings in the background and allows applying changes to Windows.
