@@ -5,6 +5,13 @@ running this same file against the code of main at the commit recorded in the
 fixture (v0.3.3). Every option added since then is off by default, so today's
 code must still produce exactly those bytes. Regenerate only on purpose, and
 only from main (see "how" in the fixture), never from a working branch.
+
+Regenerated once since, for the DNS pin fix: the server's hostname is now
+pinned into dns.hosts in every DNS mode, not only under remote-via-tunnel,
+because Xray otherwise deadlocks resolving the name of the server it needs in
+order to resolve anything (see core/dns.build_dns_and_rules). That is the only
+difference from the v0.3.3 bytes, in 30 of the 44 cases; "generated_from" in
+the fixture records it.
 """
 from __future__ import annotations
 

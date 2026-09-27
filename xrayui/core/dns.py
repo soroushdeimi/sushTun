@@ -484,11 +484,10 @@ def build_dns_and_rules(
 
     `server_ip` is the proxy's already-resolved address (connection.py
     resolves it and pins a host route to it before Xray ever starts). When
-    it is known and the proxy address is a hostname, remote-via-tunnel pins
-    that hostname straight into the hosts map instead of bootstrapping it --
-    Xray then never needs to look it up at all. Pass None (e.g. the DNS
-    dialog's own validation render, which has no live connection to ask)
-    to fall back to the full: bootstrap entry.
+    it is known and the proxy address is a hostname, that hostname goes
+    straight into the hosts map, so Xray never looks it up at all. Pass None
+    (e.g. the DNS dialog's own validation render, which has no live
+    connection to ask) to fall back to the full: bootstrap entry.
     """
     raw = str(d.get("raw_override") or "").strip()
     if raw:
@@ -527,30 +526,39 @@ def build_dns_and_rules(
         rules.append({"type": "field", "inboundTag": [_INTERNAL_DNS_TAG],
                       "outboundTag": INTERNAL_OUTBOUND})
 
-    if d.get("remote_via_tunnel"):
+    remote_via_tunnel = bool(d.get("remote_via_tunnel"))
+    if remote_via_tunnel:
         block["tag"] = "dns-module"
         rules.append({"type": "field", "inboundTag": ["dns-module"], "outboundTag": "proxy"})
 
-        proxy_is_hostname = bool(proxy_address) and not _is_ip(proxy_address)
-        bootstrap_proxy = proxy_address
-        if proxy_is_hostname and server_ip:
-            # The host route is already pinned to server_ip, so Xray needs
-            # no DNS lookup for the proxy's own name at all -- pin it here
-            # instead of bootstrapping it, which also keeps Xray dialing
-            # exactly the IP that route protects. A user's own hosts entry
-            # for the same name wins.
-            hosts = dict(block.get("hosts") or {})
-            if proxy_address not in hosts:
-                hosts[proxy_address] = server_ip
-                block["hosts"] = hosts
-            bootstrap_proxy = None
+    # Pin the proxy's own hostname to the address connection.py resolved before
+    # Xray started and protected with a host route. Without it Xray has to look
+    # that name up while the OS resolver already points back at Xray itself
+    # (127.0.0.1 on Windows, the tunnel address on Linux): the query arrives at
+    # dns-in, and the DNS module cannot answer it until it reaches the proxy,
+    # which it cannot dial until the query is answered. Every lookup on the
+    # machine then dies with "context deadline exceeded" -- seen live on Windows
+    # 0.6.0, seconds after connecting, once ipconfig /flushdns dropped the
+    # address cached before the switch. Not specific to remote_via_tunnel: the
+    # module's own DoH traffic carries no inbound tag, so it leaves through the
+    # first outbound, which is the proxy either way.
+    proxy_is_hostname = bool(proxy_address) and not _is_ip(proxy_address)
+    proxy_pinned = False
+    if proxy_is_hostname and server_ip:
+        hosts = dict(block.get("hosts") or {})
+        if proxy_address not in hosts:  # a user's own entry for the name wins
+            hosts[proxy_address] = server_ip
+            block["hosts"] = hosts
+        proxy_pinned = True
 
+    if remote_via_tunnel:
         # Deadlock guard: any DNS-server hostname still in play must resolve
         # WITHOUT going through this same DNS module, or resolving it never
         # finishes -- the module can't answer until it can reach the proxy,
         # which (when the proxy itself isn't already pinned above) it can't
         # reach until it has an answer for the proxy's own hostname.
-        hostnames = _hostnames_needing_bootstrap(bootstrap_proxy, block.get("servers") or [])
+        hostnames = _hostnames_needing_bootstrap(
+            None if proxy_pinned else proxy_address, block.get("servers") or [])
         if hostnames:
             bootstrap_addr = _pick_bootstrap_address(regular_servers)
             bootstrap = {"address": bootstrap_addr,
