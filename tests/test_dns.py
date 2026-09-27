@@ -336,6 +336,40 @@ def test_domestic_hostname_is_dropped_at_render_not_fatal():
     assert addrs == ["178.22.122.100"]
 
 
+# -- the proxy's own hostname ------------------------------------------------
+# Xray must never have to look up the name of the very server it needs in order
+# to look anything up: the OS resolver points back at Xray, so that query comes
+# in through dns-in and the module cannot answer it until it reaches the proxy.
+# This holds in every DNS mode, because the module's DoH traffic carries no
+# inbound tag and leaves through the first outbound, the proxy, either way.
+def test_proxy_hostname_is_pinned_without_remote_via_tunnel():
+    block, rules = dns_mod.build_dns_and_rules(_dns(), [], PROXY_HOST,
+                                               server_ip="198.51.100.7")
+    assert block["hosts"] == {PROXY_HOST: "198.51.100.7"}
+    assert "tag" not in block  # default mode: no dns-module, no rules
+    assert rules == []
+
+
+def test_the_pin_reaches_the_rendered_config_and_keeps_the_template_servers():
+    template = json.loads(TEMPLATE.read_text(encoding="utf-8"))
+    profile = parse_vless("vless://u@vpn.example.com:443?type=tcp&security=none#x")
+    out = json.loads(render.build_text(profile, "Wi-Fi", TEMPLATE, dns_cfg=_dns(),
+                                       server_ip="198.51.100.7"))
+    assert out["dns"]["hosts"] == {"vpn.example.com": "198.51.100.7"}
+    assert out["dns"]["servers"] == template["dns"]["servers"]
+
+
+def test_an_ip_address_server_needs_no_pin():
+    block, _ = dns_mod.build_dns_and_rules(_dns(), [], PROXY_IP, server_ip=PROXY_IP)
+    assert "hosts" not in block
+
+
+def test_a_users_own_hosts_entry_wins_over_the_pin_in_the_default_mode():
+    block, _ = dns_mod.build_dns_and_rules(
+        _dns(hosts=[f"{PROXY_HOST} = 9.9.9.9"]), [], PROXY_HOST, server_ip="198.51.100.7")
+    assert block["hosts"][PROXY_HOST] == "9.9.9.9"
+
+
 # -- remote_via_tunnel -------------------------------------------------------
 def test_remote_via_tunnel_sets_tag_and_proxy_rule():
     block, rules = dns_mod.build_dns_and_rules(
