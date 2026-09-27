@@ -270,3 +270,21 @@ def test_is_due_not_yet_due_with_a_recent_update():
     now = time.time()
     sub = Subscription(enabled=True, auto_update_hours=6, updated=now - 3600)
     assert subscription.is_due(sub, global_hours=6, now=now) is False
+
+
+# -- a subscription URL pasted where share links go --------------------------
+def test_subscription_url_recognises_a_pasted_link():
+    assert (subscription.subscription_url("  https://panel.example.com:8000/sub/abc  ")
+            == "https://panel.example.com:8000/sub/abc")
+    assert subscription.subscription_url("http://panel.example.com/sub/abc") \
+        == "http://panel.example.com/sub/abc"
+    assert subscription.subscription_url("HTTPS://Panel.Example.com/sub") == "HTTPS://Panel.Example.com/sub"
+
+
+def test_subscription_url_leaves_share_links_and_multi_line_text_alone():
+    assert subscription.subscription_url("vless://u@1.2.3.4:443?type=tcp#x") == ""
+    assert subscription.subscription_url("") == ""
+    assert subscription.subscription_url("   ") == ""
+    # Two links, or a link with a note after it: that is share text, not a URL.
+    assert subscription.subscription_url("https://a.example/sub\nhttps://b.example/sub") == ""
+    assert subscription.subscription_url("https://a.example/sub is my sub") == ""

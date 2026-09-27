@@ -6,6 +6,7 @@ import secrets
 import sys
 import threading
 import time
+import urllib.parse
 
 from PySide6.QtCore import QEvent, Qt, QThreadPool, QTimer, Signal
 from PySide6.QtGui import QActionGroup, QKeySequence, QShortcut
@@ -599,6 +600,9 @@ class MainWindow(QMainWindow):
         dlg = ImportDialog(self)
         if not dlg.exec():
             return
+        if dlg.subscription_url:
+            self._keep_as_subscription(dlg.subscription_url)
+            return
         first = None
         for p in dlg.profiles:
             self.store.save(p)
@@ -659,6 +663,10 @@ class MainWindow(QMainWindow):
     def _paste_import(self) -> None:
         text = QApplication.clipboard().text()
         if not text.strip():
+            return
+        url = sub_mod.subscription_url(text)
+        if url:
+            self._keep_as_subscription(url)
             return
         profiles = importer.parse_share_text(text)
         if not profiles:
@@ -794,6 +802,17 @@ class MainWindow(QMainWindow):
         if not dlg.exec():
             return
         sub = dlg.result_subscription()
+        self.subs.save(sub)
+        self._reload_subs()
+        self._refresh_sub(sub.uid)
+
+    def _keep_as_subscription(self, url: str) -> None:
+        """A subscription URL pasted into Import (or the clipboard) becomes a
+        subscription, not a one-off import: its servers change, and fetching it
+        once would leave them to go stale. The refresh below does the download
+        off the UI thread and reports its own errors."""
+        host = urllib.parse.urlsplit(url).hostname or ""
+        sub = sub_mod.Subscription(url=url, name=host or sub_mod.Subscription().name)
         self.subs.save(sub)
         self._reload_subs()
         self._refresh_sub(sub.uid)

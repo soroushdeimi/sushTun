@@ -28,7 +28,7 @@ else:
 # Must be set before the first QApplication; there is no display on a CI runner.
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox  # noqa: E402
+from PySide6.QtWidgets import QApplication, QDialog, QFileDialog, QMessageBox  # noqa: E402
 
 from xrayui import paths  # noqa: E402
 from xrayui.core import dns as dns_mod  # noqa: E402
@@ -42,6 +42,7 @@ from xrayui.core.subscription import Subscription  # noqa: E402
 from xrayui.i18n import ltr  # noqa: E402
 from xrayui.ui import dialogs as dialogs_mod  # noqa: E402
 from xrayui.ui.dialogs import (  # noqa: E402
+    ImportDialog,
     ProfileEditDialog,
     SettingsDialog,
     SubscriptionEditDialog,
@@ -802,6 +803,48 @@ def test_paste_import_adds_a_profile_from_clipboard(window):
     window._paste_import()
     assert "Pasted" in [p.name for p in window.store.list()]
     assert "Imported 1 server" in window.step_label.text()
+
+
+def test_paste_import_keeps_a_subscription_url_as_a_subscription(window, monkeypatch):
+    # Pasting a panel's subscription URL used to land in parse_share_text,
+    # match no scheme and report "no importable server link".
+    refreshed: list[str] = []
+    monkeypatch.setattr(window, "_refresh_sub", refreshed.append)
+    QApplication.clipboard().setText("  https://panel.example.com:8000/sub/abc123  ")
+    window._paste_import()
+    subs = window.subs.list()
+    assert [s.url for s in subs] == ["https://panel.example.com:8000/sub/abc123"]
+    assert subs[0].name == "panel.example.com"
+    assert refreshed == [subs[0].uid]  # fetched off the UI thread, by the usual path
+    assert window.store.list() == []  # not imported once and left to go stale
+
+
+def test_import_dialog_hands_a_subscription_url_back_instead_of_failing(qapp, warnings):
+    # `warnings` is not decoration: without the code under test this path
+    # opens a modal "No valid profiles found." that would block the run.
+    dlg = ImportDialog()
+    try:
+        dlg.link_edit.setPlainText("https://panel.example.com/sub/abc123")
+        dlg._accept()
+        assert warnings == []
+        assert dlg.subscription_url == "https://panel.example.com/sub/abc123"
+        assert dlg.profiles == []
+        assert dlg.result() == QDialog.Accepted
+    finally:
+        dlg.close()
+
+
+def test_import_dialog_still_parses_share_links(qapp, warnings):
+    dlg = ImportDialog()
+    try:
+        dlg.link_edit.setPlainText(
+            "vless://11111111-1111-1111-1111-111111111111@1.2.3.4:443"
+            "?encryption=none&type=tcp&security=none#Shared")
+        dlg._accept()
+        assert dlg.subscription_url == ""
+        assert [p.name for p in dlg.profiles] == ["Shared"]
+    finally:
+        dlg.close()
 
 
 def test_paste_import_is_quiet_about_unusable_clipboard_content(window):

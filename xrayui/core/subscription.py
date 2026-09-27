@@ -92,6 +92,21 @@ def parse_userinfo(header: str) -> Usage:
     )
 
 
+def subscription_url(text: str) -> str:
+    """The single http(s) URL `text` is, or "" when it is anything else.
+
+    The Import dialog's first tab is called "Link / Subscription", but it only
+    ever parsed share links, so a subscription URL pasted there matched no
+    scheme and came back as "No valid profiles found". A URL is recognised
+    here instead and kept as a subscription, which is what the user wants
+    from a subscription link anyway: one that keeps updating.
+    """
+    value = text.strip()
+    if not value or any(c.isspace() for c in value):
+        return ""  # several lines, or a link with a comment after it
+    return value if value.lower().startswith(("http://", "https://")) else ""
+
+
 def fetch(url: str, timeout: float = 20.0, user_agent: str = ""):
     req = urllib.request.Request(url, headers={"User-Agent": user_agent or DEFAULT_USER_AGENT})
     with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 (user-provided sub URL)

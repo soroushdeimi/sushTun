@@ -33,6 +33,7 @@ from ..core import autostart, coreopts, importer, render, xraycheck
 from ..core import backup as backup_mod
 from ..core import geo as geo_mod
 from ..core import settings as app_settings
+from ..core import subscription as sub_mod
 from ..core.outbounds.hysteria2 import normalize_ports
 from ..core.profiles import Profile, normalize_pcs, valid_pcs, valid_pqv
 from ..core.subscription import DEFAULT_USER_AGENT, Subscription
@@ -76,6 +77,8 @@ class ImportDialog(QDialog):
         self.setWindowTitle(tr("Import profiles"))
         self.resize(560, 420)
         self.profiles: list[Profile] = []
+        # Set instead of `profiles` when the Link tab held a subscription URL.
+        self.subscription_url = ""
 
         self.tabs = QTabWidget()
         self.link_edit = QPlainTextEdit()
@@ -145,7 +148,14 @@ class ImportDialog(QDialog):
         try:
             idx = self.tabs.currentIndex()
             if idx == 0:
-                self.profiles = importer.parse_share_text(self.link_edit.toPlainText())
+                text = self.link_edit.toPlainText()
+                # A subscription URL is not a share link: hand it back to the
+                # caller to keep as a subscription (see core.subscription).
+                self.subscription_url = sub_mod.subscription_url(text)
+                if self.subscription_url:
+                    self.accept()
+                    return
+                self.profiles = importer.parse_share_text(text)
             elif idx == 1:
                 self.profiles = [importer.parse_json(self.json_edit.toPlainText())]
             else:
