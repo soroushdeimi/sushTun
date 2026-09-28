@@ -9,7 +9,7 @@ import time
 import urllib.parse
 
 from PySide6.QtCore import QEvent, Qt, QThreadPool, QTimer, Signal
-from PySide6.QtGui import QActionGroup, QKeySequence, QShortcut
+from PySide6.QtGui import QAction, QActionGroup, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .. import __version__
+from .. import __version__, elevate
 from ..core import alerts, hotspot, importer, metrics, network, speedtest
 from ..core import autostart as autostart_mod
 from ..core import geo as geo_mod
@@ -271,7 +271,8 @@ class MainWindow(QMainWindow):
     # ── autostart / auto-connect ──────────────────────────────────────────
 
     def _reregister_autostart_if_enabled(self) -> None:
-        if sys.platform != "win32":
+        # Keeps the login item pointing at wherever the app lives now.
+        if sys.platform not in ("win32", "darwin"):
             return
         if not self.settings.get("startup", {}).get("start_on_login"):
             return
@@ -369,7 +370,14 @@ class MainWindow(QMainWindow):
         self.sidebar.settingsRequested.connect(self._open_settings)
         self.sidebar.hotspotToggled.connect(self._toggle_gateway)
 
-        if not hotspot.supported():
+        if sys.platform == "darwin":
+            # Not "yet": macOS cannot share a Wi-Fi connection over Wi-Fi at
+            # all, and Internet Sharing has no supported API to drive.
+            tip = tr("macOS cannot run a Wi-Fi hotspot while it is itself on Wi-Fi. "
+                     "To share the tunnel, turn on Settings → Local proxy → "
+                     "Allow other devices on your network, and set this Mac as "
+                     "the proxy on the other device.")
+        elif not hotspot.supported():
             tip = tr("Not available on this platform yet.")
         elif hotspot.IS_WIN:
             tip = tr("Route devices on this PC's Windows hotspot through "
@@ -432,7 +440,15 @@ class MainWindow(QMainWindow):
         cl.addWidget(self._stack, 1)
 
         if not elevated:
-            warn = QLabel(tr("Not running as administrator — connecting will fail."))
+            if elevate.mac_privacy_blocked:
+                text = tr("macOS privacy protection kept the administrator copy of sushTun "
+                          "out of this folder (Desktop, Documents and Downloads are "
+                          "protected). Move sushTun to Applications or another folder "
+                          "and open it again.")
+            else:
+                text = tr("Not running as administrator — connecting will fail.")
+            warn = QLabel(text)
+            warn.setWordWrap(True)
             warn.setStyleSheet(f"color:{ERR}; padding:4px 16px;")
             cl.insertWidget(2, warn)
 
@@ -460,9 +476,12 @@ class MainWindow(QMainWindow):
         # --- shortcuts ---------------------------------------------------
         QShortcut(QKeySequence.Close, self, activated=self.close)
         QShortcut(QKeySequence("Ctrl+M"), self, activated=self.showMinimized)
-        QShortcut(QKeySequence("Ctrl+Q"), self, activated=self._quit)
+        if sys.platform == "darwin":
+            self._build_mac_menu()
+        else:
+            QShortcut(QKeySequence("Ctrl+Q"), self, activated=self._quit)
+            QShortcut(QKeySequence("Ctrl+,"), self, activated=self._open_settings)
         QShortcut(QKeySequence.Paste, self, activated=self._paste_import)
-        QShortcut(QKeySequence("Ctrl+,"), self, activated=self._open_settings)
         for _seq, idx in enumerate("12345"):
             QShortcut(QKeySequence(f"Ctrl+{idx}"), self,
                       activated=lambda _i=_seq: self._show_page(_i))
@@ -533,13 +552,41 @@ class MainWindow(QMainWindow):
         self.tray.show()
         QApplication.instance().setQuitOnLastWindowClosed(False)
 
+    def _build_mac_menu(self) -> None:
+        """The macOS menu bar, with Quit and Settings in the app menu.
+
+        The app menu owns Cmd+Q there: its default Quit item took the key
+        before any shortcut, and its quit was cancelled by closeEvent's hide
+        to the tray, so Cmd+Q only ever hid the window and the root process
+        stayed behind. These role actions replace the default items and run
+        this window's own quit and settings.
+        """
+        menu = self.menuBar().addMenu(tr("Connection"))
+        menu.addAction(tr("Connect"), self._connect)
+        menu.addAction(tr("Disconnect"), self._disconnect)
+        self.act_settings = QAction(tr("Settings"), self)
+        self.act_settings.setMenuRole(QAction.PreferencesRole)
+        self.act_settings.setShortcut(QKeySequence("Ctrl+,"))  # Cmd+, on macOS
+        self.act_settings.triggered.connect(self._open_settings)
+        menu.addAction(self.act_settings)
+        self.act_quit = QAction(tr("Quit"), self)
+        self.act_quit.setMenuRole(QAction.QuitRole)
+        self.act_quit.setShortcut(QKeySequence.Quit)
+        self.act_quit.triggered.connect(self._quit)
+        menu.addAction(self.act_quit)
+
     def _show_window(self) -> None:
         self.showNormal()
         self.raise_()
         self.activateWindow()
+        self._refresh_status()
+
+    def prepare_quit(self) -> None:
+        """The app is quitting: the close that follows must not hide to the tray."""
+        self._quitting = True
 
     def _quit(self) -> None:
-        self._quitting = True
+        self.prepare_quit()
         QApplication.instance().quit()
 
     # ── page switching ────────────────────────────────────────────────────
@@ -1101,6 +1148,14 @@ class MainWindow(QMainWindow):
     # ── status ------------------------------------------------------------
 
     def _refresh_status(self) -> None:
+        visible = self.isVisible() and not self.isMinimized()
+        # Hidden in the tray there is nothing on screen to update: skip the
+        # process polling below (a pgrep and a whole `xray api` run every two
+        # seconds), which kept a laptop awake for no one. Showing the window
+        # refreshes at once.
+        self.tailer.interval = LogTailer.INTERVAL if visible else LogTailer.IDLE_INTERVAL
+        if not visible:
+            return
         connected = self.conn.is_connected()
         self.status_card.set_connected(connected)
         profile = self._active_profile()
@@ -1108,7 +1163,8 @@ class MainWindow(QMainWindow):
                              profile.endpoint if profile else "—")
         self.status_card.set(
             "process",
-            tr("RUNNING") if is_xray_running() else tr("STOPPED"))
+            tr("RUNNING") if self.conn.xray.is_running() or is_xray_running()
+            else tr("STOPPED"))
         st = self.conn.state
         self.status_card.set("iface", st.alias or "—")
         self.status_card.set("ip", st.ipv4 or "—")
@@ -1144,7 +1200,9 @@ class MainWindow(QMainWindow):
 
         def work():
             return {
-                "rate": metrics.throughput_sample(tun, 1),
+                # Only Windows has a cheap per-adapter counter; elsewhere
+                # done() derives the rate from the stats below instead.
+                "rate": metrics.throughput_sample(tun, 1) if sys.platform == "win32" else None,
                 "stats": metrics.query_stats()}
 
         def done(result=None, error=None):
@@ -1153,6 +1211,10 @@ class MainWindow(QMainWindow):
                 return
             rate = result.get("rate")
             stats = result.get("stats")
+            if rate is None and stats:
+                # No per-adapter counter here (macOS, Linux): the stats the
+                # API returns anyway give the rate, with no extra process.
+                rate = self._rate_from_stats(stats)
             if rate:
                 self.status_card.set(
                     "throughput",
@@ -1164,6 +1226,17 @@ class MainWindow(QMainWindow):
                     f"↑ {human_bytes(stats['up'])}")
 
         self._run_async(work, done)
+
+    def _rate_from_stats(self, stats: dict) -> dict | None:
+        now = time.monotonic()
+        last, self._last_stats = getattr(self, "_last_stats", None), (now, stats)
+        if last is None or now - last[0] <= 0:
+            return None
+        seconds = now - last[0]
+        down = max(0, stats["down"] - last[1]["down"])
+        up = max(0, stats["up"] - last[1]["up"])
+        return {"rx_mbps": round(down * 8 / seconds / 1e6, 2),
+                "tx_mbps": round(up * 8 / seconds / 1e6, 2)}
 
     # ── settings / routing ------------------------------------------------
 

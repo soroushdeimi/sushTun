@@ -28,11 +28,24 @@ def test_defaults_block_ads_and_direct_private():
     assert "geosite:private" in direct["domain"]
 
 
-def test_low_usage_adds_windows_categories():
+def test_low_usage_adds_windows_categories(monkeypatch):
+    monkeypatch.setattr(routing.sys, "platform", "win32")
     rules = routing.build_rules(_routing(low_usage=True))
     direct = next(x for x in rules if x["outboundTag"] == "direct" and "domain" in x)
     assert "geosite:win-spy" in direct["domain"]
     assert any("telemetry.microsoft.com" in d for d in direct["domain"])
+
+
+def test_low_usage_on_macos_bypasses_apple_updates_not_windows_ones(monkeypatch):
+    # The Windows list did nothing on a Mac: macOS updates and analytics kept
+    # eating the tunnel's quota with low-usage mode on.
+    monkeypatch.setattr(routing.sys, "platform", "darwin")
+    rules = routing.build_rules(_routing(low_usage=True))
+    direct = next(x for x in rules if x["outboundTag"] == "direct" and "domain" in x)
+    assert "geosite:apple-update" in direct["domain"]
+    assert "domain:swcdn.apple.com" in direct["domain"]
+    assert "geosite:win-spy" not in direct["domain"]
+    assert not any("icloud" in d for d in direct["domain"])  # user data stays tunneled
 
 
 def test_country_toggles():
@@ -197,7 +210,7 @@ def test_low_usage_applies_in_custom_mode_as_a_rule_before_the_sets_rules():
     r["low_usage"] = True
     out = routing.build_rules(r)
     assert out[0]["outboundTag"] == "direct"
-    assert "geosite:win-spy" in out[0]["domain"]
+    assert out[0]["domain"] == routing.low_usage_domains()
     assert out[1]["domain"] == ["domain:example.com"]
 
 

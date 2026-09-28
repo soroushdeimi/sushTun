@@ -8,7 +8,11 @@ returning False with nothing on screen. On a .deb install that is the only
 action the update dialog offers, so "check for updates" ended in a button that
 did nothing at all.
 
-Everything here is a no-op off Linux and when not elevated; the caller then
+macOS elevates through a password prompt instead, with the same result: the
+browser would start as root. elevate.py passes the user's uid along as
+SUDO_UID, and the URL is opened as them.
+
+Everything here is a no-op on Windows and when not elevated; the caller then
 falls back to Qt, which works fine as the user.
 """
 from __future__ import annotations
@@ -24,7 +28,10 @@ _UID_VARS = ("PKEXEC_UID", "SUDO_UID")
 # Carried through to the opener so it reaches the same display.
 _SESSION_ENV = ("DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY", "XDG_SESSION_TYPE",
                 "XDG_CURRENT_DESKTOP", "LANG")
+# macOS: `open` hands the URL to LaunchServices, which starts the browser in
+# the user's own session. Run as root, it opened a root copy of the browser.
 _OPENERS = (["xdg-open"], ["gio", "open"])
+_MAC_OPENERS = (["open"],)
 _TIMEOUT = 20.0
 
 
@@ -97,7 +104,7 @@ def open_url(url: str) -> bool:
     except (ImportError, KeyError):  # pragma: no cover - checked above
         return False
     env = _session_env(uid, home)
-    for opener in _OPENERS:
+    for opener in _MAC_OPENERS if sys.platform == "darwin" else _OPENERS:
         if not shutil.which(opener[0]):
             continue
         argv = _as_user(uid, gid, name, [*opener, url])

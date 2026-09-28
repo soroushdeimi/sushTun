@@ -1,5 +1,45 @@
 # Changelog
 
+## Unreleased — macOS
+
+Tested on a real Mac (Apple Silicon, macOS 26) for the first time. Connecting on macOS never
+worked before this release.
+
+- Fixed connecting on macOS: tun2socks was started with single-dash flags (`-device`, `-mtu`),
+  which its parser reads as bundled short options, so it exited at once with a usage error and
+  every connect failed with "TUN device did not appear".
+- macOS now uses Xray's own TUN inbound (a `utun` device) instead of the tun2socks bridge: one
+  process instead of two, and ~24% less CPU for the same traffic in a measured download. The
+  bridge stays as an automatic fallback. Apps with a hard-coded DNS server are now caught by
+  the tunnel's DNS rule on macOS too.
+- sushTun now runs alongside another VPN on macOS (OpenVPN Connect, WireGuard, …) the way it does
+  on Windows: it takes over with four /2 routes, which outrank another VPN's 0/1 + 128/1, instead
+  of failing to add its routes and reporting "Connected" with nothing in the tunnel. A connect
+  whose traffic still does not enter the tunnel is now reported and undone.
+- Fixed Iran-direct sites and the domestic DNS failing on Macs whose Wi-Fi had lost its scoped
+  default route (seen after OpenVPN Connect): Xray pins direct traffic to the interface, and
+  without that route every such connection failed with "network is unreachable".
+- Cmd+Q really quits on macOS. Before, the app menu's Quit was cancelled by the hide-to-tray
+  logic, so the window vanished while the root process kept running.
+- Enter in the server, subscription and rule editors pressed Cancel on macOS and threw the edit
+  away. Save is now the only default button.
+- Running sushTun from Desktop, Documents or Downloads: macOS privacy protection keeps the
+  administrator copy out of those folders, so nothing appeared after the password. sushTun now
+  opens anyway and says to move it (for example to Applications).
+- Low-usage mode on macOS sends macOS software updates, App Store downloads and Apple analytics
+  around the tunnel (it listed only Windows domains before). iCloud and push stay tunneled.
+- Start at login works on macOS (a LaunchAgent; macOS asks for the password at login).
+- A crash or power loss while connected no longer leaves the Mac without DNS after a reboot: a
+  boot LaunchDaemon restores it, as the scheduled task does on Windows.
+- Live throughput is shown on macOS (from Xray's own counters), and the Throughput tool works.
+- Battery: while the window is hidden, sushTun no longer polls for processes and the Xray stats
+  every two seconds, and reads the log less often.
+- The gateway-change repair works on macOS, and a stale tun2socks from a crashed session is
+  cleaned up before connecting.
+- Backups and exported rule sets are written as the user, not as root.
+- The Hotspot button explains that macOS cannot run a Wi-Fi hotspot while on Wi-Fi, and points to
+  sharing the local proxy instead.
+
 ## v0.7.1
 
 - Fixed the update button on Linux. sushTun runs elevated there, and a root process cannot reach the desktop session, so the release-page button closed the window having opened nothing at all. Links now go out through the session that started sushTun, and one that still cannot be opened is shown in the dialog so it can be copied.

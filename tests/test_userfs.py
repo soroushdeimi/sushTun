@@ -138,6 +138,7 @@ def test_run_as_user_reports_the_last_stderr_line_on_failure(monkeypatch):
 
 def test_userfs_refuses_outright_on_a_non_linux_platform(monkeypatch, tmp_path):
     monkeypatch.setattr(userfs, "IS_LINUX", False)
+    monkeypatch.setattr(userfs, "IS_MAC", False)
     with pytest.raises(userfs.UserFsError, match="Linux"):
         userfs.write_as_user(tmp_path / "x", b"x", uid=os.getuid(), gid=os.getgid())
     with pytest.raises(userfs.UserFsError, match="Linux"):

@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPlainTextEdit,
+    QPushButton,
     QRadioButton,
     QToolButton,
     QVBoxLayout,
@@ -151,6 +152,10 @@ class RuleEditorDialog(QDialog):
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+        # Only Save may be default: on macOS an autoDefault Cancel took the
+        # default role when the dialog was shown, and Enter threw the edit away.
+        for btn in self.findChildren(QPushButton):
+            btn.setAutoDefault(btn is buttons.button(QDialogButtonBox.Save))
 
     @staticmethod
     def _lines(widget: QPlainTextEdit) -> list[str]:

@@ -11,10 +11,15 @@ from ..core.logtail import read_new_lines
 
 class LogTailer(QThread):
     lines = Signal(list)
+    INTERVAL = 0.5
+    # While the window is hidden: lines still arrive, just in larger batches,
+    # and the thread wakes four times less often.
+    IDLE_INTERVAL = 2.0
 
     def __init__(self) -> None:
         super().__init__()
         self._running = True
+        self.interval = self.INTERVAL
 
     def run(self) -> None:
         path = paths.log_file()
@@ -27,7 +32,7 @@ class LogTailer(QThread):
                         self.lines.emit(batch)
             except OSError:
                 pass
-            time.sleep(0.5)
+            time.sleep(self.interval)
 
     def stop(self) -> None:
         self._running = False

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import copy
 import json
+import sys
 import uuid
 from pathlib import Path
 
@@ -44,7 +45,7 @@ from PySide6.QtWidgets import (
 )
 
 from ...core import routing as routing_mod
-from ...core import routing_io, xraycheck
+from ...core import routing_io, userfs, xraycheck
 from ...i18n import ltr, tr
 from ..rule_editor import CollapsibleSection, RuleEditorDialog, default_rule
 from ..theme import ACCENT, ERR, OK
@@ -308,7 +309,9 @@ class RoutingPage(QWidget):
 
         toggles = QGroupBox(tr("Bypass the tunnel (go direct)"))
         tg = QGridLayout(toggles)
-        self.cb_low = QCheckBox(tr("Low usage — bypass Windows telemetry/update chatter"))
+        self.cb_low = QCheckBox(
+            tr("Low usage — bypass macOS update/telemetry chatter") if sys.platform == "darwin"
+            else tr("Low usage — bypass Windows telemetry/update chatter"))
         self.cb_ads = QCheckBox(tr("Block ads && trackers"))
         self.cb_private = QCheckBox(tr("Local network / private IPs direct"))
         self.cb_iran = QCheckBox(tr("Iran sites && IPs direct"))
@@ -710,8 +713,8 @@ class RoutingPage(QWidget):
         if not path:
             return
         try:
-            Path(path).write_text(text, encoding="utf-8")
-        except OSError as exc:
+            userfs.save_for_user(Path(path), text.encode("utf-8"))
+        except (OSError, userfs.UserFsError) as exc:
             QMessageBox.warning(self, tr("Export failed"), str(exc))
 
     # -- mode combo -----------------------------------------------------

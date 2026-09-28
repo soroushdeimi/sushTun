@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEvent, Qt
 from PySide6.QtWidgets import QApplication
 
 from .. import i18n, paths
@@ -15,6 +15,25 @@ from .main_window import MainWindow
 # button and row; Vazirmatn reports 20px.
 _FA_FONTS = '"Vazirmatn", "Noto Sans Arabic", "Segoe UI", "Tahoma", "Geeza Pro"'
 _BUNDLED_FONTS = ("Vazirmatn-Regular.ttf", "Vazirmatn-Medium.ttf", "Vazirmatn-Bold.ttf")
+
+
+class Application(QApplication):
+    """Calls `on_quit_request` when the system asks the app to quit.
+
+    macOS Cmd+Q, Dock → Quit, logout and shutdown all send the application a
+    Quit event, which first closes every window. The main window took that
+    close for "hide to the tray" and ignored it, which cancelled the quit: the
+    root process stayed behind, and could hold up a shutdown.
+    """
+
+    def __init__(self, argv: list[str]) -> None:
+        super().__init__(argv)
+        self.on_quit_request = None
+
+    def event(self, event) -> bool:
+        if event.type() == QEvent.Quit and self.on_quit_request is not None:
+            self.on_quit_request()
+        return super().event(event)
 
 
 def load_bundled_fonts() -> list[str]:
@@ -54,7 +73,7 @@ def run(argv: list[str], elevated: bool = True, autostart: bool = False) -> int:
     # Windows only frees the name of the executable an update renamed aside
     # once the process that was running it has gone -- which is now.
     updates_mod.clean_previous()
-    app = QApplication(argv)
+    app = Application(argv)
     load_bundled_fonts()
     app.setApplicationName("sushTun")
     # GNOME on Wayland pairs a window with its launcher (and so its dock and
@@ -67,6 +86,7 @@ def run(argv: list[str], elevated: bool = True, autostart: bool = False) -> int:
         app.setStyleSheet(theme.STYLESHEET)
     app.setWindowIcon(app_icon())
     window = MainWindow(elevated=elevated, autostart=autostart)
+    app.on_quit_request = window.prepare_quit
     if not starts_hidden(autostart, window.settings, tray=window.tray is not None):
         window.show()
     instance = single_instance.InstanceServer(parent=app)

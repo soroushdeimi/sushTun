@@ -38,6 +38,7 @@ from pathlib import Path
 from . import proc
 
 IS_LINUX = sys.platform.startswith("linux")
+IS_MAC = sys.platform == "darwin"
 
 # Never the inherited PATH -- an elevated process's PATH could itself be
 # attacker-influenced (a hijacked sudo/pkexec environment); every tool this
@@ -49,9 +50,9 @@ class UserFsError(RuntimeError):
     pass
 
 
-def _require_linux() -> None:
-    if not IS_LINUX:
-        raise UserFsError("core.userfs is Linux-only")
+def _require_supported() -> None:
+    if not (IS_LINUX or IS_MAC):
+        raise UserFsError("core.userfs is Linux and macOS only")
 
 
 def _tool(name: str) -> str:
@@ -94,20 +95,34 @@ def write_as_user(path: Path, data: bytes, uid: int, gid: int, mode: int = 0o644
     file and refusing a symlink at `path` itself. Parent directories are
     created as that user too, so a symlinked parent can only ever be
     followed to wherever the user could already write themselves."""
-    _require_linux()
+    _require_supported()
     _run_as_user([_tool("mkdir"), "-p", "--", str(path.parent)], uid, gid)
     # oflag=nofollow: refuses to open `path` if it's a symlink. GNU dd
     # truncates the destination by default (conv=notrunc is what disables
     # that), so this is equivalent to O_WRONLY|O_CREAT|O_TRUNC|O_NOFOLLOW.
-    _run_as_user([_tool("dd"), f"of={path}", "oflag=nofollow", "status=none"],
-                 uid, gid, input=data)
+    if IS_MAC:
+        # BSD dd has no oflag=nofollow. Refuse the symlink up front instead:
+        # the write runs as the user, so losing a race here can only reach
+        # somewhere they could already write themselves.
+        try:
+            _run_as_user([_tool("test"), "!", "-L", str(path)], uid, gid)
+        except UserFsError as e:
+            raise UserFsError(f"refusing to write through a symlink at {path}") from e
+        _run_as_user([_tool("dd"), f"of={path}", "status=none"], uid, gid, input=data)
+    else:
+        _run_as_user([_tool("dd"), f"of={path}", "oflag=nofollow", "status=none"],
+                     uid, gid, input=data)
     # umask alone can't guarantee a requested mode (it can only take bits
     # away), so this pins it exactly -- as the user, so it's safe to do.
-    _run_as_user([_tool("chmod"), f"{mode:03o}", "--", str(path)], uid, gid)
+    if IS_MAC:
+        # BSD chmod takes "--" only before the mode; after it, "--" is a file.
+        _run_as_user([_tool("chmod"), "--", f"{mode:03o}", str(path)], uid, gid)
+    else:
+        _run_as_user([_tool("chmod"), f"{mode:03o}", "--", str(path)], uid, gid)
 
 
 def unlink_as_user(path: Path, uid: int, gid: int, missing_ok: bool = True) -> None:
-    _require_linux()
+    _require_supported()
     if not missing_ok:
         try:
             _run_as_user([_tool("test"), "-e", str(path)], uid, gid)
@@ -115,3 +130,36 @@ def unlink_as_user(path: Path, uid: int, gid: int, missing_ok: bool = True) -> N
             raise UserFsError(f"{path} does not exist") from e
     # rm removes a symlink itself; it never follows one to its target.
     _run_as_user([_tool("rm"), "-f", "--", str(path)], uid, gid)
+
+
+def invoking_user_ids() -> tuple[int, int] | None:
+    """(uid, gid) of the user who elevated this process, or None when it is
+    not elevated or cannot tell -- then a plain write is already theirs."""
+    if not (IS_LINUX or IS_MAC) or os.geteuid() != 0:
+        return None
+    uid_s = os.environ.get("PKEXEC_UID") or os.environ.get("SUDO_UID")
+    if not uid_s:
+        return None
+    try:
+        import pwd
+        pw = pwd.getpwuid(int(uid_s))
+        return pw.pw_uid, pw.pw_gid
+    except (ValueError, KeyError):
+        return None
+
+
+def save_for_user(path: Path, data: bytes) -> None:
+    """Write a file to a place the user chose (a save dialog), owned by them.
+
+    Written by root, an exported file came out owned by root: the user could
+    not overwrite or delete it again without an admin password.
+    """
+    ids = invoking_user_ids()
+    if ids is not None:
+        write_as_user(path, data, *ids)
+        return
+    fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o644)
+    try:
+        os.write(fd, data)
+    finally:
+        os.close(fd)

@@ -62,12 +62,27 @@ def test_real_user_none_when_neither_is_set(monkeypatch):
 
 
 # -- is_supported -------------------------------------------------------------
-def test_is_supported_macos_unsupported(monkeypatch):
+def test_is_supported_on_macos(monkeypatch):
     monkeypatch.setattr(autostart, "IS_MAC", True)
     monkeypatch.setattr(autostart, "IS_WIN", False)
-    ok, reason = autostart.is_supported()
-    assert ok is False
-    assert "macOS" in reason
+    assert autostart.is_supported() == (True, "")
+
+
+def test_macos_login_item_is_a_user_launch_agent(monkeypatch, tmp_path):
+    import plistlib
+
+    monkeypatch.setattr(autostart, "IS_MAC", True)
+    monkeypatch.setattr(autostart, "IS_WIN", False)
+    monkeypatch.setattr(autostart.os, "geteuid", lambda: 501)
+    monkeypatch.setattr(autostart, "_mac_user", lambda: (501, 20, tmp_path))
+    autostart.enable()
+    agent = tmp_path / "Library" / "LaunchAgents" / "com.soroushdeimi.sushtun.plist"
+    data = plistlib.loads(agent.read_bytes())
+    assert data["RunAtLoad"] is True
+    assert data["ProgramArguments"][-1] == "--autostart"
+    assert data["LimitLoadToSessionType"] == "Aqua"
+    autostart.disable()
+    assert not agent.exists()
 
 
 def test_is_supported_windows_always_true(monkeypatch):

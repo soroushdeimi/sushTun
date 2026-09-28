@@ -260,3 +260,12 @@ if sys.platform != "win32":
     wait_for_tun = _posix.wait_for_tun
     foreign_tunnel = _posix.foreign_tunnel
     repair_tun_dns = _posix.repair_tun_dns
+    if sys.platform == "darwin":
+        # The Windows version's `route delete ... mask` syntax does not exist
+        # on macOS, so the gateway repair would never have taken.
+        replace_host_route = _posix.replace_host_route
+        mac_route_device = _posix.mac_route_device
+        mac_ensure_scoped_default = _posix.mac_ensure_scoped_default
+        mac_other_vpn = _posix.mac_other_vpn
+        mac_add_split_routes = _posix.mac_add_split_routes
+        mac_wait_for_device = _posix.mac_wait_for_device

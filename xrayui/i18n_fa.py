@@ -157,6 +157,8 @@ TRANSLATIONS_FA: dict[str, str] = {
     "Bypass the tunnel (go direct)": "دور زدن تونل (مستقیم)",
     "Low usage — bypass Windows telemetry/update chatter":
         "مصرف کم — دور زدن ترافیک تله‌متری/به‌روزرسانی ویندوز",
+    "Low usage — bypass macOS update/telemetry chatter":
+        "مصرف کم — دور زدن ترافیک به‌روزرسانی/تله‌متری macOS",
     "Block ads && trackers": "مسدودسازی تبلیغات و ردیاب‌ها",
     "Local network / private IPs direct": "شبکه محلی / آی‌پی‌های خصوصی مستقیم",
     "Iran sites && IPs direct": "سایت‌ها و آی‌پی‌های ایران مستقیم",
@@ -386,8 +388,20 @@ TRANSLATIONS_FA: dict[str, str] = {
     "Reconnect now": "اتصال دوباره",
     "Live log": "گزارش زنده",
     "Tools": "ابزارها",
+    "macOS cannot run a Wi-Fi hotspot while it is itself on Wi-Fi. To share the tunnel, "
+    "turn on Settings → Local proxy → Allow other devices on your network, and set this "
+    "Mac as the proxy on the other device.":
+        "macOS وقتی خودش به Wi-Fi وصل است نمی‌تواند هات‌اسپات Wi-Fi بسازد. برای اشتراک تونل، "
+        "تنظیمات ← پروکسی محلی ← «اجازه به دستگاه‌های دیگر در شبکه شما» را روشن کنید و این Mac را "
+        "به‌عنوان پروکسی در دستگاه دیگر تنظیم کنید.",
     "Not running as administrator — connecting will fail.":
         "به‌عنوان مدیر اجرا نشده — اتصال با خطا مواجه خواهد شد.",
+    "macOS privacy protection kept the administrator copy of sushTun out of this folder "
+    "(Desktop, Documents and Downloads are protected). Move sushTun to Applications or "
+    "another folder and open it again.":
+        "حفاظت از حریم خصوصی macOS اجازه نداد نسخهٔ مدیر sushTun به این پوشه دسترسی داشته باشد "
+        "(Desktop، Documents و Downloads محافظت‌شده‌اند). sushTun را به Applications یا پوشهٔ "
+        "دیگری منتقل کنید و دوباره باز کنید.",
     "Show": "نمایش",
     "Quit": "خروج",
     "Delete {n} server(s)?": "{n} سرور حذف شود؟",

@@ -2,6 +2,7 @@
 state/
 config.runtime.json
 xray.log
+tun2socks.log
 profiles/
 settings.json
 alert-state.json

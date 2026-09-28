@@ -62,8 +62,8 @@ dependencies.
   directly: reach a machine only your server can see, or force one destination through
   the tunnel whatever the routing says. Each forward can be switched off, or shared with
   other devices on your network.
-- **Startup and backup** — start sushTun at login (Windows, and the `.deb` on
-  Linux) with optional auto-connect, back up and restore your servers and
+- **Startup and backup** — start sushTun at login (Windows, macOS, and the
+  `.deb` on Linux) with optional auto-connect, back up and restore your servers and
   settings as a zip, and get a banner when a new release is out.
 - **Persian interface** — a full right-to-left فارسی translation, switchable in
   Settings.
@@ -199,13 +199,19 @@ sushTun requests elevated privileges on launch, since changing routes, DNS, and
 the network device requires admin (Windows), root via `pkexec`/`sudo` (Linux),
 or an `osascript` prompt (macOS).
 
+On macOS, keep sushTun out of Desktop, Documents and Downloads (Applications is
+the usual place): macOS privacy protection keeps the administrator copy out of
+those folders even after the password, and sushTun then opens unelevated and
+tells you so. Quit it with Cmd+Q or from its menu-bar icon; the Dock's Quit
+does not reach an app running as administrator.
+
 ## Platform support
 
 | Platform | Status |
 |----------|--------|
 | Windows | Fully supported |
 | Linux   | Uses Xray's native TUN inbound, the same model as Windows. Connect path is experimental and being hardened. |
-| macOS   | Xray has no native TUN inbound here, so sushTun runs it with a SOCKS inbound and bridges that to a real TUN device via [tun2socks](https://github.com/xjasonlyu/tun2socks). Ships as an Apple Silicon `.dmg`. Unverified on real hardware — experimental. |
+| macOS   | Tested on Apple Silicon (macOS 26). Uses Xray's own TUN inbound on a `utun` device, with a [tun2socks](https://github.com/xjasonlyu/tun2socks) bridge as the fallback, and takes over with four `/2` routes so it can run alongside another VPN. Ships as an Apple Silicon `.dmg`. No Wi-Fi hotspot: macOS cannot share Wi-Fi over Wi-Fi, so share the local proxy instead. |
 
 ## Building from source
 

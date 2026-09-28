@@ -118,6 +118,7 @@ def install_stubs() -> None:
             self._log = on_step or (lambda _m: None)
             self._connected = False
             self.state = _FakeState()
+            self.xray = _FakeXray()
 
         def is_connected(self) -> bool:
             return self._connected
@@ -142,6 +143,10 @@ def install_stubs() -> None:
 
         def stop_gateway(self):
             return None
+
+    class _FakeXray:
+        def is_running(self) -> bool:
+            return False
 
     class _FakeState:
         alias = "Ethernet"

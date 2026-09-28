@@ -60,9 +60,38 @@ def tcp_connect_delay(host: str, port: int, attempts: int = 3, timeout: float = 
     }
 
 
+def _mac_counters(device: str) -> tuple[int, int] | None:
+    """(received, sent) bytes of `device`, from `netstat -ibn`."""
+    for line in proc.run(["netstat", "-ibn", "-I", device]).stdout.splitlines():
+        cols = line.split()
+        # Name Mtu Network [Address] Ipkts Ierrs Ibytes Opkts Oerrs Obytes Coll;
+        # a utun has no Address, so count from the end.
+        if cols and cols[0] == device and "<Link#" in line and len(cols) >= 8:
+            try:
+                return int(cols[-5]), int(cols[-2])
+            except ValueError:
+                return None
+    return None
+
+
+def _mac_throughput(seconds: int) -> dict | None:
+    from .tun2socks import DEVICE
+    first = _mac_counters(DEVICE)
+    time.sleep(seconds)
+    second = _mac_counters(DEVICE)
+    if first is None or second is None:
+        return None
+    rx, tx = max(0, second[0] - first[0]), max(0, second[1] - first[1])
+    return {"name": DEVICE, "rx": rx, "tx": tx,
+            "rx_mbps": round(rx * 8 / seconds / 1024 ** 2, 2),
+            "tx_mbps": round(tx * 8 / seconds / 1024 ** 2, 2)}
+
+
 def throughput_sample(tun_index: int, seconds: int = 5) -> dict | None:
+    if IS_MAC:
+        return _mac_throughput(seconds)
     if not IS_WIN:
-        return None  # Get-NetAdapterStatistics has no Linux/macOS equivalent here
+        return None  # Get-NetAdapterStatistics has no Linux equivalent here
     out = proc.powershell(
         _THROUGHPUT_PS, env={"IDX": tun_index, "SECS": seconds}, timeout=seconds + 10
     ).stdout.strip()

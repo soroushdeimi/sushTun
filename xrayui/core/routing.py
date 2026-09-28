@@ -11,12 +11,14 @@ Two modes share one settings["routing"] dict:
   idea what "low usage" means on its own.
 
 Country and low-usage bypass use geosite/geoip categories from the bundled
-Loyalsoldier data (ir/ru/cn, category-ads-all, private, win-spy/update/extra).
+Loyalsoldier data (ir/ru/cn, category-ads-all, private, win-spy/update/extra,
+apple-update).
 """
 from __future__ import annotations
 
 import ipaddress
 import re
+import sys
 
 # geosite/geoip category groups per country. First entry is domains, second IPs.
 # The bare `domain:<tld>` entries also catch national domains the curated
@@ -45,6 +47,35 @@ LOW_USAGE_DOMAINS: list[str] = [
     "domain:nexus.officeapps.live.com",
     "domain:nexusrules.officeapps.live.com",
 ]
+
+# The macOS counterpart: software/OS updates, App Store downloads and
+# analytics, which macOS fetches in the background on its own schedule. Never
+# iCloud or push: those carry the user's own data and messages.
+MAC_LOW_USAGE_CATEGORIES = ["geosite:apple-update"]
+MAC_LOW_USAGE_DOMAINS: list[str] = [
+    "domain:swscan.apple.com",
+    "domain:swdist.apple.com",
+    "domain:swcdn.apple.com",
+    "domain:swcdnlocator.apple.com",
+    "domain:updates.cdn-apple.com",
+    "domain:updates-http.cdn-apple.com",
+    "domain:mesu.apple.com",
+    "domain:gdmf.apple.com",
+    "domain:oscdn.apple.com",
+    "domain:osrecovery.apple.com",
+    "domain:appldnld.apple.com",
+    "domain:osxapps.itunes.apple.com",
+    "domain:xp.apple.com",
+    "domain:metrics.apple.com",
+]
+
+
+def low_usage_domains(platform: str | None = None) -> list[str]:
+    """What low-usage mode sends around the tunnel on this OS."""
+    if (platform or sys.platform) == "darwin":
+        return [*MAC_LOW_USAGE_CATEGORIES, *MAC_LOW_USAGE_DOMAINS]
+    return [*LOW_USAGE_CATEGORIES, *LOW_USAGE_DOMAINS]
+
 
 _PREFIXES = ("domain:", "full:", "geosite:", "regexp:", "keyword:", "ext:")
 
@@ -80,8 +111,7 @@ def _simple_rules(r: dict) -> list[dict]:
             direct_domains.extend(domains)
             direct_ips.extend(ips)
     if r.get("low_usage"):
-        direct_domains.extend(LOW_USAGE_CATEGORIES)
-        direct_domains.extend(LOW_USAGE_DOMAINS)
+        direct_domains.extend(low_usage_domains())
     direct_domains.extend(_norm_domain(d) for d in r.get("bypass_domains", []) if d.strip())
     direct_ips.extend(ip.strip() for ip in r.get("bypass_ips", []) if ip.strip())
 
@@ -236,7 +266,7 @@ def build_rules(r: dict) -> list[dict]:
 
     rules: list[dict] = []
     if r.get("low_usage"):
-        domains = list(LOW_USAGE_CATEGORIES) + list(LOW_USAGE_DOMAINS)
+        domains = low_usage_domains()
         rules.append({"type": "field", "domain": domains, "outboundTag": "direct"})
     for rule in custom.get("rules") or []:
         if not isinstance(rule, dict):

@@ -1,7 +1,7 @@
 """Start sushTun automatically at login.
 
 Each platform needs a different mechanism, so each is handled entirely
-separately. Linux only supports the installed .deb (paths.installed()):
+separately. macOS uses a LaunchAgent in the user's own Library. Linux only supports the installed .deb (paths.installed()):
 the portable build has no fixed path a polkit rule or autostart entry
 could name without granting root to whatever happens to be at that path
 later -- a much broader hole than this feature is worth.
@@ -84,7 +84,7 @@ def _desktop_file_text() -> str:
 
 def is_supported() -> tuple[bool, str]:
     if IS_MAC:
-        return False, "Not supported on macOS yet."
+        return True, ""
     if IS_WIN:
         return True, ""
     if not paths.installed():
@@ -100,6 +100,8 @@ def enable() -> None:
         raise RuntimeError(reason)
     if IS_WIN:
         _enable_windows()
+    elif IS_MAC:
+        _enable_macos()
     else:
         _enable_linux()
 
@@ -107,8 +109,66 @@ def enable() -> None:
 def disable() -> None:
     if IS_WIN:
         _disable_windows()
-    elif not IS_MAC:
+    elif IS_MAC:
+        _disable_macos()
+    else:
         _disable_linux()
+
+
+# -- macOS: a LaunchAgent in the user's own Library ---------------------------
+# It starts sushTun unelevated at login, which then asks for the password the
+# way a manual launch does. Nothing here grants root: skipping that prompt would
+# need a signed privileged helper, and an agent names no path root will trust.
+MAC_LABEL = "com.soroushdeimi.sushtun"
+
+
+def _mac_user() -> tuple[int, int, Path]:
+    """(uid, gid, home) of the user the agent belongs to."""
+    import pwd
+    ids = userfs.invoking_user_ids()
+    uid = ids[0] if ids else os.getuid()
+    pw = pwd.getpwuid(uid)
+    return pw.pw_uid, pw.pw_gid, Path(pw.pw_dir)
+
+
+def mac_agent_path(home: Path) -> Path:
+    return home / "Library" / "LaunchAgents" / f"{MAC_LABEL}.plist"
+
+
+def mac_agent_bytes() -> bytes:
+    import plistlib
+    if getattr(sys, "frozen", False):
+        program = [str(Path(sys.executable).resolve())]
+    else:
+        program = [sys.executable, str(Path(__file__).resolve().parent.parent.parent / "app_main.py")]
+    return plistlib.dumps({
+        "Label": MAC_LABEL,
+        "ProgramArguments": [*program, "--autostart"],
+        "RunAtLoad": True,
+        "LimitLoadToSessionType": "Aqua",  # a GUI login, never ssh or the login window
+        "ProcessType": "Interactive",
+    })
+
+
+def _enable_macos() -> None:
+    uid, gid, home = _mac_user()
+    path = mac_agent_path(home)
+    if os.geteuid() == 0:
+        # Written as the user: ~/Library is theirs, and root must not follow a
+        # symlink someone planted there (see core/userfs.py).
+        userfs.write_as_user(path, mac_agent_bytes(), uid, gid)
+    else:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        userfs.save_for_user(path, mac_agent_bytes())
+
+
+def _disable_macos() -> None:
+    uid, gid, home = _mac_user()
+    path = mac_agent_path(home)
+    if os.geteuid() == 0:
+        userfs.unlink_as_user(path, uid, gid)
+    else:
+        path.unlink(missing_ok=True)
 
 
 def _write_polkit_rule(user: str) -> None:

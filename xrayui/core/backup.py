@@ -12,7 +12,6 @@ import io
 import json
 import os
 import re
-import sys
 import tempfile
 import time
 import zipfile
@@ -20,8 +19,6 @@ from pathlib import Path
 
 from .. import __version__, paths
 from . import userfs
-
-IS_LINUX = sys.platform.startswith("linux")
 
 # The exact set of names a restore will ever accept -- anything else in the
 # zip (an absolute path, "..", or a file this app never wrote) is rejected
@@ -98,20 +95,10 @@ def backup(dest_zip: Path) -> None:
 
 
 def _real_user_ids() -> tuple[int, int] | None:
-    """On Linux, when running elevated (root via pkexec/sudo), the uid/gid
-    of the user who invoked it -- so the backup can be written as them
-    instead of as root writing into a path they control."""
-    if not IS_LINUX or os.geteuid() != 0:
-        return None
-    uid_s = os.environ.get("PKEXEC_UID") or os.environ.get("SUDO_UID")
-    if not uid_s:
-        return None
-    try:
-        import pwd
-        pw = pwd.getpwuid(int(uid_s))
-        return pw.pw_uid, pw.pw_gid
-    except (ValueError, KeyError):
-        return None
+    """When running elevated, the uid/gid of the user who invoked it -- so
+    the backup can be written as them instead of as root writing into a
+    path they control."""
+    return userfs.invoking_user_ids()
 
 
 def restore(src_zip: Path) -> None:

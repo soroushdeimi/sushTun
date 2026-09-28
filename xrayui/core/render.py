@@ -62,6 +62,13 @@ def _apply_dns_block(cfg: dict, block: dict) -> None:
     cfg.setdefault("dns", {}).update(block)
 
 
+def _apply_tun_name(cfg: dict, name: str) -> None:
+    # macOS only accepts utunN names; the template's xray0 is for Linux/Windows.
+    for inbound in cfg.get("inbounds", []):
+        if inbound.get("tag") == "tun-in":
+            inbound.setdefault("settings", {})["name"] = name
+
+
 def _apply_mtu(cfg: dict, mtu: int) -> None:
     # Below 576 breaks IPv4 minimum reassembly; above 9000 exceeds jumbo frames.
     if not isinstance(mtu, int) or isinstance(mtu, bool) or not 576 <= mtu <= 9000:
@@ -102,12 +109,15 @@ def build_text(
     exits: list[exits_mod.Exit] | None = None,
     exits_cfg: dict | None = None,
     forwards: list[forwards_mod.Forward] | None = None,
+    tun_name: str | None = None,
 ) -> str:
     tmpl_path = template_path or paths.config_template()
     cfg = json.loads(tmpl_path.read_text(encoding="utf-8"))
     outbounds.apply_profile(cfg, profile)
     if not include_tun:
         _drop_tun_inbound(cfg)
+    elif tun_name:
+        _apply_tun_name(cfg, tun_name)
     if core_cfg:
         coreopts.apply_all(cfg, core_cfg, profile)
 
@@ -167,6 +177,7 @@ def build(
     exits: list[exits_mod.Exit] | None = None,
     exits_cfg: dict | None = None,
     forwards: list[forwards_mod.Forward] | None = None,
+    tun_name: str | None = None,
 ) -> Path:
     out = paths.runtime_config()
     # Forward by keyword: a positional forward silently mis-binds the next time
@@ -188,6 +199,7 @@ def build(
             exits=exits,
             exits_cfg=exits_cfg,
             forwards=forwards,
+            tun_name=tun_name,
         ),
         encoding="utf-8",
     )

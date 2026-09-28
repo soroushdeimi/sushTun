@@ -1756,3 +1756,46 @@ def test_settings_that_xray_reads_at_startup_ask_for_a_reconnect(
     assert reconnects and reconnects[0].endswith("changed")
     assert window.settings[key] == change
 
+
+
+def test_a_hidden_window_polls_no_processes(window, monkeypatch):
+    # In the tray, the 2 s status timer ran pgrep and a whole `xray api` every
+    # tick for nothing on screen, keeping a laptop awake.
+    from xrayui.ui import main_window as mw
+    from xrayui.ui.log_tailer import LogTailer
+
+    polled = []
+    monkeypatch.setattr(mw, "is_xray_running", lambda: polled.append("pgrep") or False)
+    monkeypatch.setattr(window, "_sample_live", lambda _t: polled.append("sample"))
+    window.hide()
+    window._refresh_status()
+    assert polled == []
+    assert window.tailer.interval == LogTailer.IDLE_INTERVAL
+    window.show()
+    window._refresh_status()
+    assert "pgrep" in polled
+    assert window.tailer.interval == LogTailer.INTERVAL
+
+
+def test_live_speed_comes_from_the_stats_counters(window, monkeypatch):
+    # macOS and Linux have no per-adapter counter call; the speed was blank.
+    clock = iter([100.0, 102.0])
+    monkeypatch.setattr("xrayui.ui.main_window.time.monotonic", lambda: next(clock))
+    assert window._rate_from_stats({"up": 0, "down": 0}) is None
+    rate = window._rate_from_stats({"up": 250_000, "down": 2_500_000})
+    assert rate == {"rx_mbps": 10.0, "tx_mbps": 1.0}
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="the macOS app menu")
+def test_cmd_q_really_quits_on_macos(window, monkeypatch):
+    # The app menu owns Cmd+Q on macOS; its default Quit only hid the window,
+    # leaving the root process running.
+    from PySide6.QtGui import QAction
+    from PySide6.QtWidgets import QApplication
+
+    quit_calls = []
+    monkeypatch.setattr(QApplication.instance(), "quit", lambda: quit_calls.append(1))
+    assert window.act_quit.menuRole() == QAction.QuitRole
+    assert window.act_settings.menuRole() == QAction.PreferencesRole
+    window.act_quit.trigger()
+    assert window._quitting is True and quit_calls == [1]

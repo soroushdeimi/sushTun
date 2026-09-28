@@ -128,10 +128,10 @@ def set_dns_loopback(alias: str) -> bool:
     """Send the system's DNS into the tunnel. False if it would not stick."""
     if IS_MAC:
         service = mac_service_name(alias)
-        if service:
-            proc.run(["networksetup", "-setdnsservers", service, "127.0.0.1"])
+        ok = bool(service) and proc.run(
+            ["networksetup", "-setdnsservers", service, "127.0.0.1"]).returncode == 0
         _mac_flush_dns()
-        return True
+        return ok
     if _resolved_active():
         # Never 127.0.0.1 on the physical link: resolved pins a link's queries
         # to that link (IP_UNICAST_IF), and loopback is unreachable through a
@@ -267,12 +267,81 @@ def add_host_route(server_ip: str, gateway: str) -> None:
         proc.run(["ip", "route", "add", server_ip, "via", gateway])
 
 
+def replace_host_route(server_ip: str, gateway: str) -> None:
+    """macOS: repoint the pinned server route after the gateway moved."""
+    if proc.run(["route", "-n", "change", "-host", server_ip, gateway]).returncode != 0:
+        proc.run(["route", "-n", "delete", "-host", server_ip])
+        add_host_route(server_ip, gateway)
+
+
+def mac_ensure_scoped_default(iface: str, gateway: str) -> bool:
+    """Give `iface` its own (scoped) default route if it lost it. True if added.
+
+    Xray pins direct/proxy/dns-out to the interface (IP_BOUND_IF), and macOS
+    then looks up only routes scoped to it. macOS normally keeps one per
+    interface, but VPN helpers (seen with OpenVPN Connect) can leave just the
+    global default behind: every pinned connection without a host route of
+    its own failed with "network is unreachable", so Iran-direct sites and
+    the domestic DNS never loaded while the tunnel itself worked.
+    """
+    out = proc.run(["route", "-n", "get", "-ifscope", iface, "default"]).stdout
+    if "IFSCOPE" in out:
+        return False
+    return proc.run(["route", "-n", "add", "-ifscope", iface, "default", gateway]).returncode == 0
+
+
+def mac_other_vpn(iface: str) -> str | None:
+    """Another VPN's device currently carrying the default traffic, if any."""
+    dev = mac_route_device("1.1.1.1")
+    return dev if dev and dev not in (iface, t2s.DEVICE) else None
+
+
+def mac_route_device(dest: str) -> str | None:
+    """The interface macOS would send `dest` out of, per `route -n get`."""
+    for line in proc.run(["route", "-n", "get", dest]).stdout.splitlines():
+        line = line.strip()
+        if line.startswith("interface:"):
+            return line.split(":", 1)[1].strip() or None
+    return None
+
+
+# macOS takes over with four /2 routes rather than the two /1s used elsewhere.
+# VPN apps there (OpenVPN Connect, WireGuard, most NetworkExtensions) claim
+# 0/1 + 128/1 themselves; ours then failed with "File exists". A /2 is more
+# specific than their /1, so ours win and both can run at once, while the
+# other VPN keeps its own narrower routes (a company subnet, its DNS server).
+MAC_SPLIT = ("0.0.0.0/2", "64.0.0.0/2", "128.0.0.0/2", "192.0.0.0/2")
+# Earlier builds used these; still removed so an old session cannot strand them.
+_MAC_OLD_SPLIT = ("0.0.0.0/1", "128.0.0.0/1")
+
+
+def _mac_via(native: bool) -> list[str]:
+    # Xray's own utun is reached by interface. The tun2socks device only
+    # forwards what is addressed to its point-to-point next-hop.
+    return ["-interface", t2s.DEVICE] if native else [t2s.ADDRESS]
+
+
+def mac_add_split_routes(native: bool) -> None:
+    for dest in MAC_SPLIT:
+        proc.run(["route", "-n", "add", "-net", dest, *_mac_via(native)])
+
+
+def mac_wait_for_device(timeout: float = 15.0, alive: Callable[[], bool] | None = None) -> bool:
+    """True once the utun device exists; False on timeout or when `alive`
+    says its owner has exited."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if proc.run(["ifconfig", t2s.DEVICE]).returncode == 0:
+            return True
+        if alive is not None and not alive():
+            return False
+        time.sleep(0.3)
+    return False
+
+
 def add_default_routes(tun_index: int | None = None) -> None:
     if IS_MAC:
-        # Route via the tun2socks point-to-point address, not -interface: the
-        # utun device only forwards what's addressed to its own next-hop.
-        proc.run(["route", "-n", "add", "-net", "0.0.0.0/1", t2s.ADDRESS])
-        proc.run(["route", "-n", "add", "-net", "128.0.0.0/1", t2s.ADDRESS])
+        mac_add_split_routes(native=False)
         return
     for dest in ("0.0.0.0/1", "128.0.0.0/1"):
         proc.run(["ip", "route", "add", dest, "dev", TUN_NAME])
@@ -280,8 +349,9 @@ def add_default_routes(tun_index: int | None = None) -> None:
 
 def remove_routes(server_ip: str | None = None) -> None:
     if IS_MAC:
-        proc.run(["route", "-n", "delete", "-net", "0.0.0.0/1", t2s.ADDRESS])
-        proc.run(["route", "-n", "delete", "-net", "128.0.0.0/1", t2s.ADDRESS])
+        for dest in (*MAC_SPLIT, *_MAC_OLD_SPLIT):
+            for native in (True, False):
+                proc.run(["route", "-n", "delete", "-net", dest, *_mac_via(native)])
         if server_ip:
             proc.run(["route", "-n", "delete", "-host", server_ip])
     else:
@@ -318,6 +388,8 @@ def foreign_tunnel(iface: str) -> str | None:
     NetworkManager) loses to our two /1 routes, so it can run alongside.
     """
     if IS_MAC:
+        # Nothing to refuse: MAC_SPLIT outranks another VPN's routes, as the
+        # /1s do on Windows. mac_other_vpn() names it for the log.
         return None
     try:
         route = json.loads(proc.run(["ip", "-j", "route", "get", "1.1.1.1"]).stdout or "[]")[0]

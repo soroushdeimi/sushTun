@@ -200,6 +200,10 @@ class ProfileEditDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.addWidget(self.tabs)
         layout.addWidget(buttons)
+        # Only Save may be default: on macOS an autoDefault Cancel took the
+        # default role when the dialog was shown, and Enter threw the edit away.
+        for btn in self.findChildren(QPushButton):
+            btn.setAutoDefault(btn is buttons.button(QDialogButtonBox.Save))
         _mark_primary(buttons.button(QDialogButtonBox.Save))
 
     def _add_row(self, form: QFormLayout, text: str, widget) -> QLabel:
@@ -1114,6 +1118,10 @@ class SubscriptionEditDialog(QDialog):
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+        # Only Save may be default: on macOS an autoDefault Cancel took the
+        # default role when the dialog was shown, and Enter threw the edit away.
+        for btn in self.findChildren(QPushButton):
+            btn.setAutoDefault(btn is buttons.button(QDialogButtonBox.Save))
         _mark_primary(buttons.button(QDialogButtonBox.Save))
 
     def _stop_autofill_name(self, _text: str) -> None:

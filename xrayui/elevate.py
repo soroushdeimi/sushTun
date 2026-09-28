@@ -11,6 +11,10 @@ from pathlib import Path
 IS_WIN = sys.platform == "win32"
 IS_MAC = sys.platform == "darwin"
 
+# Set when the macOS password was given but the elevated copy was refused its
+# own files by privacy protection (see _relaunch_macos).
+mac_privacy_blocked = False
+
 
 def is_admin() -> bool:
     if IS_WIN:
@@ -53,6 +57,9 @@ _GUI_ENV = (
     "QT_QPA_PLATFORM", "QT_SCALE_FACTOR", "LANG",
 )
 _SESSION_ARG = "--session-env="
+# Same name sudo uses, so everything that already reads it (core.userfs,
+# core.desktop) finds the user behind the macOS password prompt too.
+_MAC_UID = "SUDO_UID"
 
 # pkexec exit codes: 126 = the auth dialog was dismissed, 127 = not authorized
 # (or no polkit agent is running).
@@ -69,6 +76,10 @@ def _session_args() -> list[str]:
     if not getattr(sys, "frozen", False):
         # Root's interpreter would not see --user site-packages (PySide6).
         env["PYTHONPATH"] = os.pathsep.join(p for p in sys.path if p and os.path.isdir(p))
+    if IS_MAC:
+        # pkexec and sudo record who elevated; the macOS prompt does not.
+        # Files saved where the user chose are then written as them.
+        env[_MAC_UID] = str(os.getuid())
     return [f"{_SESSION_ARG}{k}={v}" for k, v in env.items()]
 
 
@@ -82,6 +93,8 @@ def apply_session_env(argv: list[str]) -> list[str]:
         key, _, value = arg[len(_SESSION_ARG):].partition("=")
         if key == "PYTHONPATH" and not getattr(sys, "frozen", False):
             sys.path[1:1] = [p for p in value.split(os.pathsep) if p and p not in sys.path]
+        elif key == _MAC_UID and IS_MAC and value.isdigit() and int(value) != 0:
+            os.environ[key] = value
         elif key in _GUI_ENV:
             os.environ[key] = value
     return rest
@@ -120,14 +133,26 @@ def _relaunch_macos() -> bool:
     # Quoted for the shell `do shell script` runs, then escaped for the
     # AppleScript string literal around it: unquoted, a space anywhere in the
     # path split the command and the elevated app never started.
-    inner = " ".join(shlex.quote(a) for a in _elevated_cmd())
+    # The session arguments too: `do shell script` starts from a bare
+    # environment, which loses LANG and, in a source run, --user site-packages.
+    inner = " ".join(shlex.quote(a) for a in [*_elevated_cmd(), *_session_args()])
     literal = inner.replace("\\", "\\\\").replace('"', '\\"')
     script = f'do shell script "{literal}" with administrator privileges'
     # Wait, so a cancelled prompt (AppleScript error -128) falls back to an
     # unelevated window that says why connecting will fail, as on Linux. Any
     # other failure is the elevated app's own exit, not a reason to reopen.
     result = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
-    return "-128" not in result.stderr
+    if "-128" in result.stderr:
+        return False
+    if result.returncode != 0 and "Operation not permitted" in result.stderr:
+        # The root copy could not read its own files: macOS privacy
+        # protection keeps it out of Desktop, Documents and Downloads, even
+        # after the password. It died before opening a window, so without
+        # this nothing appeared at all. Open unelevated and say why.
+        global mac_privacy_blocked
+        mac_privacy_blocked = True
+        return False
+    return True
 
 
 def _join(args: list[str]) -> str:
