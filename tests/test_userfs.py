@@ -136,6 +136,19 @@ def test_run_as_user_reports_the_last_stderr_line_on_failure(monkeypatch):
         userfs._run_as_user(["/bin/false"], os.getuid(), os.getgid())
 
 
+def test_save_for_user_writes_where_o_nofollow_does_not_exist(monkeypatch, tmp_path):
+    # Windows has neither O_NOFOLLOW nor an invoking-user id, so save_for_user
+    # falls through to the plain write -- and naming os.O_NOFOLLOW there raises
+    # an AttributeError, which the rule-set export's `except OSError` lets
+    # through as a traceback instead of a message.
+    monkeypatch.setattr(userfs, "IS_LINUX", False)
+    monkeypatch.setattr(userfs, "IS_MAC", False)
+    monkeypatch.delattr(userfs.os, "O_NOFOLLOW", raising=False)
+    target = tmp_path / "rules.json"
+    userfs.save_for_user(target, b'{"remarks": "x"}\n')
+    assert target.read_bytes() == b'{"remarks": "x"}\n'
+
+
 def test_userfs_refuses_outright_on_a_non_linux_platform(monkeypatch, tmp_path):
     monkeypatch.setattr(userfs, "IS_LINUX", False)
     monkeypatch.setattr(userfs, "IS_MAC", False)

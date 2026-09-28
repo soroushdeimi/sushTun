@@ -158,7 +158,13 @@ def save_for_user(path: Path, data: bytes) -> None:
     if ids is not None:
         write_as_user(path, data, *ids)
         return
-    fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o644)
+    # O_NOFOLLOW does not exist on Windows and O_BINARY exists only there, so
+    # ask for whichever this platform has: naming either outright would raise
+    # an AttributeError the callers' own `except OSError` does not catch, and
+    # without O_BINARY Windows would rewrite the newlines of an exported file.
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+    flags |= getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
+    fd = os.open(str(path), flags, 0o644)
     try:
         os.write(fd, data)
     finally:
