@@ -17,8 +17,9 @@ def _stub_common(monkeypatch, argv):
     monkeypatch.setattr(elevate, "is_admin", lambda: True)
     monkeypatch.setattr(elevate, "relaunch_as_admin", lambda: False)
     monkeypatch.setattr(paths, "ensure_dirs", lambda: None)
-    # Never knock on a real sushTun running on the test machine.
-    monkeypatch.setattr(single_instance, "notify_running", lambda **kw: False)
+    # Never knock on a real sushTun running on the test machine, and never
+    # let the different-build dialog open behind a test run.
+    monkeypatch.setattr(single_instance, "hand_over", lambda **kw: False)
     captured = {}
     monkeypatch.setattr(app_mod, "run", lambda argv, **kw: captured.update(argv=argv, **kw)
                         or 0)
@@ -42,7 +43,7 @@ def test_a_second_launch_hands_over_before_asking_for_the_password(monkeypatch):
     knocks, elevations = [], []
     monkeypatch.setattr(elevate, "is_admin", lambda: False)
     monkeypatch.setattr(elevate, "relaunch_as_admin", lambda: elevations.append(1) or True)
-    monkeypatch.setattr(single_instance, "notify_running",
+    monkeypatch.setattr(single_instance, "hand_over",
                         lambda **kw: knocks.append(kw) or True)
     assert main_mod.main() == 0
     assert knocks == [{"show": True}]
@@ -52,7 +53,7 @@ def test_a_second_launch_hands_over_before_asking_for_the_password(monkeypatch):
 def test_a_login_launch_leaves_the_running_copy_hidden(monkeypatch):
     _stub_common(monkeypatch, ["sushtun", "--autostart"])
     knocks = []
-    monkeypatch.setattr(single_instance, "notify_running",
+    monkeypatch.setattr(single_instance, "hand_over",
                         lambda **kw: knocks.append(kw) or True)
     assert main_mod.main() == 0
     assert knocks == [{"show": False}]

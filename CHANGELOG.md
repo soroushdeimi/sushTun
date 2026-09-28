@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.8.1
+
+- Opening a newly installed sushTun while an older one was still running raised the *old* window
+  and the new launch disappeared without a word: Settings then showed the previous version number
+  and nothing explained why. Every launch now says which version it is, and one that finds a
+  different build tells you what is on screen instead of vanishing. Found on macOS, where a login
+  item pointing at the old copy kept the new one from ever getting a turn.
+
 ## v0.8.0 — macOS
 
 Tested on a real Mac (Apple Silicon, macOS 26) for the first time. Connecting on macOS never

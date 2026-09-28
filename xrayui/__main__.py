@@ -18,8 +18,8 @@ def main() -> int:
     autostart = "--autostart" in argv
     # Checked before elevating, so a second launch neither asks for the
     # password again nor starts a copy that would fight over the tunnel.
-    from xrayui.ui.single_instance import notify_running
-    if notify_running(show=not autostart):
+    from xrayui.ui.single_instance import hand_over
+    if hand_over(show=not autostart):
         return 0
     if not elevate.is_admin() and elevate.relaunch_as_admin():
         return 0  # elevated instance takes over

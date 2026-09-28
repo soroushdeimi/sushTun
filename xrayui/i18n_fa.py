@@ -523,6 +523,14 @@ TRANSLATIONS_FA: dict[str, str] = {
         "و دستی جایگزین کنید.",
     "Couldn't open a browser. The page is {url}":
         "مرورگر باز نشد. نشانی صفحه: {url}",
+    "You opened sushTun {this}, but another copy is already running — the "
+    "window on screen is that one. Quit it first, then open this copy again.":
+        "شما sushTun {this} را باز کردید، ولی نسخه‌ی دیگری از قبل در حال اجراست — "
+        "پنجره‌ای که می‌بینید مال آن است. اول آن را ببندید، بعد این نسخه را باز کنید.",
+    "You opened sushTun {this}, but sushTun {running} is already running — the "
+    "window on screen is that one. Quit it first, then open this copy again.":
+        "شما sushTun {this} را باز کردید، ولی sushTun {running} از قبل در حال اجراست — "
+        "پنجره‌ای که می‌بینید مال آن است. اول آن را ببندید، بعد این نسخه را باز کنید.",
     "Stopping…": "در حال توقف…",
     "Downloading {name}…": "در حال دانلود {name}…",
     "Downloaded {done} of {total}": "{done} از {total} دانلود شد",
