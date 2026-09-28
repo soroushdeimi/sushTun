@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — macOS
+## v0.8.0 — macOS
 
 Tested on a real Mac (Apple Silicon, macOS 26) for the first time. Connecting on macOS never
 worked before this release.
@@ -39,6 +39,13 @@ worked before this release.
 - Backups and exported rule sets are written as the user, not as root.
 - The Hotspot button explains that macOS cannot run a Wi-Fi hotspot while on Wi-Fi, and points to
   sharing the local proxy instead.
+
+Windows and Linux keep the connection they had: every change above is behind a platform check,
+and the rendered Xray config is byte for byte the one 0.7.1 produced. One Windows fix came out of
+the same work:
+
+- Fixed exporting a rule set on Windows, which ended in a traceback: the export was moved onto a
+  shared write path that asked for a POSIX-only open flag.
 
 ## v0.7.1
 
