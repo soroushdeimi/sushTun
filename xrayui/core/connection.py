@@ -82,6 +82,9 @@ class Connection:
         self.tun2socks = t2s.Tun2socks()
         self._owned = False  # did this process establish the active connection?
         self._gateway_on = False
+        # Whether sushTun itself switched the Windows hotspot on. Only then is
+        # it ours to switch off again; one the user started stays up.
+        self._tethering_started = False
         self._dns_warned = False
         atexit.register(self._atexit)
 
@@ -255,14 +258,26 @@ class Connection:
     def _start_gateway(self, cfg: dict) -> None:
         if IS_WIN:
             self._configure_windows_hotspot(cfg)
+            started_here = False
             if cfg.get("start_hotspot", True) and hotspot.tethering_state() != "On":
                 self._log("Starting Windows hotspot...")
                 if not hotspot.start_tethering():
                     raise RuntimeError("Windows would not start the hotspot")
+                started_here = True
                 # Tethering reports "On" a moment before the adapter ICS has
                 # to share shows up in the connection list.
                 hotspot.wait_for_hotspot_adapter()
-            hotspot.enable(public_name=network.TUN_NAME)
+            try:
+                hotspot.enable(public_name=network.TUN_NAME)
+            except Exception:
+                # The switch is about to say "off": a hotspot this call just
+                # started would stay on behind it, handing its devices the
+                # untunneled connection.
+                if started_here:
+                    self._log("Sharing could not be set up; turning the hotspot back off.")
+                    hotspot.stop_tethering()
+                raise
+            self._tethering_started = self._tethering_started or started_here
         else:
             ssid, password = _hotspot_credentials()
             gw = app_settings.load()["gateway"]
@@ -304,8 +319,16 @@ class Connection:
         """Turn sharing off without dropping the tunnel."""
         if self._gateway_on:
             hotspot.disable()
+            self._stop_own_tethering()
             self._gateway_on = False
             self.state.set_gateway(False)
+
+    def _stop_own_tethering(self) -> None:
+        """Switch off a Windows hotspot only if sushTun switched it on."""
+        if IS_WIN and self._tethering_started:
+            self._tethering_started = False
+            if not hotspot.stop_tethering():
+                self._log("WARNING: Windows would not switch the hotspot off.")
 
     def _connect_macos(self, profile: Profile, iface, server_ip: str, dns) -> None:
         # Xray's own TUN inbound first (a utun device, the same model as
@@ -479,6 +502,9 @@ class Connection:
             # Undo first: leaving ICS pointed at a dead tunnel breaks the hotspot.
             try:
                 hotspot.disable()
+                # Left on without its sharing, the hotspot would hand its
+                # devices the plain connection instead of the tunnel.
+                self._stop_own_tethering()
             except Exception:
                 pass
             self._gateway_on = False
