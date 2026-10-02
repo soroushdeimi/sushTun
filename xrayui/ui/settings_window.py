@@ -221,6 +221,7 @@ class _GeneralPage(QWidget):
     # The main window owns installing an update, so a found release is handed
     # up rather than acted on here.
     updateAvailable = Signal(object)
+    tourRequested = Signal()
 
     def __init__(self, settings: dict, parent=None) -> None:
         super().__init__(parent)
@@ -318,8 +319,21 @@ class _GeneralPage(QWidget):
                  tr("The version you are running, and a button to check for a newer one."),
                  tr("Handy to mention when you report a problem."))
 
+        self.btn_tour = QPushButton(tr("Show the tour again"))
+        self.btn_tour.clicked.connect(self._request_tour)
+        group.add_row(tr("Welcome tour"), self.btn_tour)
+        set_help(self.btn_tour,
+                 tr("Replays the short walk through the app that you saw on first "
+                    "launch. It starts when you close Settings."),
+                 tr("Showing sushTun to a friend? Replay it for them."))
+
         layout.addWidget(group)
         layout.addStretch(1)
+
+    def _request_tour(self) -> None:
+        self.btn_tour.setEnabled(False)
+        self.btn_tour.setText(tr("Starts when you close Settings"))
+        self.tourRequested.emit()
 
     def _check_now(self) -> None:
         self.btn_check_now.setEnabled(False)
@@ -1567,6 +1581,7 @@ class SettingsWindow(QDialog):
     # General → Check now found one. Installing it belongs to the main window,
     # which is the only thing that can quit the app afterwards.
     updateAvailable = Signal(object)
+    tourRequested = Signal()
 
     def __init__(
         self,
@@ -1672,6 +1687,7 @@ class SettingsWindow(QDialog):
         self._pages = {}
         self._pages["general"] = _GeneralPage(self._settings)
         self._pages["general"].updateAvailable.connect(self.updateAvailable)
+        self._pages["general"].tourRequested.connect(self.tourRequested)
         self._pages["anti-filter"] = _AntiFilterPage(core_cfg)
         self._pages["local-proxy"] = _LocalProxyPage(core_cfg)
         self._pages["geo-data"] = _GeoDataPage(geo_cfg)

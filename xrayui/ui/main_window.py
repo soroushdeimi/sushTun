@@ -68,6 +68,7 @@ from .settings_window import SettingsWindow
 from .sidebar import Sidebar
 from .theme import ERR, HAIRLINE, MUTED, TEXT
 from .titlebar import TitleBar
+from .tour import SpotlightTour, Step
 from .widgets import AlertBanner
 
 # how far in from the border a press starts a resize on the frameless window
@@ -264,6 +265,7 @@ class MainWindow(QMainWindow):
         self._update_release = None
         self._told_about_tray = False
         self._current_page = PAGE_SERVERS
+        self.tour: SpotlightTour | None = None
 
         # stores / core
         self.store = ProfileStore()
@@ -1542,7 +1544,12 @@ class MainWindow(QMainWindow):
         # rather than behind, and so closing it does not strand the dialog.
         dlg.updateAvailable.connect(
             lambda release: self.open_update_dialog(release, parent=dlg))
-        if dlg.exec():
+        tour_asked = []
+        dlg.tourRequested.connect(lambda: tour_asked.append(True))
+        accepted = dlg.exec()
+        if tour_asked:
+            QTimer.singleShot(250, self.start_tour)
+        if accepted:
             values = dlg.values()
             self.settings.update(values)
             app_settings.save(self.settings)
@@ -1569,6 +1576,67 @@ class MainWindow(QMainWindow):
             self._refresh_routing_combo()
             if self.conn.is_connected():
                 self._needs_reconnect(tr("Settings restored from backup"))
+
+    # ── first-run tour ────────────────────────────────────────────────────
+
+    def maybe_start_tour(self, shown: bool = True) -> None:
+        """Start the tour on the first launch that actually shows the window;
+        a login launch that stays in the tray waits for a later one."""
+        if shown and not self.settings.get("tour_seen"):
+            QTimer.singleShot(400, self.start_tour)
+
+    def start_tour(self) -> None:
+        if self.tour is not None:
+            self.tour.hide()
+            self.tour.deleteLater()
+        self.tour = SpotlightTour(self, self._tour_steps(), self._show_page)
+        self.tour.finished.connect(self._on_tour_finished)
+        self.tour.start()
+
+    def _on_tour_finished(self) -> None:
+        self.settings["tour_seen"] = True
+        app_settings.save(self.settings)
+
+    def _tour_steps(self) -> list[Step]:
+        return [
+            Step(tr("Welcome to sushTun"),
+                 tr("sushTun sends your computer's internet through a server you "
+                    "choose, so blocked sites open and your traffic stays private. "
+                    "Let's take a quick look around."),
+                 page=PAGE_SERVERS),
+            Step(tr("Add your servers"),
+                 tr("Copy a server link or your provider's subscription URL, then "
+                    "press Import. Ctrl+V works too. A link looks like vless://…"),
+                 lambda: self.servers_page.core.btn_import, PAGE_SERVERS),
+            Step(tr("Your server list"),
+                 tr("Press Test to see each server's ping and the flag of the "
+                    "country it really exits from. Then pick the one you like."),
+                 lambda: [self.servers_page.core.btn_import,
+                          self.servers_page.frame], PAGE_SERVERS),
+            Step(tr("Connect"),
+                 tr("One click puts every app on your computer on the tunnel."),
+                 lambda: self.status_card, PAGE_SERVERS),
+            Step(tr("Routing mode"),
+                 tr("Choose what goes through the tunnel. For example: Iranian "
+                    "sites open directly, everything else goes through the tunnel."),
+                 lambda: self.toolbar.btn_routing_popup, PAGE_SERVERS),
+            Step(tr("Anti-filter"),
+                 tr("A server connects but nothing loads? Switch this on, then "
+                    "reconnect."),
+                 lambda: self.toolbar.btn_fragment, PAGE_SERVERS),
+            Step(tr("Chains"),
+                 tr("Put servers in a row so your traffic hops through each one. "
+                    "Test tells you where you exit and which link breaks."),
+                 lambda: self.sidebar.item_chains, PAGE_SERVERS),
+            Step(tr("Hotspot"),
+                 tr("Share the tunnel with your phone: turn this on and join your "
+                    "computer's Wi-Fi hotspot."),
+                 lambda: self.sidebar._hotspot_row, PAGE_SERVERS),
+            Step(tr("You're all set"),
+                 tr("Hover anything: every control explains itself. You can replay "
+                    "this tour from Settings → General."),
+                 page=PAGE_SERVERS),
+        ]
 
     def _open_routing(self) -> None:
         dlg = RoutingDialog(self.settings["routing"], self)

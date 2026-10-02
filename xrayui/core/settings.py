@@ -16,6 +16,7 @@ SCHEMA_VERSION = 1
 DEFAULTS: dict = {
     "schema_version": SCHEMA_VERSION,
     "language": "en",
+    "tour_seen": False,
     "ping_target": "1.1.1.1",
     "sample_seconds": 5,
     "log_level": "warning",
