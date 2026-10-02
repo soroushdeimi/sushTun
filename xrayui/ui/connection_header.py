@@ -148,6 +148,8 @@ class ConnectionHeader(QFrame):
         outer.addLayout(notice)
         self.hide_reconnect()
 
+        self._chain_path = None
+        self._chain_key = None
         self._meta_parts: dict[str, str] = {}
         self.set_connected(False)
 
@@ -252,6 +254,23 @@ class ConnectionHeader(QFrame):
         if pix is not None:
             self._flag.setPixmap(pix)
         self._set_meta("country", geo_exit.country_name(code, current()) if pix else "")
+
+    def set_chain(self, plan, results=None):
+        if plan:
+            self._set_meta('relay', '')
+        key = (plan, repr(results))
+        if key == self._chain_key:
+            return
+        self._chain_key = key
+        if self._chain_path is not None:
+            self.layout().removeWidget(self._chain_path)
+            self._chain_path.deleteLater()
+            self._chain_path = None
+        if plan:
+            from .pages.chains_page import ChainPath
+            self._chain_path = ChainPath(plan.profiles, results, compact=True)
+            self.layout().insertWidget(1, self._chain_path)
+            self._set_meta('relay', '')
 
     def set_timer(self, text: str) -> None:
         self._timer_pill.setText(text)

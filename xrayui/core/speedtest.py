@@ -161,7 +161,7 @@ def _status_error(status: int) -> str | None:
 def _measure_cold(port: int, url: str, timeout: float) -> Measured:
     proxy_url = f"http://127.0.0.1:{port}"
     opener = urllib.request.build_opener(
-        urllib.request.ProxyHandler({"http": proxy_url, "https": proxy_url})
+        geo_exit.ExplicitProxyHandler({"http": proxy_url, "https": proxy_url})
     )
     start = time.perf_counter()
     try:

@@ -8,6 +8,7 @@ through the tunnel itself) tells what the destination sees.
 from __future__ import annotations
 
 import json
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from functools import lru_cache
@@ -71,6 +72,17 @@ def parse_trace(text: str) -> ExitInfo | None:
     return ExitInfo(country, fields.get("ip", ""))
 
 
+class ExplicitProxyHandler(urllib.request.ProxyHandler):
+    """A requested test proxy must not be silently bypassed by NO_PROXY."""
+
+    def proxy_open(self, req, proxy, protocol):
+        parts = urllib.parse.urlsplit(proxy)
+        if parts.scheme != 'http' or not parts.netloc or parts.username:
+            raise ValueError('expected an unauthenticated HTTP test proxy')
+        req.set_proxy(parts.netloc, 'http')
+        return None
+
+
 def detect(proxy=None, timeout: float = 8.0) -> ExitInfo | None:
     """The exit country and IP seen through `proxy`, or None on any failure.
 
@@ -82,7 +94,7 @@ def detect(proxy=None, timeout: float = 8.0) -> ExitInfo | None:
             opener = proxy
         elif proxy:
             opener = urllib.request.build_opener(
-                urllib.request.ProxyHandler({"http": proxy, "https": proxy}))
+                ExplicitProxyHandler({"http": proxy, "https": proxy}))
         else:
             opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
         with opener.open(TRACE_URL, timeout=timeout) as resp:

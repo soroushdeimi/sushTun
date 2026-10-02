@@ -259,3 +259,22 @@ def test_immediate_close_responses_are_delivered(lab, protocol, network):
     for _ in range(5):
         assert b"ordered-chain-target" in socks_request(port, target, close=True)
     assert len(requests) == 5
+
+
+def test_chain_report_identifies_failed_middle(lab, monkeypatch, tmp_path):
+    from xrayui.core import chain_test, geo_exit
+
+    create, target, _requests, _launch = lab
+    _port, servers, _logs, items = create(3)
+    servers[1].terminate()
+    servers[1].wait(timeout=5)
+    monkeypatch.setattr(chain_test.paths, "base_dir", lambda: tmp_path)
+    monkeypatch.setattr(chain_test.paths, "xray_exe", lambda: XRAY)
+    monkeypatch.setattr(geo_exit, "detect", lambda *a: None)
+    plan = chains.resolve(chains.Chain(hops=[p.uid for p in items]), items)
+    report = chain_test.test_chain(
+        plan, mode="warm", url=f"http://127.0.0.1:{target}/", download_url="",
+        timeout=0.5, cancel=threading.Event(), on_progress=lambda *a: None,
+        iface_alias="")
+    assert report.verdict == "BROKEN_AT"
+    assert report.broken_at == 2
