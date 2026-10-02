@@ -46,14 +46,14 @@ def ran(monkeypatch):
 def test_paste_reads_the_users_clipboard_as_the_user(mac_root, ran):
     assert desktop.session_clipboard_text() == "vless://copied-in-safari\n"
     argv, kw = ran[0]
-    assert argv == ["sudo", "-n", "-u", "#501", "--", "pbpaste"]
+    assert argv == ["launchctl", "asuser", "501", "sudo", "-n", "-u", "#501", "--", "pbpaste"]
     assert kw["env"]["LANG"] == "en_US.UTF-8"  # non-ASCII survives
 
 
 def test_copy_writes_to_the_users_clipboard_as_the_user(mac_root, ran):
     assert desktop.set_session_clipboard_text("سرور آلمان") is True
     argv, kw = ran[0]
-    assert argv == ["sudo", "-n", "-u", "#501", "--", "pbcopy"]
+    assert argv == ["launchctl", "asuser", "501", "sudo", "-n", "-u", "#501", "--", "pbcopy"]
     assert kw["input"] == "سرور آلمان".encode()
 
 

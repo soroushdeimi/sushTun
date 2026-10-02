@@ -46,6 +46,43 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
       # Evidence for the clipboard fix: reports only, never fails the job.
+      # The elevated app is started by osascript, outside the user's login
+      # session. A LaunchDaemon in the system domain is the nearest thing a
+      # runner can produce, so the app's own clipboard code runs there and
+      # must read and write what the user's session sees.
+      - name: App clipboard from outside the user's session
+        shell: bash
+        run: |
+          set -euo pipefail
+          PY="$(command -v python)"
+          ME="$(id -u)"
+          TOKEN="from-user-$(python3 -c 'import secrets; print(secrets.token_hex(6))')"
+          printf '%s' "$TOKEN" | pbcopy
+          cat > /tmp/sushtun_clip.sh <<EOF
+          #!/bin/bash
+          cd "$PWD"
+          export SUDO_UID=$ME PYTHONPATH="$PWD"
+          exec "$PY" -c 'from xrayui.core import desktop
+          print("READ:" + repr(desktop.session_clipboard_text()))
+          print("WROTE:" + repr(desktop.set_session_clipboard_text("from-root-ok")))' >/tmp/sushtun_clip.out 2>&1
+          EOF
+          chmod 755 /tmp/sushtun_clip.sh
+          sudo tee /Library/LaunchDaemons/com.sushtun.clip.plist >/dev/null <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>Label</key><string>com.sushtun.clip</string>
+            <key>ProgramArguments</key><array><string>/tmp/sushtun_clip.sh</string></array>
+            <key>RunAtLoad</key><true/>
+          </dict></plist>
+          EOF
+          sudo launchctl bootstrap system /Library/LaunchDaemons/com.sushtun.clip.plist
+          for i in $(seq 1 40); do grep -q WROTE /tmp/sushtun_clip.out 2>/dev/null && break; sleep 0.5; done
+          cat /tmp/sushtun_clip.out
+          grep -q "READ:'$TOKEN'" /tmp/sushtun_clip.out
+          grep -q "WROTE:True" /tmp/sushtun_clip.out
+          test "$(pbpaste)" = "from-root-ok"
+          echo "CLIPBOARD BRIDGE OK"
       - name: Pasteboard seen from root
         continue-on-error: true
         shell: bash

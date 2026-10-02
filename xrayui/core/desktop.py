@@ -139,6 +139,12 @@ def _clipboard_tool(tool: str, data: bytes | None = None) -> subprocess.Complete
     argv = _as_user(uid, gid, name, [tool])
     if argv is None:
         return None
+    # Becoming the user is not enough. osascript starts the elevated app
+    # outside the user's login session, and from there pbpaste reads nothing
+    # even as the user; only a command placed back in that session with
+    # launchctl asuser reaches their pasteboard. Measured on a macOS runner
+    # from a LaunchDaemon: plain and sudo -u read "", asuser read the text.
+    argv = ["launchctl", "asuser", str(uid), *argv]
     # pbpaste/pbcopy pick their text encoding from the locale; without a UTF-8
     # one anything outside ASCII (a Persian server name) came back as "?".
     env = {"LANG": "en_US.UTF-8", "PATH": os.environ.get("PATH") or "/usr/bin:/bin"}
