@@ -7,7 +7,7 @@ from .network import DnsState, Interface
 _FILES = (
     "active_if.txt", "active_ip.txt", "gateway.txt", "relay_ip.txt",
     "tunidx.txt", "connected.flag", "dns-mode.txt", "dns-servers.txt",
-    "gateway.flag", "profile.txt", "chain.txt",
+    "gateway.flag", "tethering.txt", "profile.txt", "chain.txt",
 )
 
 
@@ -105,6 +105,26 @@ class State:
 
     def gateway_on(self) -> bool:
         return self._p("gateway.flag").exists()
+
+    def set_tethering(self, how: str) -> None:
+        """What sushTun did to the Windows hotspot: "started" it, "moved" the
+        user's own one onto the tunnel, or "" for nothing. Kept on disk so a
+        restarted app or the crash recovery can still undo exactly that."""
+        if how:
+            self._write("tethering.txt", how)
+        else:
+            self._p("tethering.txt").unlink(missing_ok=True)
+
+    def tethering(self) -> str:
+        return self._read("tethering.txt")
+
+    # Not in _FILES: it describes Windows' hotspot, which outlives a connection.
+    def hotspot_pushed(self) -> str:
+        return self._read("hotspot_pushed.txt")
+
+    def set_hotspot_pushed(self, digest: str) -> None:
+        self.dir.mkdir(parents=True, exist_ok=True)
+        self._write("hotspot_pushed.txt", digest)
 
     def clear(self) -> None:
         for name in _FILES:

@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import atexit
+import hashlib
+import json
 import secrets
 import socket
 import sys
@@ -82,9 +84,6 @@ class Connection:
         self.tun2socks = t2s.Tun2socks()
         self._owned = False  # did this process establish the active connection?
         self._gateway_on = False
-        # Whether sushTun itself switched the Windows hotspot on. Only then is
-        # it ours to switch off again; one the user started stays up.
-        self._tethering_started = False
         self._dns_warned = False
         atexit.register(self._atexit)
 
@@ -277,27 +276,7 @@ class Connection:
 
     def _start_gateway(self, cfg: dict) -> None:
         if IS_WIN:
-            self._configure_windows_hotspot(cfg)
-            started_here = False
-            if cfg.get("start_hotspot", True) and hotspot.tethering_state() != "On":
-                self._log("Starting Windows hotspot...")
-                if not hotspot.start_tethering():
-                    raise RuntimeError("Windows would not start the hotspot")
-                started_here = True
-                # Tethering reports "On" a moment before the adapter ICS has
-                # to share shows up in the connection list.
-                hotspot.wait_for_hotspot_adapter()
-            try:
-                hotspot.enable(public_name=network.TUN_NAME)
-            except Exception:
-                # The switch is about to say "off": a hotspot this call just
-                # started would stay on behind it, handing its devices the
-                # untunneled connection.
-                if started_here:
-                    self._log("Sharing could not be set up; turning the hotspot back off.")
-                    hotspot.stop_tethering()
-                raise
-            self._tethering_started = self._tethering_started or started_here
+            self._start_windows_hotspot(cfg)
         else:
             ssid, password = _hotspot_credentials()
             gw = app_settings.load()["gateway"]
@@ -310,6 +289,29 @@ class Connection:
         self._gateway_on = True
         self.state.set_gateway(True)
         self._log("Gateway mode on — hotspot clients now use the tunnel.")
+
+    def _start_windows_hotspot(self, cfg: dict) -> None:
+        """Run the Mobile Hotspot on the tunnel's connection.
+
+        Windows shares whichever connection the hotspot was started from, so
+        a hotspot already running (started by the user, on Wi-Fi) is
+        restarted on the tunnel and handed back to Wi-Fi when sharing ends."""
+        if self.state.tethering() and hotspot.tethering_state(network.TUN_NAME) == "On":
+            return  # already ours and on the tunnel
+        self._configure_windows_hotspot(cfg)
+        was_on = hotspot.tethering_state() == "On"
+        if not was_on and not cfg.get("start_hotspot", True):
+            raise RuntimeError("the Windows hotspot is off — turn it on first")
+        if was_on:
+            self._log("Moving the Windows hotspot onto the tunnel...")
+            hotspot.stop_tethering()
+        else:
+            self._log("Starting Windows hotspot...")
+        if not hotspot.start_tethering(network.TUN_NAME):
+            if was_on:
+                hotspot.start_tethering(self.state.alias or "")  # give it back
+            raise RuntimeError("Windows would not run the hotspot on the tunnel")
+        self.state.set_tethering("moved" if was_on else "started")
 
     def _configure_windows_hotspot(self, cfg: dict) -> None:
         """Push Settings → Hotspot into Windows' own access point settings.
@@ -326,9 +328,18 @@ class Connection:
         security, band = str(cfg.get("security") or ""), str(cfg.get("band") or "")
         if not (ssid or password or security or band):
             return
+        # The window keeps its own copy of the settings and saves it whole, so
+        # the cleared flag below came back on the next save and every connect
+        # pushed the same values again. What was pushed last is remembered
+        # here, where the window cannot overwrite it.
+        pushed = hashlib.sha256(
+            json.dumps([ssid, password, security, band]).encode("utf-8")).hexdigest()
+        if self.state.hotspot_pushed() == pushed:
+            return
         if hotspot.configure_tethering(ssid, password, security=security, band=band):
             self._log(f'Hotspot name and password set ("{ssid}").' if ssid
                       else "Hotspot settings applied.")
+            self.state.set_hotspot_pushed(pushed)
             settings = app_settings.load()
             settings["gateway"]["apply_on_windows"] = False
             app_settings.save(settings)
@@ -337,18 +348,28 @@ class Connection:
 
     def stop_gateway(self) -> None:
         """Turn sharing off without dropping the tunnel."""
-        if self._gateway_on:
-            hotspot.disable()
-            self._stop_own_tethering()
+        # The flag on disk too: after an app restart the switch must still
+        # be able to turn off a hotspot the previous run left sharing.
+        if self._gateway_on or self.state.gateway_on():
+            self._stop_sharing()
             self._gateway_on = False
             self.state.set_gateway(False)
 
-    def _stop_own_tethering(self) -> None:
-        """Switch off a Windows hotspot only if sushTun switched it on."""
-        if IS_WIN and self._tethering_started:
-            self._tethering_started = False
-            if not hotspot.stop_tethering():
-                self._log("WARNING: Windows would not switch the hotspot off.")
+    def _stop_sharing(self) -> None:
+        if not IS_WIN:
+            hotspot.disable()
+            return
+        how = self.state.tethering()
+        self.state.set_tethering("")
+        if not how:
+            return  # not ours: a hotspot the user runs stays as it is
+        if not hotspot.stop_tethering(network.TUN_NAME):
+            self._log("WARNING: Windows would not switch the hotspot off.")
+        elif how == "moved":
+            # It was the user's, running on their own connection before.
+            if not hotspot.start_tethering(self.state.alias or ""):
+                self._log("WARNING: the Windows hotspot could not be put back on "
+                          "this computer's own connection.")
 
     def _connect_macos(self, profile: Profile | chains.ResolvedChain, iface, server_ip: str, dns) -> None:
         # Xray's own TUN inbound first (a utun device, the same model as
@@ -527,12 +548,10 @@ class Connection:
         server_ip = self.state.server_ip
         dns = self.state.dns_state()
         if self._gateway_on or self.state.gateway_on():
-            # Undo first: leaving ICS pointed at a dead tunnel breaks the hotspot.
+            # Undo first, while the tunnel still exists: a hotspot left
+            # sharing it would have nothing behind it once it is gone.
             try:
-                hotspot.disable()
-                # Left on without its sharing, the hotspot would hand its
-                # devices the plain connection instead of the tunnel.
-                self._stop_own_tethering()
+                self._stop_sharing()
             except Exception:
                 pass
             self._gateway_on = False

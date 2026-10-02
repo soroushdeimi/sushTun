@@ -74,6 +74,7 @@ def test_restore_clears_gateway_flag(monkeypatch, tmp_path):
     monkeypatch.setattr(connection.network, "remove_routes", lambda ip=None: None)
     monkeypatch.setattr(connection.network, "restore_dns", lambda *a, **k: True)
     monkeypatch.setattr(connection.bootrestore, "uninstall", lambda: None)
+    monkeypatch.setattr(connection, "IS_WIN", False)  # Linux: sharing is a hotspot.disable()
     ics = []
     monkeypatch.setattr(connection.hotspot, "disable", lambda: ics.append(True))
 
