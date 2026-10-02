@@ -447,12 +447,12 @@ class MainWindow(QMainWindow):
         self.chains_page.addRequested.connect(lambda: self._edit_chain())
         self.chains_page.editRequested.connect(self._edit_chain)
         self.chains_page.deleteRequested.connect(self._delete_chain)
+        self.chains_page.duplicateRequested.connect(self._duplicate_chain)
         self.chains_page.connectRequested.connect(self._connect_chain)
         self.chains_page.disconnectRequested.connect(self._disconnect)
         self.chains_page.testRequested.connect(self._test_chain)
         self.chains_page.cancelRequested.connect(self._cancel_chain_test)
-        self.chainProgress.connect(lambda n, total: self.chains_page.progress.setText(
-            tr("Testing path {n} of {total}…", n=n, total=total)))
+        self.chainProgress.connect(self.chains_page.set_progress)
         activity = self.activity_page
 
         self._stack = QStackedWidget()
@@ -1150,7 +1150,8 @@ class MainWindow(QMainWindow):
     def _reload_chains(self):
         uid = self.conn.state.chain_uid if self.conn.is_connected() else ''
         self.chains_page.set_chains(self.chain_store.list(), self.store.list(),
-                                   self.chain_results.load(), self.results.load(), uid)
+                                   self.chain_results.load(), self.results.load(), uid,
+                                   self._chain_interface_name)
         self.chains_page.set_testing(self._chain_cancel is not None)
 
     def _edit_chain(self, uid=''):
@@ -1161,6 +1162,23 @@ class MainWindow(QMainWindow):
             chain = dialog.result_chain()
             self.chain_store.save(chain)
             self.chain_results.prune(c.uid for c in self.chain_store.list() if c.uid != chain.uid)
+            self._reload_chains()
+            self._rebuild_servers_tray_menu()
+
+    def _chain_interface_name(self):
+        if self.conn.is_connected():
+            return self.conn.state.alias or ''
+        try:
+            iface = network.detect_interface()
+        except OSError:
+            return ''
+        return iface.alias if iface else ''
+
+    def _duplicate_chain(self, uid):
+        original = self.chain_store.get(uid)
+        if original is not None:
+            self.chain_store.save(chains.Chain(name=tr('{name} (copy)', name=original.name),
+                                               hops=list(original.hops)))
             self._reload_chains()
             self._rebuild_servers_tray_menu()
 
@@ -1203,7 +1221,7 @@ class MainWindow(QMainWindow):
             self.chains_page.progress.show()
             return
         cancel = self._chain_cancel = threading.Event()
-        self.chains_page.set_testing(True)
+        self.chains_page.set_testing(True, uid)
         cfg = self.settings['speedtest']
 
         def work():
