@@ -149,8 +149,18 @@ def test_invalid_chain_leaves_existing_connection_intact(rig):
     conn.connect(chain)
     calls.clear()
     chain.hops.append("missing")
-    with pytest.raises(connection.ConnectError, match="missing"):
+    with pytest.raises(connection.ConnectError, match="no longer exists"):
         conn.connect(chain)
     assert calls == []
     assert conn.state.is_connected()
     assert conn.state.chain_uid == chain.uid
+
+
+def test_deleted_hop_error_shows_no_internal_id(rig):
+    conn, calls, items, chain, _cfg = rig
+    ProfileStore().delete(items[1].uid)
+    with pytest.raises(connection.ConnectError) as caught:
+        conn.connect(chain)
+    assert "no longer exists" in str(caught.value)
+    assert not any(p.uid in str(caught.value) for p in items)
+    assert calls == []

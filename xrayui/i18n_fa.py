@@ -726,7 +726,6 @@ TRANSLATIONS_FA: dict[str, str] = {
     "A chain must contain between 2 and 8 hops.": "زنجیره باید بین 2 تا 8 گام داشته باشد.",
     "Hop {hop} has an invalid profile ID.": "شناسهٔ پروفایل گام {hop} نامعتبر است.",
     "Profile {name} is used twice in the chain.": "پروفایل {name} دو بار در زنجیره استفاده شده است.",
-    "The profile for hop {hop} no longer exists: {uid}.": "پروفایل گام {hop} دیگر وجود ندارد: {uid}.",
     "The server for hop {hop} no longer exists.": "سرور گام {hop} دیگر وجود ندارد.",
     "Hop {hop}: protocol {protocol} is not verified for chains.": "گام {hop}: پروتکل {protocol} برای زنجیره‌ها تأیید نشده است.",
     "Hop {hop} is missing an address or credential settings.": "گام {hop} فاقد آدرس یا تنظیمات احراز هویت است.",

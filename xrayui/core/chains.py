@@ -74,9 +74,7 @@ def _display_name(profile: Profile | None) -> str:
     return (profile.name if profile is not None and profile.name else tr("Missing server"))
 
 
-def validate(chain: Chain, profiles: Iterable[Profile] | Mapping[str, Profile],
-             *, user_facing: bool = False) -> list[str]:
-    """List problems; user_facing=True keeps internal IDs out of the messages."""
+def validate(chain: Chain, profiles: Iterable[Profile] | Mapping[str, Profile]) -> list[str]:
     problems = []
     if not _valid_uid(chain.uid):
         problems.append(tr("The chain has an invalid ID."))
@@ -96,11 +94,7 @@ def validate(chain: Chain, profiles: Iterable[Profile] | Mapping[str, Profile],
         seen.add(uid)
         profile = known.get(uid)
         if profile is None:
-            if user_facing:
-                problems.append(tr("The server for hop {hop} no longer exists.", hop=index))
-            else:
-                problems.append(tr("The profile for hop {hop} no longer exists: {uid}.",
-                                   hop=index, uid=uid))
+            problems.append(tr("The server for hop {hop} no longer exists.", hop=index))
             continue
         hop = f"{index} ({_display_name(profile)})"
         protocol = str(profile.protocol or "").lower()

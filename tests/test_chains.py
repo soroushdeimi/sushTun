@@ -53,7 +53,7 @@ def test_missing_duplicate_and_malformed_references():
     chain = chain_for(items)
     chain.hops = [items[0].uid, items[0].uid, "gone", "../escape", {}, None]
     problems = " ".join(chains.validate(chain, items)).lower()
-    assert "twice" in problems and "gone" in problems and "invalid" in problems
+    assert "twice" in problems and "no longer exists" in problems and "invalid" in problems
     with pytest.raises(ValueError):
         chains.resolve(chain, items)
 
@@ -260,4 +260,4 @@ def test_subscription_refresh_and_removal_keep_chain_references(monkeypatch, tmp
     refreshed.pop()
     subscription.refresh(sub, store, subscription.SubscriptionStore())
     assert saved.hops == chain.hops
-    assert "hop-1" in " ".join(chains.validate(saved, store.list()))
+    assert "no longer exists" in " ".join(chains.validate(saved, store.list()))

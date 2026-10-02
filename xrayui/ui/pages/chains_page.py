@@ -340,7 +340,7 @@ class ChainCard(QFrame):
         footer.addWidget(self.test_button)
         footer.addWidget(self.connect_button)
         outer.addLayout(footer)
-        issues = chains.validate(chain, profiles, user_facing=True)
+        issues = chains.validate(chain, profiles)
         self.valid = not issues
         self.connect_button.setEnabled(connected or self.valid)
         self.test_button.setEnabled(self.valid)
@@ -622,7 +622,7 @@ class ChainEditor(QDialog):
 
     def validate(self, *_):
         chain = self.result_chain()
-        problems = chains.validate(chain, self.profiles, user_facing=True)
+        problems = chains.validate(chain, self.profiles)
         self.validation.setText('\n'.join(problems))
         self.save_button.setEnabled(not problems)
         known = {p.uid: p for p in self.profiles}
@@ -631,7 +631,7 @@ class ChainEditor(QDialog):
             role = tr('Entry') if i == 0 else tr('Exit') if i == len(chain.hops) - 1 else ''
             heading = local_number(i + 1) + (' · ' + role if role else '')
             item.setText(heading + '   ' + self._item(uid).text())
-            individual = chains.validate(chains.Chain(hops=[uid]), self.profiles, user_facing=True)[1:]
+            individual = chains.validate(chains.Chain(hops=[uid]), self.profiles)[1:]
             if chain.hops.count(uid) > 1:
                 individual.append(tr('This server appears twice.'))
             if individual:
