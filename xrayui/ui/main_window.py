@@ -1190,6 +1190,9 @@ class MainWindow(QMainWindow):
 
         def done(result=None, error=None):
             self._repairing = False
+            if error and error != getattr(self, "_route_health_error", None):
+                self._on_step(f"WARNING: route health check failed: {error}")
+            self._route_health_error = error
             if result:
                 self._refresh_status()
 

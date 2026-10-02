@@ -242,6 +242,11 @@ def repair_tun_dns() -> bool | None:
     return None
 
 
+def repair_tun_routes() -> bool | None:
+    """Split-route recovery is currently implemented by the Linux backend."""
+    return None
+
+
 # On Linux/macOS, swap the Windows implementations for the POSIX backend.
 # The Windows code above is left untouched and never runs off-Windows.
 if sys.platform != "win32":
@@ -255,15 +260,14 @@ if sys.platform != "win32":
     release_stranded_dns = _posix.release_stranded_dns
     configure_tun = _posix.configure_tun
     add_host_route = _posix.add_host_route
+    replace_host_route = _posix.replace_host_route
     add_default_routes = _posix.add_default_routes
+    repair_tun_routes = _posix.repair_tun_routes
     remove_routes = _posix.remove_routes
     wait_for_tun = _posix.wait_for_tun
     foreign_tunnel = _posix.foreign_tunnel
     repair_tun_dns = _posix.repair_tun_dns
     if sys.platform == "darwin":
-        # The Windows version's `route delete ... mask` syntax does not exist
-        # on macOS, so the gateway repair would never have taken.
-        replace_host_route = _posix.replace_host_route
         mac_route_device = _posix.mac_route_device
         mac_ensure_scoped_default = _posix.mac_ensure_scoped_default
         mac_other_vpn = _posix.mac_other_vpn

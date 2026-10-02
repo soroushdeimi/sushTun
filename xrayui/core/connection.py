@@ -196,7 +196,10 @@ class Connection:
         network.remove_routes(server_ip)
         # Pin the server route first: Xray dials the moment it starts, and
         # until this exists that dial races the default route out of the box.
-        network.add_host_route(server_ip, iface.gateway)
+        try:
+            network.add_host_route(server_ip, iface.gateway)
+        except (OSError, RuntimeError) as exc:
+            self._fail_connect(server_ip, f"Could not pin the server route: {exc}")
         self.xray.start(cfg)
         self._retry_without_extras(build, exits, forwards)
 
@@ -217,6 +220,12 @@ class Connection:
                 "the tunnel would carry no traffic",
             )
 
+        # Validate capture before saving connected state or changing DNS.
+        try:
+            network.add_default_routes(tun)
+        except (OSError, RuntimeError) as exc:
+            self._fail_connect(server_ip, f"Could not install tunnel routes: {exc}")
+
         # Persist backup + a boot restore task BEFORE hijacking DNS. Static
         # 127.0.0.1 survives a power-off; the task puts the adapter back.
         self.state.save(iface, server_ip, tun, dns)
@@ -228,7 +237,6 @@ class Connection:
         if network.set_dns_loopback(iface.alias) is False:
             self._log("WARNING: DNS could not be routed through the tunnel — "
                       "lookups will leave unencrypted via the local network.")
-        network.add_default_routes(tun)
         self._owned = True
         self._setup_gateway()
         self._log("Connected.")
@@ -418,8 +426,12 @@ class Connection:
             # Offline, or roamed to a different adapter entirely — too risky
             # to auto-migrate DNS/routes across adapters; let the user reconnect.
             return None
+        restored = None
+        if network.repair_tun_routes():
+            restored = "Missing tunnel routes restored."
+            self._log(restored)
         if iface.gateway == self.state.gateway:
-            return None
+            return restored
         server_ip = self.state.server_ip
         if not server_ip:
             return None

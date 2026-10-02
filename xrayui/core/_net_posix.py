@@ -260,15 +260,25 @@ def configure_tun(index: int, address: str = TUN_ADDRESS, mask: str = TUN_NETMAS
 
 
 # -- routes ----------------------------------------------------------------
+def _ip_route(*args: str):
+    result = proc.run(["ip", *args])
+    if result.returncode != 0:
+        raise RuntimeError(f"ip {' '.join(args)} failed: {result.stderr.strip()}")
+    return result
+
+
 def add_host_route(server_ip: str, gateway: str) -> None:
     if IS_MAC:
         proc.run(["route", "-n", "add", "-host", server_ip, gateway])
     else:
-        proc.run(["ip", "route", "add", server_ip, "via", gateway])
+        _ip_route("route", "add", server_ip, "via", gateway)
 
 
 def replace_host_route(server_ip: str, gateway: str) -> None:
-    """macOS: repoint the pinned server route after the gateway moved."""
+    """Repoint the pinned server route after the gateway moved."""
+    if not IS_MAC:
+        _ip_route("route", "replace", server_ip, "via", gateway)
+        return
     if proc.run(["route", "-n", "change", "-host", server_ip, gateway]).returncode != 0:
         proc.run(["route", "-n", "delete", "-host", server_ip])
         add_host_route(server_ip, gateway)
@@ -344,7 +354,19 @@ def add_default_routes(tun_index: int | None = None) -> None:
         mac_add_split_routes(native=False)
         return
     for dest in ("0.0.0.0/1", "128.0.0.0/1"):
-        proc.run(["ip", "route", "add", dest, "dev", TUN_NAME])
+        _ip_route("route", "add", dest, "dev", TUN_NAME)
+
+
+def repair_tun_routes() -> bool | None:
+    """Restore missing Linux split routes without replacing another VPN's routes."""
+    if IS_MAC:
+        return None
+    routes = json.loads(_ip_route("-j", "-4", "route", "show", "table", "main").stdout)
+    installed = {r.get("dst") for r in routes if r.get("dev") == TUN_NAME}
+    missing = [d for d in ("0.0.0.0/1", "128.0.0.0/1") if d not in installed]
+    for dest in missing:
+        _ip_route("route", "add", dest, "dev", TUN_NAME)
+    return True if missing else None
 
 
 def remove_routes(server_ip: str | None = None) -> None:
