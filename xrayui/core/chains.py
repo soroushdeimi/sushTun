@@ -70,7 +70,13 @@ def _profile_map(profiles: Iterable[Profile] | Mapping[str, Profile]) -> dict[st
     return {p.uid: p for p in items if _valid_uid(p.uid)}
 
 
-def validate(chain: Chain, profiles: Iterable[Profile] | Mapping[str, Profile]) -> list[str]:
+def _display_name(profile: Profile | None) -> str:
+    return (profile.name if profile is not None and profile.name else tr("Missing server"))
+
+
+def validate(chain: Chain, profiles: Iterable[Profile] | Mapping[str, Profile],
+             *, user_facing: bool = False) -> list[str]:
+    """List problems; user_facing=True keeps internal IDs out of the messages."""
     problems = []
     if not _valid_uid(chain.uid):
         problems.append(tr("The chain has an invalid ID."))
@@ -85,34 +91,39 @@ def validate(chain: Chain, profiles: Iterable[Profile] | Mapping[str, Profile]) 
             problems.append(tr("Hop {hop} has an invalid profile ID.", hop=index))
             continue
         if uid in seen:
-            problems.append(tr("Profile {uid} is used twice in the chain.", uid=uid))
+            problems.append(tr("Profile {name} is used twice in the chain.",
+                               name=_display_name(known.get(uid))))
         seen.add(uid)
         profile = known.get(uid)
         if profile is None:
-            problems.append(tr("The profile for hop {hop} no longer exists: {uid}.",
-                               hop=index, uid=uid))
+            if user_facing:
+                problems.append(tr("The server for hop {hop} no longer exists.", hop=index))
+            else:
+                problems.append(tr("The profile for hop {hop} no longer exists: {uid}.",
+                                   hop=index, uid=uid))
             continue
+        hop = f"{index} ({_display_name(profile)})"
         protocol = str(profile.protocol or "").lower()
         if protocol not in SUPPORTED_PROTOCOLS:
             problems.append(tr("Hop {hop}: protocol {protocol} is not verified for chains.",
-                               hop=index, protocol=protocol))
+                               hop=hop, protocol=protocol))
         if not profile.is_valid():
-            problems.append(tr("Hop {hop} is missing an address or credential settings.", hop=index))
+            problems.append(tr("Hop {hop} is missing an address or credential settings.", hop=hop))
         network = str(profile.network or "")
         # v26.3.27 transport/internet/splithttp/dialer.go:403-438 builds a
         # separate download stream with independent socket settings. Until
         # both paths are verified, accepting XHTTP could bypass earlier hops.
         if network == "ws":
             problems.append(tr("Hop {hop}: WebSocket (ws) chains can lose responses when "
-                               "a connection closes and are not supported yet.", hop=index))
+                               "a connection closes and are not supported yet.", hop=hop))
         elif network not in SUPPORTED_TRANSPORTS:
             problems.append(tr("Hop {hop}: transport {transport} is not verified for chains "
-                               "(including separate XHTTP downloads).", hop=index, transport=network))
+                               "(including separate XHTTP downloads).", hop=hop, transport=network))
         # v26.3.27 proxy/vless/outbound/outbound.go:249-295 inspects the
         # underlying connection for Vision; redirected pipes need separate proof.
         if profile.flow:
             problems.append(tr("Hop {hop}: flow {flow} is not verified for chains.",
-                               hop=index, flow=profile.flow))
+                               hop=hop, flow=profile.flow))
     return problems
 
 

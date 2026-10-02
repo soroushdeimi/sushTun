@@ -137,3 +137,82 @@ def test_editor_reorder_updates_preview_and_roles(app):
     assert editor.path.item(0).text().startswith('1 · Entry')
     preview = editor.preview_host.itemAt(0).widget()
     assert [p.uid for p in preview.profiles] == ['p1', 'p0']
+
+
+@pytest.mark.parametrize('language', ['en', 'fa'])
+@pytest.mark.parametrize('problem', ['duplicate', 'missing', 'unsupported'])
+def test_editor_validation_uses_display_names(app, language, problem):
+    from PySide6.QtWidgets import QLabel
+    i18n.set_language(language)
+    ps = servers()
+    hops = [p.uid for p in ps]
+    if problem == 'duplicate':
+        hops.append(ps[0].uid)
+    elif problem == 'missing':
+        hops.append('private-missing-id')
+    else:
+        ps[0].protocol = 'unsupported'
+    editor = ChainEditor(ps, {}, Chain(hops=hops))
+    texts = [editor.validation.text()]
+    texts += [label.text() for label in editor.findChildren(QLabel)]
+    texts += [editor.path.item(i).text() + editor.path.item(i).toolTip()
+              for i in range(editor.path.count())]
+    assert not editor.save_button.isEnabled()
+    assert all(uid not in text for uid in hops for text in texts)
+    if problem != 'missing':
+        assert ps[0].name in editor.validation.text()
+    editor.close()
+
+
+@pytest.mark.parametrize('language', ['en', 'fa'])
+def test_metric_units_and_alignment(app, language):
+    from PySide6.QtWidgets import QFrame, QLabel
+
+    from xrayui.ui.theme import STYLESHEET
+    i18n.set_language(language)
+    ps = servers()
+    card = ChainCard(Chain(hops=[p.uid for p in ps]), ps,
+                     dict(warm_ms=84, cold_ms=216, download_mbps=38,
+                          country='de', exit_ip='203.0.113.42'), {})
+    card.setStyleSheet(STYLESHEET)
+    card.resize(900, 500)
+    card.show()
+    app.processEvents()
+    for tile in card.findChildren(QFrame, 'ChainMetric')[:3]:
+        number = tile.findChild(QLabel, 'ChainNumber')
+        unit = tile.findChild(QLabel, 'ChainUnit')
+        assert unit is not None
+        nrect, urect = number.geometry(), unit.geometry()
+        assert nrect.top() < urect.bottom() and urect.top() < nrect.bottom()
+        assert number.font().pixelSize() > unit.font().pixelSize()
+        assert '\n' not in unit.text()
+    for tile in card.findChildren(QFrame, 'ChainMetric'):
+        for label in tile.findChildren(QLabel):
+            if label.text():
+                assert label.alignment() & (Qt.AlignRight if language == 'fa' else Qt.AlignLeft)
+                assert label.alignment() & Qt.AlignAbsolute
+    card.close()
+
+
+@pytest.mark.parametrize('language', ['en', 'fa'])
+def test_wiring_headers_share_column_alignment(app, language):
+    i18n.set_language(language)
+    ps = servers()
+    card = ChainCard(Chain(hops=[p.uid for p in ps]), ps, {}, {})
+    card.resize(900, 600)
+    card._toggle_wiring()
+    card.show()
+    app.processEvents()
+    table = card.wiring_table
+    header = table.horizontalHeader()
+    alignment = Qt.AlignRight if language == 'fa' else Qt.AlignLeft
+    assert header.defaultAlignment() & alignment
+    positions = []
+    for col in range(table.columnCount()):
+        rect = table.visualItemRect(table.item(0, col))
+        assert abs(rect.left() - header.sectionViewportPosition(col)) <= 1
+        assert abs(rect.width() - header.sectionSize(col)) <= 1
+        assert table.item(0, col).textAlignment() & alignment
+        positions.append(rect.left())
+    assert positions == sorted(positions, reverse=language == 'fa')
+    card.close()

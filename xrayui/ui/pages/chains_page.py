@@ -262,22 +262,39 @@ class ChainCard(QFrame):
         outer.addWidget(self.path_view)
         tiles = QHBoxLayout()
         self.metric_values = []
+        rtl = current() == 'fa'
+        side = Qt.AlignAbsolute | (Qt.AlignRight if rtl else Qt.AlignLeft) | Qt.AlignVCenter
+        direction = Qt.RightToLeft if rtl else Qt.LeftToRight
         for key, title in [('warm_ms', tr('Round trip')), ('cold_ms', tr('First connection')),
                            ('download_mbps', tr('Download'))]:
             tile = QFrame()
             tile.setObjectName('ChainMetric')
+            tile.setLayoutDirection(direction)
             box = QVBoxLayout(tile)
             value = report.get(key)
             text = '—' if value is None else local_number(round(value))
             number = label(text)
             number.setObjectName('ChainNumber')
+            number.setWordWrap(False)
+            number.setAlignment(side)
             self.metric_values.append(number)
-            box.addWidget(number)
-            unit = tr('Mbit/s') if key == 'download_mbps' else tr('ms')
-            box.addWidget(label(title + '\n' + unit, True))
+            unit = label(tr('Mbit/s') if key == 'download_mbps' else tr('ms'))
+            unit.setObjectName('ChainUnit')
+            unit.setWordWrap(False)
+            unit.setAlignment(side)
+            figure = QHBoxLayout()
+            figure.setSpacing(5)
+            figure.addWidget(number)
+            figure.addWidget(unit)
+            figure.addStretch()
+            box.addLayout(figure)
+            caption = label(title, True)
+            caption.setAlignment(side)
+            box.addWidget(caption)
             tiles.addWidget(tile, 1)
         tile = QFrame()
         tile.setObjectName('ChainMetric')
+        tile.setLayoutDirection(direction)
         box = QVBoxLayout(tile)
         country_row = QHBoxLayout()
         pix = flag_pixmap(report.get('country'))
@@ -285,11 +302,14 @@ class ChainCard(QFrame):
             flag = QLabel()
             flag.setPixmap(pix)
             country_row.addWidget(flag)
-        country_row.addWidget(label(geo_exit.country_name(report.get('country'), current()) if report.get('country') else '—'), 1)
+        country = label(geo_exit.country_name(report.get('country'), current()) if report.get('country') else '—')
+        country.setAlignment(side)
+        country_row.addWidget(country, 1)
         box.addLayout(country_row)
         ip = label(report.get('exit_ip') or '—')
         ip.setObjectName('Mono')
         ip.setLayoutDirection(Qt.LeftToRight)
+        ip.setAlignment(side)
         ip.setTextInteractionFlags(Qt.TextSelectableByMouse)
         box.addWidget(ip)
         tiles.addWidget(tile, 1)
@@ -320,7 +340,7 @@ class ChainCard(QFrame):
         footer.addWidget(self.test_button)
         footer.addWidget(self.connect_button)
         outer.addLayout(footer)
-        issues = chains.validate(chain, profiles)
+        issues = chains.validate(chain, profiles, user_facing=True)
         self.valid = not issues
         self.connect_button.setEnabled(connected or self.valid)
         self.test_button.setEnabled(self.valid)
@@ -338,6 +358,10 @@ class ChainCard(QFrame):
         table.setSelectionMode(QAbstractItemView.NoSelection)
         table.setToolTip(tr('Read the route; chain-1 carries the second server.'))
         table.verticalHeader().hide()
+        wiring_rtl = current() == 'fa'
+        table.setLayoutDirection(Qt.RightToLeft if wiring_rtl else Qt.LeftToRight)
+        wiring_side = Qt.AlignAbsolute | (Qt.AlignRight if wiring_rtl else Qt.AlignLeft) | Qt.AlignVCenter
+        table.horizontalHeader().setDefaultAlignment(wiring_side)
         table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
         table.horizontalHeader().setStretchLastSection(True)
         if not issues:
@@ -347,7 +371,9 @@ class ChainCard(QFrame):
                           f'{profile.network} / {profile.security or tr("none")}',
                           outbound['tag'], via or (interface_name if isinstance(interface_name, str) else '') or tr('network card')]
                 for col, text in enumerate(values):
-                    table.setItem(row, col, QTableWidgetItem(text))
+                    item = QTableWidgetItem(text)
+                    item.setTextAlignment(wiring_side)
+                    table.setItem(row, col, item)
         self.wiring_table = table
         table.setFixedHeight(table.horizontalHeader().sizeHint().height() + 34 * table.rowCount() + 6)
         details.addWidget(table)
@@ -596,7 +622,7 @@ class ChainEditor(QDialog):
 
     def validate(self, *_):
         chain = self.result_chain()
-        problems = chains.validate(chain, self.profiles)
+        problems = chains.validate(chain, self.profiles, user_facing=True)
         self.validation.setText('\n'.join(problems))
         self.save_button.setEnabled(not problems)
         known = {p.uid: p for p in self.profiles}
@@ -605,7 +631,7 @@ class ChainEditor(QDialog):
             role = tr('Entry') if i == 0 else tr('Exit') if i == len(chain.hops) - 1 else ''
             heading = local_number(i + 1) + (' · ' + role if role else '')
             item.setText(heading + '   ' + self._item(uid).text())
-            individual = chains.validate(chains.Chain(hops=[uid]), self.profiles)[1:]
+            individual = chains.validate(chains.Chain(hops=[uid]), self.profiles, user_facing=True)[1:]
             if chain.hops.count(uid) > 1:
                 individual.append(tr('This server appears twice.'))
             if individual:
