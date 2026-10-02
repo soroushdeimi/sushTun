@@ -77,3 +77,30 @@ def test_name_lookup_falls_back_to_english_then_the_code():
     assert geo_exit.flag_path("de").name == "de.svg"
     assert geo_exit.flag_path("xx") is None
     assert geo_exit.flag_path(None) is None
+
+
+def test_trace_never_bypasses_explicit_proxy(monkeypatch):
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    requests = []
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            requests.append(self.path)
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(TRACE.encode())
+        def log_message(self, *a):
+            pass
+    server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        monkeypatch.setenv('no_proxy', '*')
+        monkeypatch.setattr(geo_exit, 'TRACE_URL', 'http://example.invalid/trace')
+        info = geo_exit.detect(f'http://127.0.0.1:{server.server_port}', 1)
+        assert info == geo_exit.ExitInfo('de', '152.233.20.199')
+        assert requests == ['http://example.invalid/trace']
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()

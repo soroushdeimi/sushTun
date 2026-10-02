@@ -88,6 +88,7 @@ DEFAULTS: dict = {
         "auto_refresh_hours": 6,
     },
     "speedtest": {
+        "download_url": "https://speed.cloudflare.com/__down?bytes=25000000",
         "url": "https://www.google.com/generate_204",
         "timeout_s": 10,
         "batch_size": 50,

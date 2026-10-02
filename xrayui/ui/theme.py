@@ -66,6 +66,12 @@ QFrame#Card {{
 }}
 QFrame#Card QLabel {{ background: transparent; }}
 
+QFrame#ChainMetric {{ background: {SUNKEN}; border: none; border-radius: 8px; }}
+QLabel#ChainNumber {{ font-size: 20px; font-weight: 600; }}
+QLabel#ChainUnit {{ font-size: 12px; color: {MUTED}; }}
+QWidget#ChainWiring {{ background: transparent; }}
+QTableWidget#ChainWiringTable {{ background: {SUNKEN}; border: none; font-family: {_MONO}; font-size: 11px; }}
+QTableWidget#ChainWiringTable QHeaderView::section {{ background: {SURFACE}; color: {MUTED}; border: none; padding: 5px; }}
 QLabel#H1 {{ font-size: 17px; font-weight: 600; }}
 QLabel#Muted {{ color: {MUTED}; }}
 QLabel#Mono {{ font-family: {_MONO}; color: {MUTED}; }}

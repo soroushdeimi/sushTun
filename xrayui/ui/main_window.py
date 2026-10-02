@@ -29,7 +29,17 @@ from PySide6.QtWidgets import (
 )
 
 from .. import __version__, elevate
-from ..core import alerts, geo_exit, hotspot, importer, metrics, network, speedtest
+from ..core import (
+    alerts,
+    chain_test,
+    chains,
+    geo_exit,
+    hotspot,
+    importer,
+    metrics,
+    network,
+    speedtest,
+)
 from ..core import autostart as autostart_mod
 from ..core import geo as geo_mod
 from ..core import settings as app_settings
@@ -79,6 +89,7 @@ PAGE_SUBS = 1
 PAGE_ROUTING = 2
 PAGE_DNS = 3
 PAGE_ACTIVITY = 4
+PAGE_CHAINS = 5
 
 _MIN_W, _MIN_H = 820, 560
 
@@ -226,6 +237,7 @@ class MainWindow(QMainWindow):
     testResultReceived = Signal(str, object, object)
     testDetailReceived = Signal(str, dict)
     exitDetected = Signal(str, object)
+    chainProgress = Signal(int, int)
 
     def __init__(self, elevated: bool = True, autostart: bool = False) -> None:
         super().__init__()
@@ -257,6 +269,10 @@ class MainWindow(QMainWindow):
         self.store = ProfileStore()
         self.subs = sub_mod.SubscriptionStore()
         self.results = speedtest.ResultStore()
+        self.chain_store = chains.ChainStore()
+        self.chain_results = chain_test.ResultStore()
+        self._chain_cancel = None
+        self._connected_chain = None
         self.settings = app_settings.load()
         self.throttle = alerts.Throttle()
         self.pool = QThreadPool.globalInstance()
@@ -460,6 +476,17 @@ class MainWindow(QMainWindow):
             copy.deepcopy(self.settings["routing"]))
         self._dns_page.applied.connect(self._on_dns_applied)
 
+        from .pages.chains_page import ChainsPage
+        self.chains_page = ChainsPage()
+        self.chains_page.addRequested.connect(lambda: self._edit_chain())
+        self.chains_page.editRequested.connect(self._edit_chain)
+        self.chains_page.deleteRequested.connect(self._delete_chain)
+        self.chains_page.duplicateRequested.connect(self._duplicate_chain)
+        self.chains_page.connectRequested.connect(self._connect_chain)
+        self.chains_page.disconnectRequested.connect(self._disconnect)
+        self.chains_page.testRequested.connect(self._test_chain)
+        self.chains_page.cancelRequested.connect(self._cancel_chain_test)
+        self.chainProgress.connect(self.chains_page.set_progress)
         activity = self.activity_page
 
         self._stack = QStackedWidget()
@@ -468,12 +495,14 @@ class MainWindow(QMainWindow):
         servers_page.layout().setContentsMargins(16, 12, 16, 12)
         # The real pages, by index; the stack may hold a scroll area instead.
         self._page_widgets = [servers_page, self.subs_panel,
-                              self._routing_page, self._dns_page, activity]
+                              self._routing_page, self._dns_page, activity, self.chains_page]
         self._stack.addWidget(servers_page)                        # 0
         self._stack.addWidget(self._scrolled(self.subs_panel))     # 1
         self._stack.addWidget(self._scrolled(self._routing_page))  # 2
         self._stack.addWidget(self._scrolled(self._dns_page))      # 3
         self._stack.addWidget(activity)                            # 4
+
+        self._stack.addWidget(self.chains_page)
 
         # --- assemble central body ----------------------------------------
         content = QWidget()
@@ -660,6 +689,7 @@ class MainWindow(QMainWindow):
             PAGE_ROUTING: tr("Routing"),
             PAGE_DNS: tr("DNS"),
             PAGE_ACTIVITY: tr("Activity"),
+            PAGE_CHAINS: tr("Chains"),
         }
         self.toolbar.title.setText(titles.get(index, ""))
         self.toolbar.filter_edit.setVisible(index == PAGE_SERVERS)
@@ -668,11 +698,12 @@ class MainWindow(QMainWindow):
     def _refresh_status_subtitle(self) -> None:
         connected = self.conn.is_connected()
         profile = self._connected_profile()
+        plan = self._connected_chain if connected and self.conn.state.chain_uid else None
         pix = None
         if connected and profile:
             self.toolbar.subtitle.setText(
                 ltr(tr("Connected · {server}",
-                       server=profile.name)))
+                       server=plan.name if plan else profile.name)))
             pix = flag_pixmap(self.profiles.model.country_of(profile.uid), 16, 12)
         else:
             self.toolbar.subtitle.setText(tr("Disconnected"))
@@ -690,6 +721,7 @@ class MainWindow(QMainWindow):
             {s.uid: s.name for s in self.subs.list()})
         self.profiles.set_profiles(profiles, self.store.active_uid())
         self._rebuild_servers_tray_menu()
+        self._reload_chains()
 
     def _connected_profile(self) -> Profile | None:
         """The profile the running tunnel was built from, when it is known.
@@ -858,6 +890,7 @@ class MainWindow(QMainWindow):
             self._show_exit_of_connected()
 
     def _detect_exit_after_connect(self) -> None:
+        chain_uid = self.conn.state.chain_uid
         uid = self.conn.state.profile_uid or self.store.active_uid()
         if not uid:
             return
@@ -867,7 +900,12 @@ class MainWindow(QMainWindow):
 
         def done(result=None, error=None):
             if result:
-                self.exitDetected.emit(uid, result)
+                if chain_uid:
+                    if self.conn.is_connected() and self.conn.state.chain_uid == chain_uid:
+                        self._chain_exit = (chain_uid, result)
+                        self._show_exit_of_connected()
+                else:
+                    self.exitDetected.emit(uid, result)
 
         self._run_async(work, done)
 
@@ -879,6 +917,17 @@ class MainWindow(QMainWindow):
         self._show_exit_of_connected()
 
     def _show_exit_of_connected(self) -> None:
+        uid = self.conn.state.chain_uid if self.conn.is_connected() else ''
+        if uid:
+            detected = getattr(self, '_chain_exit', None)
+            report = self.chain_results.get(uid) or {}
+            country = detected[1].country if detected and detected[0] == uid else report.get('country')
+            self.status_card.set_exit(country)
+            from ..i18n import current
+            if country:
+                self.status_card._set_meta('country', tr('Exits in {country}',
+                    country=geo_exit.country_name(country, current())))
+            return
         profile = self._connected_profile()
         self.status_card.set_exit(
             self.profiles.model.country_of(profile.uid) if profile else None)
@@ -1132,6 +1181,102 @@ class MainWindow(QMainWindow):
 
     # ── connection --------------------------------------------------------
 
+    def _reload_chains(self):
+        uid = self.conn.state.chain_uid if self.conn.is_connected() else ''
+        self.chains_page.set_chains(self.chain_store.list(), self.store.list(),
+                                   self.chain_results.load(), self.results.load(), uid,
+                                   self._chain_interface_name)
+        self.chains_page.set_testing(self._chain_cancel is not None)
+
+    def _edit_chain(self, uid=''):
+        from .pages.chains_page import ChainEditor
+        dialog = ChainEditor(self.store.list(), self.results.load(),
+                             self.chain_store.get(uid) if uid else None, self)
+        if dialog.exec():
+            chain = dialog.result_chain()
+            self.chain_store.save(chain)
+            self.chain_results.prune(c.uid for c in self.chain_store.list() if c.uid != chain.uid)
+            self._reload_chains()
+            self._rebuild_servers_tray_menu()
+
+    def _chain_interface_name(self):
+        if self.conn.is_connected():
+            return self.conn.state.alias or ''
+        try:
+            iface = network.detect_interface()
+        except OSError:
+            return ''
+        return iface.alias if iface else ''
+
+    def _duplicate_chain(self, uid):
+        original = self.chain_store.get(uid)
+        if original is not None:
+            self.chain_store.save(chains.Chain(name=tr('{name} (copy)', name=original.name),
+                                               hops=list(original.hops)))
+            self._reload_chains()
+            self._rebuild_servers_tray_menu()
+
+    def _delete_chain(self, uid):
+        if QMessageBox.question(self, tr("Delete"), tr("Delete this saved chain?")) == QMessageBox.Yes:
+            self.chain_store.delete(uid)
+            self.chain_results.prune(c.uid for c in self.chain_store.list())
+            self._reload_chains()
+            self._rebuild_servers_tray_menu()
+
+    def _connect_chain(self, plan):
+        if self._busy:
+            return
+        self._set_busy(True)
+
+        def work():
+            if self.conn.is_connected():
+                self.conn.disconnect()
+            self.conn.connect(plan)
+
+        def done(result=None, error=None):
+            if not error:
+                self._connected_chain = plan
+                self._chain_exit = None
+            self._on_conn_done(result, error)
+            self._reload_chains()
+
+        self._run_async(work, done)
+
+    def _test_chain(self, uid):
+        if self._chain_cancel is not None:
+            return
+        chain = self.chain_store.get(uid)
+        if chain is None:
+            return
+        try:
+            plan = chains.resolve(chain, self.store.list())
+        except ValueError as exc:
+            self.chains_page.progress.setText(str(exc))
+            self.chains_page.progress.show()
+            return
+        cancel = self._chain_cancel = threading.Event()
+        self.chains_page.set_testing(True, uid)
+        cfg = self.settings['speedtest']
+
+        def work():
+            return chain_test.test_chain(plan, mode=cfg.get('mode', 'warm'),
+                url=cfg['url'], download_url=cfg.get('download_url', chain_test.DEFAULT_DOWNLOAD_URL),
+                timeout=cfg.get('timeout_s', 10), cancel=cancel,
+                on_progress=self.chainProgress.emit)
+
+        def done(result=None, error=None):
+            self._chain_cancel = None
+            self._reload_chains()
+            self.chains_page.progress.setText(error or (tr("Test cancelled")
+                if result and result.verdict == 'CANCELLED' else ''))
+            self.chains_page.progress.setVisible(bool(self.chains_page.progress.text()))
+
+        self._run_async(work, done)
+
+    def _cancel_chain_test(self):
+        if self._chain_cancel is not None:
+            self._chain_cancel.set()
+
     def _connect(self) -> None:
         if self._busy:
             return
@@ -1167,6 +1312,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, tr("Connection"), error)
         self.btn_reconnect.setVisible(False)
         self._refresh_status()
+        self._reload_chains()
         if not error and self.conn.is_connected():
             self._detect_exit_after_connect()
 
@@ -1271,6 +1417,17 @@ class MainWindow(QMainWindow):
         self.status_card.set("endpoint",
                              profile.endpoint if profile else "—")
         self._show_exit_of_connected()
+        plan = self._connected_chain
+        if connected and self.conn.state.chain_uid:
+            if plan is None or plan.uid != self.conn.state.chain_uid:
+                saved = self.chain_store.get(self.conn.state.chain_uid)
+                try:
+                    plan = chains.resolve(saved, self.store.list()) if saved else None
+                except ValueError:
+                    plan = None
+            self.status_card.set_chain(plan, self.results.load())
+        else:
+            self.status_card.set_chain(None)
         self.status_card.set(
             "process",
             tr("RUNNING") if self.conn.xray.is_running() or is_xray_running()
@@ -1362,7 +1519,7 @@ class MainWindow(QMainWindow):
     def _reconnect_now(self) -> None:
         if self._busy:
             return
-        profile = self._active_profile()
+        profile = self._connected_chain if self.conn.state.chain_uid else self._active_profile()
         if not profile:
             return
         self._set_busy(True)
@@ -1528,6 +1685,20 @@ class MainWindow(QMainWindow):
             action.triggered.connect(
                 lambda _c=False, u=uid: self._activate_from_tray(u))
             group.addAction(action)
+
+        saved_chains = self.chain_store.list()
+        if saved_chains:
+            self.servers_menu.addSeparator()
+            submenu = self.servers_menu.addMenu(tr("Chains"))
+            for chain in saved_chains:
+                action = submenu.addAction(chain.name or tr("Unnamed"))
+                action.setToolTip(tr("Connect this saved route; your relay has company."))
+                try:
+                    plan = chains.resolve(chain, self.store.list())
+                except ValueError:
+                    action.setEnabled(False)
+                    continue
+                action.triggered.connect(lambda _c=False, p=plan: self._connect_chain(p))
 
     def _rebuild_routing_tray_menu(self) -> None:
         if self.routing_menu is None:
@@ -1726,5 +1897,6 @@ class MainWindow(QMainWindow):
         self.tailer.stop()
         if self._test_cancel is not None:
             self._test_cancel.set()
+        self._cancel_chain_test()
         self.pool.waitForDone(2000)
         super().closeEvent(event)
