@@ -101,6 +101,8 @@ class Sidebar(QFrame):
         self.item_routing = self._add_nav(tr("Routing"), "routing")
         self.item_dns = self._add_nav(tr("DNS"), "dns")
         self.item_activity = self._add_nav(tr("Activity"), "activity")
+        self.item_chains = self._add_nav(tr("Chains"), "routing")
+        self.item_chains.setToolTip(tr("Build and test a route; see where your traffic takes its final bow."))
         self.item_servers.setChecked(True)
         set_help(self.item_servers,
                  tr("Your list of servers: pick one, test how fast they are, and "

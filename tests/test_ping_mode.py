@@ -157,3 +157,11 @@ def test_a_failed_measurement_skips_detection(monkeypatch):
         [P], [1234], url="http://x/", timeout=1, on_result=lambda *a: None,
         cancel=threading.Event(), on_detail=lambda uid, f: details.append(f))
     assert details == []
+
+
+def test_cold_probe_never_bypasses_explicit_proxy(proxy, monkeypatch):
+    monkeypatch.setenv('no_proxy', '*')
+    srv = proxy()
+    measured = speedtest._measure_one(srv.port, 'http://example.invalid/', 1, 'cold')
+    assert measured[1] is None
+    assert srv.requests == ['http://example.invalid/']
