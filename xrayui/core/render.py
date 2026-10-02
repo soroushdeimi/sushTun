@@ -6,11 +6,12 @@ verbatim, and the __IFACE__ / __INTERFACE__ placeholders are substituted last.
 """
 from __future__ import annotations
 
+import ipaddress
 import json
 from pathlib import Path
 
 from .. import paths
-from . import coreopts, outbounds
+from . import chains, coreopts, outbounds
 from . import dns as dns_mod
 from . import exits as exits_mod
 from . import forwards as forwards_mod
@@ -94,7 +95,7 @@ def _apply_stats(cfg: dict) -> None:
 
 
 def build_text(
-    profile: Profile,
+    profile: Profile | chains.ResolvedChain,
     iface_alias: str,
     template_path: Path | None = None,
     routing_rules: list[dict] | None = None,
@@ -113,19 +114,29 @@ def build_text(
 ) -> str:
     tmpl_path = template_path or paths.config_template()
     cfg = json.loads(tmpl_path.read_text(encoding="utf-8"))
-    outbounds.apply_profile(cfg, profile)
+    plan = profile if isinstance(profile, chains.ResolvedChain) else None
+    if plan:
+        chains.apply(cfg, plan, core_cfg)
+        profile = plan.exit
+    else:
+        outbounds.apply_profile(cfg, profile)
     if not include_tun:
         _drop_tun_inbound(cfg)
     elif tun_name:
         _apply_tun_name(cfg, tun_name)
     if core_cfg:
-        coreopts.apply_all(cfg, core_cfg, profile)
+        if plan:
+            coreopts.apply_sniffing(cfg, core_cfg)
+            coreopts.apply_local_proxy(cfg, core_cfg)
+        else:
+            coreopts.apply_all(cfg, core_cfg, profile)
 
     dns_block: dict = {}
     if dns_cfg:
         direct_domains = routing_mod.direct_domains(routing_rules or [])
         dns_block, dns_routing_rules = dns_mod.build_dns_and_rules(
-            dns_cfg, direct_domains, profile.address, server_ip=server_ip)
+            dns_cfg, direct_domains, plan.entry.address if plan else profile.address,
+            server_ip=server_ip)
         if any(r.get("outboundTag") == dns_mod.INTERNAL_OUTBOUND for r in dns_routing_rules):
             # No interface binding: the OS must route these into the company VPN.
             cfg.setdefault("outbounds", []).append(
@@ -140,7 +151,7 @@ def build_text(
         # Same slot as the DNS rules: after the template's own rules and
         # before every user rule, so a chosen exit beats Iran-direct.
         cfg.setdefault("routing", {}).setdefault("rules", []).extend(
-            exits_mod.apply(cfg, exits, exits_cfg or {}, core_cfg, profile))
+            exits_mod.apply(cfg, exits, exits_cfg or {}, core_cfg, None if plan else profile))
     if forwards:
         # Same slot: a forward's "through the tunnel / direct" choice must
         # hold whatever the user's routing rules say.
@@ -155,6 +166,21 @@ def build_text(
         _apply_log_level(cfg, log_level)
     if dns_block:
         _apply_dns_block(cfg, dns_block)
+    if plan and server_ip:
+        try:
+            ipaddress.ip_address(plan.entry.address)
+        except ValueError:
+            # Raw DNS overrides return before dns.py's normal hosts pin.
+            # The entry must still use the exact IP protected by our host route.
+            dns = cfg.setdefault("dns", {})
+            hosts = dict(dns.get("hosts") or {})
+            hosts[plan.entry.address] = server_ip
+            dns["hosts"] = hosts
+            # v26.3.27 transport/internet/dialer.go:252-279 consults Xray's
+            # hosts map only with a domain strategy. Later hops must keep
+            # AsIs so their hostnames are resolved by the preceding server.
+            entry = next(o for o in cfg["outbounds"] if o.get("tag") == "chain-1")
+            entry["streamSettings"]["sockopt"]["domainStrategy"] = "ForceIPv4"
     if tun_mtu:
         _apply_mtu(cfg, tun_mtu)
     text = json.dumps(cfg, indent=2, ensure_ascii=False)
@@ -162,7 +188,7 @@ def build_text(
 
 
 def build(
-    profile: Profile,
+    profile: Profile | chains.ResolvedChain,
     iface_alias: str,
     template_path: Path | None = None,
     routing_rules: list[dict] | None = None,

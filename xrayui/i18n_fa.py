@@ -719,6 +719,22 @@ TRANSLATIONS_FA: dict[str, str] = {
         "بگذار دستگاه‌های دیگر شبکه هم از این انتقال استفاده کنند.",
     "Port forwarding: {why}": "انتقال پورت: {why}",
     "Through the tunnel": "از داخل تونل",
+    # -- core/chains: validation ---------------------------------------------
+    "Hop {hop}: WebSocket (ws) chains can lose responses when a connection closes and are not supported yet.": "گام {hop}: زنجیره‌های WebSocket (ws) ممکن است هنگام بسته شدن اتصال پاسخ را از دست بدهند و هنوز پشتیبانی نمی‌شوند.",
+    "The chain has an invalid ID.": "شناسهٔ زنجیره نامعتبر است.",
+    "Chain hops must be a list of profile IDs.": "گام‌های زنجیره باید فهرستی از شناسه‌های پروفایل باشند.",
+    "A chain must contain between 2 and 8 hops.": "زنجیره باید بین 2 تا 8 گام داشته باشد.",
+    "Hop {hop} has an invalid profile ID.": "شناسهٔ پروفایل گام {hop} نامعتبر است.",
+    "Profile {uid} is used twice in the chain.": "پروفایل {uid} دو بار در زنجیره استفاده شده است.",
+    "The profile for hop {hop} no longer exists: {uid}.": "پروفایل گام {hop} دیگر وجود ندارد: {uid}.",
+    "Hop {hop}: protocol {protocol} is not verified for chains.": "گام {hop}: پروتکل {protocol} برای زنجیره‌ها تأیید نشده است.",
+    "Hop {hop} is missing an address or credential settings.": "گام {hop} فاقد آدرس یا تنظیمات احراز هویت است.",
+    "Hop {hop}: transport {transport} is not verified for chains (including separate XHTTP downloads).": "گام {hop}: انتقال {transport} برای زنجیره‌ها تأیید نشده است (از جمله دانلود جداگانهٔ XHTTP).",
+    "Hop {hop}: flow {flow} is not verified for chains.": "گام {hop}: جریان {flow} برای زنجیره‌ها تأیید نشده است.",
+    "Mux and XUDP are not verified for chains; disable mux to connect.": "Mux و XUDP برای زنجیره‌ها تأیید نشده‌اند؛ برای اتصال mux را غیرفعال کنید.",
+    "The template already uses chain outbound tag {tag}.": "قالب از قبل از برچسب خروجی زنجیرهٔ {tag} استفاده می‌کند.",
+    "The template has no proxy outbound for the chain.": "قالب فاقد خروجی proxy برای زنجیره است.",
+
     # -- ui/a-shell: Windows hotspot read ------------------------------------
     "Keep Windows setting": "حفظ تنظیم ویندوز",
     "Couldn't read Windows' hotspot settings. Empty fields keep what Windows already uses.":

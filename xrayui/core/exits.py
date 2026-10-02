@@ -108,7 +108,7 @@ def prepare(exits_cfg: dict | None, core_cfg: dict | None,
 
 
 def apply(cfg: dict, exits: list[Exit], exits_cfg: dict, core_cfg: dict | None,
-          active: Profile) -> list[dict]:
+          active: Profile | None) -> list[dict]:
     """Add the inbound and one outbound per exit; return the routing rules.
 
     The rules must go before every user rule (render inserts them right
@@ -127,7 +127,7 @@ def apply(cfg: dict, exits: list[Exit], exits_cfg: dict, core_cfg: dict | None,
     rules: list[dict] = []
     built: set[str] = set()
     for e in exits:
-        if e.profile.uid == active.uid:
+        if active is not None and e.profile.uid == active.uid:
             tag = "proxy"  # the live server already has its outbound
         else:
             tag = outbound_tag(e.profile)
