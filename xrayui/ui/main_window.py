@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
 )
 
 from .. import __version__, elevate
-from ..core import alerts, hotspot, importer, metrics, network, speedtest
+from ..core import alerts, geo_exit, hotspot, importer, metrics, network, speedtest
 from ..core import autostart as autostart_mod
 from ..core import geo as geo_mod
 from ..core import settings as app_settings
@@ -42,6 +42,7 @@ from ..core.xray import is_xray_running
 from ..i18n import ltr, tr
 from .dialogs import ImportDialog, ProfileEditDialog, SubscriptionEditDialog
 from .dns_dialog import DnsDialog
+from .flags import flag_pixmap
 from .icons import icon
 from .log_tailer import LogTailer
 from .mac import PopupButton
@@ -110,8 +111,15 @@ class _Toolbar(QWidget):
         self.subtitle = QLabel(tr("Disconnected"))
         self.subtitle.setStyleSheet(
             f"font-size:11px; color:{MUTED}; background:transparent;")
+        self.subtitle_flag = QLabel()
+        self.subtitle_flag.setFixedSize(16, 12)
+        self.subtitle_flag.setVisible(False)
+        sub_row = QHBoxLayout()
+        sub_row.setSpacing(6)
+        sub_row.addWidget(self.subtitle_flag, 0, Qt.AlignVCenter)
+        sub_row.addWidget(self.subtitle, 1)
         title_col.addWidget(self.title)
-        title_col.addWidget(self.subtitle)
+        title_col.addLayout(sub_row)
         outer.addLayout(title_col)
 
         outer.addStretch(1)
@@ -182,6 +190,8 @@ class _Toolbar(QWidget):
 class MainWindow(QMainWindow):
     stepReceived = Signal(str)
     testResultReceived = Signal(str, object, object)
+    testDetailReceived = Signal(str, dict)
+    exitDetected = Signal(str, object)
 
     def __init__(self, elevated: bool = True, autostart: bool = False) -> None:
         super().__init__()
@@ -226,6 +236,8 @@ class MainWindow(QMainWindow):
 
         self.stepReceived.connect(self._on_step)
         self.testResultReceived.connect(self._on_test_result)
+        self.testDetailReceived.connect(self._on_test_detail)
+        self.exitDetected.connect(self._on_exit_detected)
         self._build_ui(elevated)
         self._build_tray()
         self._refresh_routing_combo()
@@ -306,6 +318,7 @@ class MainWindow(QMainWindow):
                 return
             self.btn_reconnect.setVisible(False)
             self._refresh_status()
+            self._detect_exit_after_connect()
 
         self._run_async(work, done)
 
@@ -621,12 +634,17 @@ class MainWindow(QMainWindow):
     def _refresh_status_subtitle(self) -> None:
         connected = self.conn.is_connected()
         profile = self._connected_profile()
+        pix = None
         if connected and profile:
             self.toolbar.subtitle.setText(
                 ltr(tr("Connected · {server}",
                        server=profile.name)))
+            pix = flag_pixmap(self.profiles.model.country_of(profile.uid), 16, 12)
         else:
             self.toolbar.subtitle.setText(tr("Disconnected"))
+        self.toolbar.subtitle_flag.setVisible(pix is not None)
+        if pix is not None:
+            self.toolbar.subtitle_flag.setPixmap(pix)
 
     # ── profiles ----------------------------------------------------------
 
@@ -770,7 +788,9 @@ class MainWindow(QMainWindow):
                     timeout=cfg.get("timeout_s", 10),
                     batch_size=cfg.get("batch_size", 50),
                     iface_alias=iface.alias,
-                    connected=self.conn.is_connected())
+                    connected=self.conn.is_connected(),
+                    mode=cfg.get("mode", "warm"),
+                    on_detail=self.testDetailReceived.emit)
             else:
                 speedtest.tcping_all(profiles, self._emit_test_result, cancel)
 
@@ -795,6 +815,39 @@ class MainWindow(QMainWindow):
         self.results.set(uid, delay_ms=delay, error=error, skipped=skipped)
         self.profiles.update_result(uid, delay, error, skipped)
         self._rebuild_servers_tray_menu()
+
+    def _on_test_detail(self, uid: str, fields: dict) -> None:
+        self.results.set(uid, **fields)
+        self.profiles.update_detail(uid, fields)
+        if "country" in fields:
+            self._refresh_status_subtitle()
+            self._show_exit_of_connected()
+
+    def _detect_exit_after_connect(self) -> None:
+        uid = self.conn.state.profile_uid or self.store.active_uid()
+        if not uid:
+            return
+
+        def work():
+            return geo_exit.detect(None, 8.0)
+
+        def done(result=None, error=None):
+            if result:
+                self.exitDetected.emit(uid, result)
+
+        self._run_async(work, done)
+
+    def _on_exit_detected(self, uid: str, info) -> None:
+        fields = {"country": info.country, "exit_ip": info.ip}
+        self.results.set(uid, **fields)
+        self.profiles.update_detail(uid, fields)
+        self._refresh_status_subtitle()
+        self._show_exit_of_connected()
+
+    def _show_exit_of_connected(self) -> None:
+        profile = self._connected_profile()
+        self.status_card.set_exit(
+            self.profiles.model.country_of(profile.uid) if profile else None)
 
     def _use_fastest(self, uid: str) -> None:
         profile = self.store.get(uid)
@@ -1080,6 +1133,8 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, tr("Connection"), error)
         self.btn_reconnect.setVisible(False)
         self._refresh_status()
+        if not error and self.conn.is_connected():
+            self._detect_exit_after_connect()
 
     def _on_step(self, msg: str) -> None:
         self.step_label.setText(tr(msg))
@@ -1181,6 +1236,7 @@ class MainWindow(QMainWindow):
         profile = self._connected_profile() if connected else self._active_profile()
         self.status_card.set("endpoint",
                              profile.endpoint if profile else "—")
+        self._show_exit_of_connected()
         self.status_card.set(
             "process",
             tr("RUNNING") if self.conn.xray.is_running() or is_xray_running()

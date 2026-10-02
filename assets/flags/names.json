@@ -1,0 +1,1014 @@
+{
+"ad": {
+"en": "Andorra",
+"fa": "آندورا"
+},
+"ae": {
+"en": "United Arab Emirates",
+"fa": "امارات متحدهٔ عربی"
+},
+"af": {
+"en": "Afghanistan",
+"fa": "افغانستان"
+},
+"ag": {
+"en": "Antigua & Barbuda",
+"fa": "آنتیگوا و باربودا"
+},
+"ai": {
+"en": "Anguilla",
+"fa": "آنگویلا"
+},
+"al": {
+"en": "Albania",
+"fa": "آلبانی"
+},
+"am": {
+"en": "Armenia",
+"fa": "ارمنستان"
+},
+"ao": {
+"en": "Angola",
+"fa": "آنگولا"
+},
+"aq": {
+"en": "Antarctica",
+"fa": "جنوبگان"
+},
+"ar": {
+"en": "Argentina",
+"fa": "آرژانتین"
+},
+"as": {
+"en": "American Samoa",
+"fa": "ساموآی امریکا"
+},
+"at": {
+"en": "Austria",
+"fa": "اتریش"
+},
+"au": {
+"en": "Australia",
+"fa": "استرالیا"
+},
+"aw": {
+"en": "Aruba",
+"fa": "آروبا"
+},
+"ax": {
+"en": "Åland Islands",
+"fa": "جزایر آلاند"
+},
+"az": {
+"en": "Azerbaijan",
+"fa": "جمهوری آذربایجان"
+},
+"ba": {
+"en": "Bosnia & Herzegovina",
+"fa": "بوسنی و هرزگوین"
+},
+"bb": {
+"en": "Barbados",
+"fa": "باربادوس"
+},
+"bd": {
+"en": "Bangladesh",
+"fa": "بنگلادش"
+},
+"be": {
+"en": "Belgium",
+"fa": "بلژیک"
+},
+"bf": {
+"en": "Burkina Faso",
+"fa": "بورکینافاسو"
+},
+"bg": {
+"en": "Bulgaria",
+"fa": "بلغارستان"
+},
+"bh": {
+"en": "Bahrain",
+"fa": "بحرین"
+},
+"bi": {
+"en": "Burundi",
+"fa": "بوروندی"
+},
+"bj": {
+"en": "Benin",
+"fa": "بنین"
+},
+"bl": {
+"en": "St. Barthélemy",
+"fa": "سن بارتلمی"
+},
+"bm": {
+"en": "Bermuda",
+"fa": "برمودا"
+},
+"bn": {
+"en": "Brunei",
+"fa": "برونئی"
+},
+"bo": {
+"en": "Bolivia",
+"fa": "بولیوی"
+},
+"bq": {
+"en": "Caribbean Netherlands",
+"fa": "جزایر کارائیب هلند"
+},
+"br": {
+"en": "Brazil",
+"fa": "برزیل"
+},
+"bs": {
+"en": "Bahamas",
+"fa": "باهاما"
+},
+"bt": {
+"en": "Bhutan",
+"fa": "بوتان"
+},
+"bv": {
+"en": "Bouvet Island",
+"fa": "جزیرهٔ بووه"
+},
+"bw": {
+"en": "Botswana",
+"fa": "بوتسوانا"
+},
+"by": {
+"en": "Belarus",
+"fa": "بلاروس"
+},
+"bz": {
+"en": "Belize",
+"fa": "بلیز"
+},
+"ca": {
+"en": "Canada",
+"fa": "کانادا"
+},
+"cc": {
+"en": "Cocos (Keeling) Islands",
+"fa": "جزایر کوکوس"
+},
+"cd": {
+"en": "Congo - Kinshasa",
+"fa": "کنگو - کینشاسا"
+},
+"cf": {
+"en": "Central African Republic",
+"fa": "جمهوری افریقای مرکزی"
+},
+"cg": {
+"en": "Congo - Brazzaville",
+"fa": "کنگو - برازویل"
+},
+"ch": {
+"en": "Switzerland",
+"fa": "سوئیس"
+},
+"ci": {
+"en": "Côte d’Ivoire",
+"fa": "ساحل عاج"
+},
+"ck": {
+"en": "Cook Islands",
+"fa": "جزایر کوک"
+},
+"cl": {
+"en": "Chile",
+"fa": "شیلی"
+},
+"cm": {
+"en": "Cameroon",
+"fa": "کامرون"
+},
+"cn": {
+"en": "China",
+"fa": "چین"
+},
+"co": {
+"en": "Colombia",
+"fa": "کلمبیا"
+},
+"cp": {
+"en": "Clipperton Island",
+"fa": "جزایر کلیپرتون"
+},
+"cr": {
+"en": "Costa Rica",
+"fa": "کاستاریکا"
+},
+"cu": {
+"en": "Cuba",
+"fa": "کوبا"
+},
+"cv": {
+"en": "Cape Verde",
+"fa": "کیپ‌ورد"
+},
+"cw": {
+"en": "Curaçao",
+"fa": "کوراسائو"
+},
+"cx": {
+"en": "Christmas Island",
+"fa": "جزیرهٔ کریسمس"
+},
+"cy": {
+"en": "Cyprus",
+"fa": "قبرس"
+},
+"cz": {
+"en": "Czechia",
+"fa": "چک"
+},
+"de": {
+"en": "Germany",
+"fa": "آلمان"
+},
+"dg": {
+"en": "Diego Garcia",
+"fa": "دیه‌گو گارسیا"
+},
+"dj": {
+"en": "Djibouti",
+"fa": "جیبوتی"
+},
+"dk": {
+"en": "Denmark",
+"fa": "دانمارک"
+},
+"dm": {
+"en": "Dominica",
+"fa": "دومینیکا"
+},
+"do": {
+"en": "Dominican Republic",
+"fa": "جمهوری دومینیکن"
+},
+"dz": {
+"en": "Algeria",
+"fa": "الجزایر"
+},
+"ec": {
+"en": "Ecuador",
+"fa": "اکوادور"
+},
+"ee": {
+"en": "Estonia",
+"fa": "استونی"
+},
+"eg": {
+"en": "Egypt",
+"fa": "مصر"
+},
+"eh": {
+"en": "Western Sahara",
+"fa": "صحرای غربی"
+},
+"er": {
+"en": "Eritrea",
+"fa": "اریتره"
+},
+"es": {
+"en": "Spain",
+"fa": "اسپانیا"
+},
+"et": {
+"en": "Ethiopia",
+"fa": "اتیوپی"
+},
+"fi": {
+"en": "Finland",
+"fa": "فنلاند"
+},
+"fj": {
+"en": "Fiji",
+"fa": "فیجی"
+},
+"fk": {
+"en": "Falkland Islands",
+"fa": "جزایر فالکلند"
+},
+"fm": {
+"en": "Micronesia",
+"fa": "میکرونزی"
+},
+"fo": {
+"en": "Faroe Islands",
+"fa": "جزایر فارو"
+},
+"fr": {
+"en": "France",
+"fa": "فرانسه"
+},
+"ga": {
+"en": "Gabon",
+"fa": "گابن"
+},
+"gb": {
+"en": "United Kingdom",
+"fa": "بریتانیا"
+},
+"gd": {
+"en": "Grenada",
+"fa": "گرنادا"
+},
+"ge": {
+"en": "Georgia",
+"fa": "گرجستان"
+},
+"gf": {
+"en": "French Guiana",
+"fa": "گویان فرانسه"
+},
+"gg": {
+"en": "Guernsey",
+"fa": "گرنزی"
+},
+"gh": {
+"en": "Ghana",
+"fa": "غنا"
+},
+"gi": {
+"en": "Gibraltar",
+"fa": "جبل‌الطارق"
+},
+"gl": {
+"en": "Greenland",
+"fa": "گرینلند"
+},
+"gm": {
+"en": "Gambia",
+"fa": "گامبیا"
+},
+"gn": {
+"en": "Guinea",
+"fa": "گینه"
+},
+"gp": {
+"en": "Guadeloupe",
+"fa": "گوادلوپ"
+},
+"gq": {
+"en": "Equatorial Guinea",
+"fa": "گینهٔ استوایی"
+},
+"gr": {
+"en": "Greece",
+"fa": "یونان"
+},
+"gs": {
+"en": "South Georgia & South Sandwich Islands",
+"fa": "جورجیای جنوبی و جزایر ساندویچ جنوبی"
+},
+"gt": {
+"en": "Guatemala",
+"fa": "گواتمالا"
+},
+"gu": {
+"en": "Guam",
+"fa": "گوام"
+},
+"gw": {
+"en": "Guinea-Bissau",
+"fa": "گینهٔ بیسائو"
+},
+"gy": {
+"en": "Guyana",
+"fa": "گویان"
+},
+"hk": {
+"en": "Hong Kong",
+"fa": "هنگ‌کنگ"
+},
+"hm": {
+"en": "Heard & McDonald Islands",
+"fa": "هرد و جزایر مک‌دونالد"
+},
+"hn": {
+"en": "Honduras",
+"fa": "هندوراس"
+},
+"hr": {
+"en": "Croatia",
+"fa": "کرواسی"
+},
+"ht": {
+"en": "Haiti",
+"fa": "هائیتی"
+},
+"hu": {
+"en": "Hungary",
+"fa": "مجارستان"
+},
+"ic": {
+"en": "Canary Islands",
+"fa": "جزایر قناری"
+},
+"id": {
+"en": "Indonesia",
+"fa": "اندونزی"
+},
+"ie": {
+"en": "Ireland",
+"fa": "ایرلند"
+},
+"il": {
+"en": "Israel",
+"fa": "اسرائیل"
+},
+"im": {
+"en": "Isle of Man",
+"fa": "جزیرهٔ من"
+},
+"in": {
+"en": "India",
+"fa": "هند"
+},
+"io": {
+"en": "British Indian Ocean Territory",
+"fa": "قلمرو بریتانیا در اقیانوس هند"
+},
+"iq": {
+"en": "Iraq",
+"fa": "عراق"
+},
+"ir": {
+"en": "Iran",
+"fa": "ایران"
+},
+"is": {
+"en": "Iceland",
+"fa": "ایسلند"
+},
+"it": {
+"en": "Italy",
+"fa": "ایتالیا"
+},
+"je": {
+"en": "Jersey",
+"fa": "جرزی"
+},
+"jm": {
+"en": "Jamaica",
+"fa": "جامائیکا"
+},
+"jo": {
+"en": "Jordan",
+"fa": "اردن"
+},
+"jp": {
+"en": "Japan",
+"fa": "ژاپن"
+},
+"ke": {
+"en": "Kenya",
+"fa": "کنیا"
+},
+"kg": {
+"en": "Kyrgyzstan",
+"fa": "قرقیزستان"
+},
+"kh": {
+"en": "Cambodia",
+"fa": "کامبوج"
+},
+"ki": {
+"en": "Kiribati",
+"fa": "کیریباتی"
+},
+"km": {
+"en": "Comoros",
+"fa": "کومور"
+},
+"kn": {
+"en": "St. Kitts & Nevis",
+"fa": "سنت کیتس و نویس"
+},
+"kp": {
+"en": "North Korea",
+"fa": "کرهٔ شمالی"
+},
+"kr": {
+"en": "South Korea",
+"fa": "کرهٔ جنوبی"
+},
+"kw": {
+"en": "Kuwait",
+"fa": "کویت"
+},
+"ky": {
+"en": "Cayman Islands",
+"fa": "جزایر کِیمن"
+},
+"kz": {
+"en": "Kazakhstan",
+"fa": "قزاقستان"
+},
+"la": {
+"en": "Laos",
+"fa": "لائوس"
+},
+"lb": {
+"en": "Lebanon",
+"fa": "لبنان"
+},
+"lc": {
+"en": "St. Lucia",
+"fa": "سنت لوسیا"
+},
+"li": {
+"en": "Liechtenstein",
+"fa": "لیختن‌اشتاین"
+},
+"lk": {
+"en": "Sri Lanka",
+"fa": "سری‌لانکا"
+},
+"lr": {
+"en": "Liberia",
+"fa": "لیبریا"
+},
+"ls": {
+"en": "Lesotho",
+"fa": "لسوتو"
+},
+"lt": {
+"en": "Lithuania",
+"fa": "لیتوانی"
+},
+"lu": {
+"en": "Luxembourg",
+"fa": "لوکزامبورگ"
+},
+"lv": {
+"en": "Latvia",
+"fa": "لتونی"
+},
+"ly": {
+"en": "Libya",
+"fa": "لیبی"
+},
+"ma": {
+"en": "Morocco",
+"fa": "مراکش"
+},
+"mc": {
+"en": "Monaco",
+"fa": "موناکو"
+},
+"md": {
+"en": "Moldova",
+"fa": "مولداوی"
+},
+"me": {
+"en": "Montenegro",
+"fa": "مونته‌نگرو"
+},
+"mf": {
+"en": "St. Martin",
+"fa": "سنت مارتین"
+},
+"mg": {
+"en": "Madagascar",
+"fa": "ماداگاسکار"
+},
+"mh": {
+"en": "Marshall Islands",
+"fa": "جزایر مارشال"
+},
+"mk": {
+"en": "North Macedonia",
+"fa": "مقدونیهٔ شمالی"
+},
+"ml": {
+"en": "Mali",
+"fa": "مالی"
+},
+"mm": {
+"en": "Myanmar (Burma)",
+"fa": "میانمار (برمه)"
+},
+"mn": {
+"en": "Mongolia",
+"fa": "مغولستان"
+},
+"mo": {
+"en": "Macao",
+"fa": "ماکائو"
+},
+"mp": {
+"en": "Northern Mariana Islands",
+"fa": "جزایر ماریانای شمالی"
+},
+"mq": {
+"en": "Martinique",
+"fa": "مارتینیک"
+},
+"mr": {
+"en": "Mauritania",
+"fa": "موریتانی"
+},
+"ms": {
+"en": "Montserrat",
+"fa": "مونت‌سرات"
+},
+"mt": {
+"en": "Malta",
+"fa": "مالت"
+},
+"mu": {
+"en": "Mauritius",
+"fa": "موریس"
+},
+"mv": {
+"en": "Maldives",
+"fa": "مالدیو"
+},
+"mw": {
+"en": "Malawi",
+"fa": "مالاوی"
+},
+"mx": {
+"en": "Mexico",
+"fa": "مکزیک"
+},
+"my": {
+"en": "Malaysia",
+"fa": "مالزی"
+},
+"mz": {
+"en": "Mozambique",
+"fa": "موزامبیک"
+},
+"na": {
+"en": "Namibia",
+"fa": "نامیبیا"
+},
+"nc": {
+"en": "New Caledonia",
+"fa": "کالدونیای جدید"
+},
+"ne": {
+"en": "Niger",
+"fa": "نیجر"
+},
+"nf": {
+"en": "Norfolk Island",
+"fa": "جزیرهٔ نورفولک"
+},
+"ng": {
+"en": "Nigeria",
+"fa": "نیجریه"
+},
+"ni": {
+"en": "Nicaragua",
+"fa": "نیکاراگوئه"
+},
+"nl": {
+"en": "Netherlands",
+"fa": "هلند"
+},
+"no": {
+"en": "Norway",
+"fa": "نروژ"
+},
+"np": {
+"en": "Nepal",
+"fa": "نپال"
+},
+"nr": {
+"en": "Nauru",
+"fa": "نائورو"
+},
+"nu": {
+"en": "Niue",
+"fa": "نیوئه"
+},
+"nz": {
+"en": "New Zealand",
+"fa": "نیوزیلند"
+},
+"om": {
+"en": "Oman",
+"fa": "عمان"
+},
+"pa": {
+"en": "Panama",
+"fa": "پاناما"
+},
+"pe": {
+"en": "Peru",
+"fa": "پرو"
+},
+"pf": {
+"en": "French Polynesia",
+"fa": "پلی‌نزی فرانسه"
+},
+"pg": {
+"en": "Papua New Guinea",
+"fa": "پاپوا گینهٔ نو"
+},
+"ph": {
+"en": "Philippines",
+"fa": "فیلیپین"
+},
+"pk": {
+"en": "Pakistan",
+"fa": "پاکستان"
+},
+"pl": {
+"en": "Poland",
+"fa": "لهستان"
+},
+"pm": {
+"en": "St. Pierre & Miquelon",
+"fa": "سن پیر و میکلن"
+},
+"pn": {
+"en": "Pitcairn Islands",
+"fa": "جزایر پیت‌کرن"
+},
+"pr": {
+"en": "Puerto Rico",
+"fa": "پورتوریکو"
+},
+"ps": {
+"en": "Palestinian Territories",
+"fa": "سرزمین‌های فلسطینی"
+},
+"pt": {
+"en": "Portugal",
+"fa": "پرتغال"
+},
+"pw": {
+"en": "Palau",
+"fa": "پالائو"
+},
+"py": {
+"en": "Paraguay",
+"fa": "پاراگوئه"
+},
+"qa": {
+"en": "Qatar",
+"fa": "قطر"
+},
+"re": {
+"en": "Réunion",
+"fa": "رئونیون"
+},
+"ro": {
+"en": "Romania",
+"fa": "رومانی"
+},
+"rs": {
+"en": "Serbia",
+"fa": "صربستان"
+},
+"ru": {
+"en": "Russia",
+"fa": "روسیه"
+},
+"rw": {
+"en": "Rwanda",
+"fa": "رواندا"
+},
+"sa": {
+"en": "Saudi Arabia",
+"fa": "عربستان سعودی"
+},
+"sb": {
+"en": "Solomon Islands",
+"fa": "جزایر سلیمان"
+},
+"sc": {
+"en": "Seychelles",
+"fa": "سیشل"
+},
+"sd": {
+"en": "Sudan",
+"fa": "سودان"
+},
+"se": {
+"en": "Sweden",
+"fa": "سوئد"
+},
+"sg": {
+"en": "Singapore",
+"fa": "سنگاپور"
+},
+"sh": {
+"en": "St. Helena",
+"fa": "سنت هلن"
+},
+"si": {
+"en": "Slovenia",
+"fa": "اسلوونی"
+},
+"sj": {
+"en": "Svalbard & Jan Mayen",
+"fa": "سوالبارد و یان ماین"
+},
+"sk": {
+"en": "Slovakia",
+"fa": "اسلواکی"
+},
+"sl": {
+"en": "Sierra Leone",
+"fa": "سیرالئون"
+},
+"sm": {
+"en": "San Marino",
+"fa": "سان‌مارینو"
+},
+"sn": {
+"en": "Senegal",
+"fa": "سنگال"
+},
+"so": {
+"en": "Somalia",
+"fa": "سومالی"
+},
+"sr": {
+"en": "Suriname",
+"fa": "سورینام"
+},
+"ss": {
+"en": "South Sudan",
+"fa": "سودان جنوبی"
+},
+"st": {
+"en": "São Tomé & Príncipe",
+"fa": "سائوتومه و پرینسیپ"
+},
+"sv": {
+"en": "El Salvador",
+"fa": "السالوادور"
+},
+"sx": {
+"en": "Sint Maarten",
+"fa": "سنت مارتن"
+},
+"sy": {
+"en": "Syria",
+"fa": "سوریه"
+},
+"sz": {
+"en": "Eswatini",
+"fa": "اسواتینی"
+},
+"tc": {
+"en": "Turks & Caicos Islands",
+"fa": "جزایر تورکس و کایکوس"
+},
+"td": {
+"en": "Chad",
+"fa": "چاد"
+},
+"tf": {
+"en": "French Southern Territories",
+"fa": "سرزمین‌های جنوبی فرانسه"
+},
+"tg": {
+"en": "Togo",
+"fa": "توگو"
+},
+"th": {
+"en": "Thailand",
+"fa": "تایلند"
+},
+"tj": {
+"en": "Tajikistan",
+"fa": "تاجیکستان"
+},
+"tk": {
+"en": "Tokelau",
+"fa": "توکلائو"
+},
+"tl": {
+"en": "Timor-Leste",
+"fa": "تیمور-لسته"
+},
+"tm": {
+"en": "Turkmenistan",
+"fa": "ترکمنستان"
+},
+"tn": {
+"en": "Tunisia",
+"fa": "تونس"
+},
+"to": {
+"en": "Tonga",
+"fa": "تونگا"
+},
+"tr": {
+"en": "Türkiye",
+"fa": "ترکیه"
+},
+"tt": {
+"en": "Trinidad & Tobago",
+"fa": "ترینیداد و توباگو"
+},
+"tv": {
+"en": "Tuvalu",
+"fa": "تووالو"
+},
+"tw": {
+"en": "Taiwan",
+"fa": "تایوان"
+},
+"tz": {
+"en": "Tanzania",
+"fa": "تانزانیا"
+},
+"ua": {
+"en": "Ukraine",
+"fa": "اوکراین"
+},
+"ug": {
+"en": "Uganda",
+"fa": "اوگاندا"
+},
+"um": {
+"en": "U.S. Outlying Islands",
+"fa": "جزایر دورافتادهٔ ایالات متحده"
+},
+"us": {
+"en": "United States",
+"fa": "ایالات متحده"
+},
+"uy": {
+"en": "Uruguay",
+"fa": "اروگوئه"
+},
+"uz": {
+"en": "Uzbekistan",
+"fa": "ازبکستان"
+},
+"va": {
+"en": "Vatican City",
+"fa": "واتیکان"
+},
+"vc": {
+"en": "St. Vincent & Grenadines",
+"fa": "سنت وینسنت و گرنادین"
+},
+"ve": {
+"en": "Venezuela",
+"fa": "ونزوئلا"
+},
+"vg": {
+"en": "British Virgin Islands",
+"fa": "جزایر ویرجین بریتانیا"
+},
+"vi": {
+"en": "U.S. Virgin Islands",
+"fa": "جزایر ویرجین ایالات متحده"
+},
+"vn": {
+"en": "Vietnam",
+"fa": "ویتنام"
+},
+"vu": {
+"en": "Vanuatu",
+"fa": "وانواتو"
+},
+"wf": {
+"en": "Wallis & Futuna",
+"fa": "والیس و فوتونا"
+},
+"ws": {
+"en": "Samoa",
+"fa": "ساموآ"
+},
+"xk": {
+"en": "Kosovo",
+"fa": "کوزوو"
+},
+"ye": {
+"en": "Yemen",
+"fa": "یمن"
+},
+"yt": {
+"en": "Mayotte",
+"fa": "مایوت"
+},
+"za": {
+"en": "South Africa",
+"fa": "افریقای جنوبی"
+},
+"zm": {
+"en": "Zambia",
+"fa": "زامبیا"
+},
+"zw": {
+"en": "Zimbabwe",
+"fa": "زیمبابوه"
+}
+}

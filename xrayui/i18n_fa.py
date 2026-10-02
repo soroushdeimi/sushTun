@@ -62,6 +62,22 @@ TRANSLATIONS_FA: dict[str, str] = {
     "QR — {name}": "کد QR — {name}",
     "Copy link": "کپی لینک",
 
+    # -- ping mode and exit flags -------------------------------------------
+    "Delay test": "آزمون تأخیر",
+    "Round trip (like v2rayN)": "رفت‌وبرگشت (مثل v2rayN)",
+    "First connection": "اتصال اول",
+    "Round trip times a second request on the connection the first one "
+    "opened, which is what v2rayN shows. First connection includes the "
+    "time to set the connection up, so the numbers are higher.":
+        "«رفت‌وبرگشت» درخواست دوم را روی همان اتصالی که درخواست اول باز کرده "
+        "اندازه می‌گیرد؛ عددی که v2rayN نشان می‌دهد. «اتصال اول» زمان برقراری "
+        "اتصال را هم شامل می‌شود و به همین دلیل عددها بزرگ‌تر است.",
+    "First connection: {time}": "اتصال اول: {time}",
+    "Exits in {country} · {ip}": "خروج از {country} · {ip}",
+    "Exits in {country}": "خروج از {country}",
+    "Press Test to find out where this server exits":
+        "برای فهمیدن محل خروج این سرور، دکمهٔ تست را بزنید",
+
     # -- dns_dialog.py ------------------------------------------------------
     "Preset:": "الگو:",
     "Resolvers (one per line, in order):": "سرورهای DNS (هر خط یک مورد، به ترتیب):",

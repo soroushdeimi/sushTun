@@ -74,6 +74,14 @@ def font_file(name: str) -> Path:
     return _first_existing(str(Path("assets") / "fonts" / name))
 
 
+def flags_dir() -> Path:
+    """Bundled country flags and names; assets/flags."""
+    bundled = _first_existing(str(Path("assets") / "flags"))
+    if bundled.exists():
+        return bundled
+    return Path(__file__).resolve().parent.parent / "assets" / "flags"
+
+
 def xray_exe() -> Path:
     return _first_existing("xray.exe" if sys.platform == "win32" else "xray")
 

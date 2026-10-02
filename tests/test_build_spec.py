@@ -14,3 +14,12 @@ def test_build_spec_bundles_every_ui_data_file():
     for suffix in suffixes:
         # A glob per suffix; a new data file type needs its own line in the spec.
         assert f'glob("*{suffix}")' in spec, f"build.spec does not bundle xrayui/ui/*{suffix}"
+
+
+def test_build_spec_bundles_the_country_flags():
+    spec = (ROOT / "tools" / "build.spec").read_text(encoding="utf-8")
+    assert 'ROOT / "assets" / "flags"' in spec
+    assert '"*.svg"' in spec
+    assert '"*.json"' in spec
+    assert '"assets/flags"' in spec
+    assert (ROOT / "assets" / "flags" / "names.json").is_file()
