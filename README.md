@@ -21,6 +21,25 @@ full control of it from a single window: import a server, choose what bypasses
 the tunnel, and connect. It ships as one self-contained binary — no install, no
 dependencies.
 
+## Screenshots
+
+<p align="center">
+  <img alt="The Servers page, connected, with exit-country flags" src="docs/screenshots/servers.png" width="100%">
+</p>
+
+<table>
+  <tr>
+    <td width="33%" valign="top"><img alt="Proxy chains with a verified exit" src="docs/screenshots/chains.png" width="100%"></td>
+    <td width="33%" valign="top"><img alt="Routing" src="docs/screenshots/routing.png" width="100%"></td>
+    <td width="33%" valign="top"><img alt="Anti-filter" src="docs/screenshots/anti-filter.png" width="100%"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Proxy chains with a verified exit</sub></td>
+    <td align="center"><sub>Routing</sub></td>
+    <td align="center"><sub>Anti-filter</sub></td>
+  </tr>
+</table>
+
 ## Features
 
 - **Servers** — VLESS, VMess, Trojan, Shadowsocks, Hysteria2, and WireGuard, with
@@ -28,6 +47,11 @@ dependencies.
   WireGuard `.conf`, raw JSON, or a QR code; test real delay or TCP ping (one
   server or a whole selection), switch to the fastest, and copy a share
   link/QR straight from the table.
+- **Proxy chains** — put several servers in a row: traffic enters through the first and
+  leaves from the last. The Chains page draws the path, and Test measures the whole
+  chain, shows the country you really exit from, and names the exact link that failed.
+- **Exit-country flags** — after a test or a connect, each server shows the flag of the
+  country it really exits from, not where its address is.
 - **Subscriptions** — tracks your plan's data quota and expiry with a live usage
   bar; each one refreshes on its own schedule, with an optional name filter and
   custom User-Agent, or refresh them all at once.
@@ -65,6 +89,8 @@ dependencies.
 - **Startup and backup** — start sushTun at login (Windows, macOS, and the
   `.deb` on Linux) with optional auto-connect, back up and restore your servers and
   settings as a zip, and get a banner when a new release is out.
+- **First-run tour and help** — a short tour shows where everything is, and every button
+  and option explains itself on hover.
 - **Persian interface** — a full right-to-left فارسی translation, switchable in
   Settings.
 - **Live metrics** — real-time throughput and total data used this session,
