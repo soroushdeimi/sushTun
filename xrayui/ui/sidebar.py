@@ -102,7 +102,6 @@ class Sidebar(QFrame):
         self.item_dns = self._add_nav(tr("DNS"), "dns")
         self.item_activity = self._add_nav(tr("Activity"), "activity")
         self.item_chains = self._add_nav(tr("Chains"), "routing")
-        self.item_chains.setToolTip(tr("Build and test a route; see where your traffic takes its final bow."))
         self.item_servers.setChecked(True)
         set_help(self.item_servers,
                  tr("Your list of servers: pick one, test how fast they are, and "
@@ -120,6 +119,9 @@ class Sidebar(QFrame):
                  tr("Choose who looks up website addresses for you."),
                  tr("Sites won't open but the connection is fine? A different DNS "
                     "can help."))
+        set_help(self.item_chains,
+                 tr("Put servers in a row so your traffic hops through each one."),
+                 tr("A relay inside the country, then a server abroad."))
         set_help(self.item_activity,
                  tr("The live log, handy tools and diagnostics."),
                  tr("Something odd? Look here before asking anyone for help."))

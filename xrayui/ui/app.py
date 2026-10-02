@@ -93,8 +93,10 @@ def run(argv: list[str], elevated: bool = True, autostart: bool = False) -> int:
     app.setWindowIcon(app_icon())
     window = MainWindow(elevated=elevated, autostart=autostart)
     app.on_quit_request = window.prepare_quit
-    if not starts_hidden(autostart, window.settings, tray=window.tray is not None):
+    shown = not starts_hidden(autostart, window.settings, tray=window.tray is not None)
+    if shown:
         window.show()
+    window.maybe_start_tour(shown)
     instance = single_instance.InstanceServer(parent=app)
     instance.show_requested.connect(window._show_window)
 

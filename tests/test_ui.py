@@ -451,6 +451,7 @@ def test_open_settings_reloads_profiles_and_tray_after_a_restore(window, monkeyp
 
     class FakeDialog:
         updateAvailable = _NoSignal()
+        tourRequested = _NoSignal()
 
         def __init__(self, *a, **k):
             pass
@@ -1729,6 +1730,7 @@ def test_settings_that_xray_reads_at_startup_ask_for_a_reconnect(
 
     class _Dlg:
         updateAvailable = _NoSignal()
+        tourRequested = _NoSignal()
 
         def __init__(self, *a, **k):
             pass

@@ -1546,6 +1546,45 @@ TRANSLATIONS_FA: dict[str, str] = {
     "You're up to date.": "شما به‌روز هستید.",
     "Version {version}": "نسخه {version}",
 
+    # -- first-run tour -----------------------------------------------------
+    "Put servers in a row so your traffic hops through each one.":
+        "چند سرور را پشت سر هم بگذارید تا ترافیکتان از هرکدام یکی‌یکی عبور کند.",
+    "A relay inside the country, then a server abroad.":
+        "اول یک رله داخل کشور، بعد یک سرور در خارج.",
+    "Skip": "رد کردن",
+    "Back": "قبلی",
+    "Next": "بعدی",
+    "Welcome to sushTun": "به sushTun خوش آمدید",
+    "sushTun sends your computer's internet through a server you choose, so blocked sites open and your traffic stays private. Let's take a quick look around.":
+        "sushTun اینترنت کامپیوترتان را از سروری که خودتان انتخاب می‌کنید رد می‌کند؛ پس سایت‌های بسته باز می‌شوند و ترافیکتان خصوصی می‌ماند. بیایید یک نگاه سریع بیندازیم.",
+    "Add your servers": "سرورهایتان را اضافه کنید",
+    "Copy a server link or your provider's subscription URL, then press Import. Ctrl+V works too. A link looks like vless://…":
+        "لینک یک سرور یا آدرس اشتراکی را که ارائه‌دهنده‌تان داده کپی کنید و «وارد کردن» را بزنید. Ctrl+V هم جواب می‌دهد. لینک‌ها شبیه vless://… هستند.",
+    "Your server list": "فهرست سرورها",
+    "Press Test to see each server's ping and the flag of the country it really exits from. Then pick the one you like.":
+        "«تست» را بزنید تا پینگ هر سرور و پرچم کشوری را که واقعاً از آن بیرون می‌روید ببینید. بعد هرکدام را که خواستید انتخاب کنید.",
+    "One click puts every app on your computer on the tunnel.":
+        "با یک کلیک، همه‌ی برنامه‌های کامپیوترتان از تونل رد می‌شوند.",
+    "Routing mode": "حالت مسیریابی",
+    "Choose what goes through the tunnel. For example: Iranian sites open directly, everything else goes through the tunnel.":
+        "تعیین کنید چه چیزهایی از تونل رد شوند. مثلاً سایت‌های ایرانی مستقیم باز شوند و بقیه از تونل بروند.",
+    "A server connects but nothing loads? Switch this on, then reconnect.":
+        "سرور وصل می‌شود ولی چیزی باز نمی‌شود؟ این را روشن کنید و دوباره وصل شوید.",
+    "Put servers in a row so your traffic hops through each one. Test tells you where you exit and which link breaks.":
+        "چند سرور را پشت سر هم بگذارید تا ترافیکتان از هرکدام یکی‌یکی عبور کند. با «تست» می‌فهمید از کجا بیرون می‌روید و کدام حلقه مشکل دارد.",
+    "Share the tunnel with your phone: turn this on and join your computer's Wi-Fi hotspot.":
+        "تونل را با گوشی‌تان شریک شوید: این را روشن کنید و گوشی را به هات‌اسپات وای‌فای کامپیوترتان وصل کنید.",
+    "You're all set": "همه‌چیز آماده است",
+    "Hover anything: every control explains itself. You can replay this tour from Settings → General.":
+        "ماوس را روی هر چیزی نگه دارید، خودش توضیح می‌دهد. این راهنما را هر وقت خواستید از تنظیمات ← عمومی دوباره ببینید.",
+    "Welcome tour": "راهنمای شروع",
+    "Show the tour again": "نمایش دوباره‌ی راهنما",
+    "Starts when you close Settings": "با بستن تنظیمات شروع می‌شود",
+    "Replays the short walk through the app that you saw on first launch. It starts when you close Settings.":
+        "همان گشت کوتاهی را که بار اول دیدید دوباره نشان می‌دهد. با بستن تنظیمات شروع می‌شود.",
+    "Showing sushTun to a friend? Replay it for them.":
+        "می‌خواهید sushTun را به دوستتان نشان بدهید؟ راهنما را برایش دوباره پخش کنید.",
+
     # -- ui/a-foundation: connection header ----------------------------------
     "Connected": "متصل",
     "Disconnected": "قطع شده",
@@ -1751,7 +1790,6 @@ TRANSLATIONS_FA: dict[str, str] = {
     'Available servers': 'سرورهای موجود',
     'Before a video call, test the path and the country websites see.': 'پیش از تماس تصویری، مسیر و کشوری را که سایت\u200cها می\u200cبینند آزمایش کنید.',
     'Build a path with two to eight servers; give your relay a travel buddy.': 'مسیری با دو تا هشت سرور بسازید؛ برای سرور واسط یک همسفر پیدا کنید.',
-    'Build and test a route; see where your traffic takes its final bow.': 'مسیری بسازید و آزمایش کنید؛ ببینید ترافیک شما در کجا به مقصد می\u200cرسد.',
     'Cancel test': 'لغو آزمایش',
     'Chains': 'زنجیره\u200cها',
     'Change the route; try a different exit for movie night.': 'مسیر را تغییر دهید؛ برای شب فیلم یک خروجی دیگر امتحان کنید.',
