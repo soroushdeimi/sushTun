@@ -240,7 +240,7 @@ def test_connect_warns_when_dns_stays_outside_the_tunnel(monkeypatch, tmp_path):
     steps = []
     conn._log = steps.append
 
-    conn._connect_generic(types.SimpleNamespace(), _iface(), "185.229.204.23",
+    conn._connect_generic(types.SimpleNamespace(uid="p1"), _iface(), "185.229.204.23",
                           DnsState(mode="RESOLVED"))
     assert any("unencrypted" in s for s in steps)
 
