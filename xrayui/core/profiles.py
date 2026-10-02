@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import re
 import uuid
-from dataclasses import asdict, dataclass, field, fields
+from dataclasses import MISSING, asdict, dataclass, field, fields
 
 from .. import paths
 
@@ -38,6 +38,15 @@ def valid_pqv(raw: str) -> bool:
     server's ML-DSA-65 public key as unpadded base64url (1952 bytes). Xray
     refuses to start on anything else, so the whole connection would fail."""
     return bool(_PQV_RE.match((raw or "").strip()))
+
+
+def _fits(default, value) -> bool:
+    """Whether `value` has the type a field with this default holds."""
+    if isinstance(default, bool) or isinstance(value, bool):
+        return isinstance(default, bool) and isinstance(value, bool)
+    if isinstance(default, (int, float)):
+        return isinstance(value, (int, float))
+    return isinstance(value, type(default))
 
 
 @dataclass
@@ -85,8 +94,18 @@ class Profile:
 
     @classmethod
     def from_dict(cls, data: dict) -> Profile:
-        known = {f.name for f in fields(cls)}
-        return cls(**{k: v for k, v in data.items() if k in known})
+        # A hand-edited or corrupt file can hold any JSON type in any field;
+        # one null name used to take the whole server list down with it. A
+        # value of the wrong type keeps the field's default instead.
+        clean = {}
+        for f in fields(cls):
+            if f.name not in data:
+                continue
+            value, default = data[f.name], f.default
+            if default is not MISSING and default is not None and not _fits(default, value):
+                continue
+            clean[f.name] = value
+        return cls(**clean)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -100,6 +119,9 @@ class Profile:
         can never actually connect: no address, no credential, or (for the
         protocols that need one) no peer public key / cipher method."""
         if not self.address or not self.id:
+            return False
+        if isinstance(self.port, bool) or not isinstance(self.port, int) \
+                or not 1 <= self.port <= 65535:
             return False
         if self.protocol == "wireguard" and not self.pbk:
             return False
@@ -131,10 +153,11 @@ class ProfileStore:
         return sorted(items, key=lambda x: x.name.lower())
 
     def get(self, uid: str) -> Profile | None:
-        p = self._path(uid)
-        if not p.exists():
-            return None
-        return Profile.from_dict(json.loads(p.read_text(encoding="utf-8")))
+        try:
+            data = json.loads(self._path(uid).read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            return None  # missing, or truncated by a crash or a full disk
+        return Profile.from_dict(data) if isinstance(data, dict) else None
 
     def save(self, profile: Profile) -> Profile:
         self.dir.mkdir(parents=True, exist_ok=True)

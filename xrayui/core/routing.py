@@ -176,7 +176,14 @@ def _coerce_str_list(value) -> list[str]:
 
 def _sanitize_port(port) -> str:
     port = _coerce_str(port).strip()
-    return port if _PORT_RE.match(port) else ""
+    if not _PORT_RE.match(port):
+        return ""
+    # The regex only checks the shape. Xray refuses the whole config over one
+    # number above 65535, so one bad custom rule kept the tunnel from starting
+    # at all. It accepts 0 and a reversed range ("10-5"), so those stay.
+    if any(int(n) > 65535 for n in re.split(r"[,-]", port)):
+        return ""
+    return port
 
 
 def _sanitize_network(network) -> str:

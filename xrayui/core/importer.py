@@ -130,7 +130,7 @@ def _vmess_json_profile(data: dict) -> Profile:
         name=str(data.get("ps") or data.get("add") or "imported"),
         protocol="vmess",
         address=str(data.get("add") or ""),
-        port=int(data.get("port") or 443),
+        port=int(data["port"]) if data.get("port") not in (None, "") else 443,
         id=str(data.get("id") or ""),
         vmess_security=str(data.get("scy") or "auto") or "auto",
         network=net,
@@ -413,9 +413,15 @@ def _looks_like_wg_conf(text: str) -> bool:
 
 
 def parse_share_text(text: str) -> list[Profile]:
-    body = _maybe_b64(text)
+    # Notepad and many Windows tools start a UTF-8 file with a BOM. Left in, the
+    # first link matched no scheme and a base64 body did not decode at all.
+    body = _maybe_b64(text.lstrip("\ufeff"))
     if _looks_like_wg_conf(body):
-        return [parse_wg_conf(body)]
+        try:
+            profile = parse_wg_conf(body)
+        except ValueError:
+            return []
+        return [profile] if profile.is_valid() else []
     out: list[Profile] = []
     for line in body.splitlines():
         line = line.strip()

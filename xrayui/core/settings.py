@@ -162,6 +162,8 @@ _MIGRATIONS: list[tuple[int, Callable[[dict], dict]]] = [
 
 def _migrate(data: dict) -> dict:
     version = data.get("schema_version", 0)
+    if isinstance(version, bool) or not isinstance(version, int):
+        version = 0  # hand-edited or corrupt: run every migration from the start
     for target, migrate in _MIGRATIONS:
         if version < target:
             data = migrate(data)
