@@ -9,7 +9,7 @@ import time
 from collections.abc import Callable
 
 from .. import paths
-from . import bootrestore, coreopts, hotspot, network, render, routing
+from . import bootrestore, chains, coreopts, hotspot, network, render, routing
 from . import exits as exits_mod
 from . import forwards as forwards_mod
 from . import settings as app_settings
@@ -91,7 +91,16 @@ class Connection:
     def is_connected(self) -> bool:
         return self.state.is_connected()
 
-    def connect(self, profile: Profile) -> None:
+    def connect(self, profile: Profile | chains.Chain | chains.ResolvedChain) -> None:
+        plan = None
+        if isinstance(profile, (chains.Chain, chains.ResolvedChain)):
+            try:
+                plan = (chains.resolve(profile, ProfileStore().list())
+                        if isinstance(profile, chains.Chain) else profile)
+                chains.check(plan, app_settings.load().get("core"))
+            except ValueError as exc:
+                raise ConnectError(str(exc)) from exc
+            profile = plan.entry
         if not profile.address or not profile.id:
             raise ConnectError("profile is missing address or id")
         if profile.protocol == "wireguard" and not profile.pbk:
@@ -118,9 +127,9 @@ class Connection:
         dns = network.backup_dns(iface.alias)
 
         if IS_MAC:
-            self._connect_macos(profile, iface, server_ip, dns)
+            self._connect_macos(plan or profile, iface, server_ip, dns)
         else:
-            self._connect_generic(profile, iface, server_ip, dns)
+            self._connect_generic(plan or profile, iface, server_ip, dns)
 
     def _fail_connect(self, server_ip: str, reason: str) -> None:
         """Tear down a half-built connection, then report why it failed."""
@@ -176,7 +185,7 @@ class Connection:
         suffix = "" if has_auth else " (no password!)"
         self._log(f"Local proxy shared on the LAN at {iface.ipv4}:{port}{suffix}")
 
-    def _connect_generic(self, profile: Profile, iface, server_ip: str, dns) -> None:
+    def _connect_generic(self, profile: Profile | chains.ResolvedChain, iface, server_ip: str, dns) -> None:
         self._log("Building runtime config...")
         cfgs = app_settings.load()
         rules = routing.build_rules(cfgs["routing"])
@@ -231,7 +240,10 @@ class Connection:
 
         # Persist backup + a boot restore task BEFORE hijacking DNS. Static
         # 127.0.0.1 survives a power-off; the task puts the adapter back.
-        self.state.save(iface, server_ip, tun, dns, profile_uid=profile.uid)
+        self.state.save(iface, server_ip, tun, dns,
+                        profile_uid=profile.exit.uid if isinstance(profile, chains.ResolvedChain)
+                        else profile.uid,
+                        chain_uid=profile.uid if isinstance(profile, chains.ResolvedChain) else "")
         try:
             bootrestore.install()
         except Exception as exc:
@@ -338,7 +350,7 @@ class Connection:
             if not hotspot.stop_tethering():
                 self._log("WARNING: Windows would not switch the hotspot off.")
 
-    def _connect_macos(self, profile: Profile, iface, server_ip: str, dns) -> None:
+    def _connect_macos(self, profile: Profile | chains.ResolvedChain, iface, server_ip: str, dns) -> None:
         # Xray's own TUN inbound first (a utun device, the same model as
         # Linux/Windows): measured on an M-series Mac it moved the same traffic
         # with ~24% less CPU than tun2socks, and it is one process instead of
@@ -365,6 +377,7 @@ class Connection:
                                 core_cfg=core_cfg, exits=exits,
                                 exits_cfg=cfgs.get("exits"), forwards=forwards)
 
+        cfg = build(exits, forwards)
         self._log_lan_share(core_cfg, iface)
         self._log("Starting Xray...")
         network.remove_routes(server_ip)
@@ -372,7 +385,7 @@ class Connection:
         network.add_host_route(server_ip, iface.gateway)
         if network.mac_ensure_scoped_default(iface.alias, iface.gateway):
             self._log(f"Restored the missing default route scoped to {iface.alias}.")
-        self.xray.start(build(exits, forwards))
+        self.xray.start(cfg)
         self._retry_without_extras(build, exits, forwards)
         if not network.mac_wait_for_device(alive=self.xray.is_running):
             why = (_last_log_line() if not self.xray.is_running()
@@ -382,7 +395,10 @@ class Connection:
             self.xray.stop()
             self._start_macos_bridge(build, exits, forwards, core_cfg, server_ip)
 
-        self.state.save(iface, server_ip, 0, dns, profile_uid=profile.uid)
+        self.state.save(iface, server_ip, 0, dns,
+                        profile_uid=profile.exit.uid if isinstance(profile, chains.ResolvedChain)
+                        else profile.uid,
+                        chain_uid=profile.uid if isinstance(profile, chains.ResolvedChain) else "")
         try:
             bootrestore.install()
         except Exception as exc:

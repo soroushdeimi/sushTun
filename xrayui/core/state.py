@@ -7,7 +7,7 @@ from .network import DnsState, Interface
 _FILES = (
     "active_if.txt", "active_ip.txt", "gateway.txt", "relay_ip.txt",
     "tunidx.txt", "connected.flag", "dns-mode.txt", "dns-servers.txt",
-    "gateway.flag", "profile.txt",
+    "gateway.flag", "profile.txt", "chain.txt",
 )
 
 
@@ -26,7 +26,7 @@ class State:
         self._p(name).write_text(str(value), encoding="utf-8")
 
     def save(self, iface: Interface, server_ip: str, tun_index: int, dns: DnsState,
-             profile_uid: str = "") -> None:
+             profile_uid: str = "", chain_uid: str = "") -> None:
         self.dir.mkdir(parents=True, exist_ok=True)
         # Which profile this tunnel was built from. The active profile is only
         # what the UI has selected; without this the window could not tell a
@@ -35,6 +35,10 @@ class State:
             self._write("profile.txt", profile_uid)
         else:
             self._p("profile.txt").unlink(missing_ok=True)
+        if chain_uid:
+            self._write("chain.txt", chain_uid)
+        else:
+            self._p("chain.txt").unlink(missing_ok=True)
         self._write("active_if.txt", iface.alias)
         self._write("active_ip.txt", iface.ipv4)
         self._write("gateway.txt", iface.gateway)
@@ -69,6 +73,10 @@ class State:
     @property
     def profile_uid(self) -> str | None:
         return self._read("profile.txt") or None
+
+    @property
+    def chain_uid(self) -> str | None:
+        return self._read("chain.txt") or None
 
     @property
     def tun_index(self) -> int | None:

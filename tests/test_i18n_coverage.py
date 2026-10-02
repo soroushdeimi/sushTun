@@ -31,9 +31,9 @@ def _placeholder_names(template: str) -> set[str]:
 
 
 def _ui_py_files() -> list[Path]:
-    """Every ui module the sidebar redesign owns -- both the direct children
-    and the pages/ package -- so new page strings are scanned the same way."""
-    return sorted([*UI_DIR.glob("*.py"), *(UI_DIR / "pages").glob("*.py")])
+    """UI modules plus the Qt-free chain validator's translated diagnostics."""
+    return sorted([*UI_DIR.glob("*.py"), *(UI_DIR / "pages").glob("*.py"),
+                   UI_DIR.parent / "core" / "chains.py"])
 
 
 def _tr_literal_calls() -> list[tuple[str, set[str], str, int]]:

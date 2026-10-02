@@ -26,6 +26,7 @@ from . import userfs
 # outside base_dir() (zip-slip) or smuggle in an unrelated file.
 _FIXED_NAMES = frozenset({
     "settings.json",
+    "chains.json",
     "profiles/active.txt",
     "profiles/subscriptions.json",
     "profile_stats.json",
@@ -70,6 +71,9 @@ def backup(dest_zip: Path) -> None:
         settings_path = base / "settings.json"
         if settings_path.exists():
             zf.write(settings_path, "settings.json")
+        chains_path = base / "chains.json"
+        if chains_path.exists():
+            zf.write(chains_path, "chains.json")
         active = pdir / "active.txt"
         if active.exists():
             zf.write(active, "profiles/active.txt")
@@ -179,3 +183,6 @@ def restore(src_zip: Path) -> None:
             old.unlink()
     if "profiles/active.txt" not in payload:
         (pdir / "active.txt").unlink(missing_ok=True)
+
+    if "chains.json" not in payload:
+        (base / "chains.json").unlink(missing_ok=True)
