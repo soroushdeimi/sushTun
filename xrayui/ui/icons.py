@@ -65,6 +65,10 @@ _PATHS: dict[str, str] = {
     "check": '<path d="M3.5 8.5 6.5 11.5 12.5 5.5"/>',
     "archive": '<path d="M2.5 3.5h11v3h-11zM3.5 6.5v6h9v-6M6.5 9h3"/>',
     "language": '<path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z"/>',
+    "chains": (
+        '<rect x="1.5" y="5.5" width="8" height="5" rx="2.5"/>'
+        '<rect x="6.5" y="5.5" width="8" height="5" rx="2.5"/>'
+    ),
 }
 
 # Backward-compat aliases so existing callers (e.g. connection_header.py)
@@ -77,6 +81,8 @@ _ALIASES: dict[str, str] = {
     "low-usage": "leaf",
     "test": "bolt",
 }
+
+_SCALES = (1, 1.25, 1.5, 1.75, 2, 2.5, 3)
 
 _cache: dict[tuple[str, str, int], QIcon] = {}
 
@@ -103,11 +109,16 @@ def icon(name: str, color: str | None = None, size: int = 16) -> QIcon:
     if cached is not None:
         return cached
     renderer = QSvgRenderer(_svg(resolved, color).encode("utf-8"))
-    pixmap = QPixmap(QSize(size, size))
-    pixmap.fill(Qt.transparent)
-    painter = QPainter(pixmap)
-    renderer.render(painter)
-    painter.end()
-    result = QIcon(pixmap)
+    result = QIcon()
+    # One pixmap per common display scale, so a scaled screen gets an exact
+    # render instead of a stretched 1x one.
+    for scale in _SCALES:
+        edge = round(size * scale)
+        pixmap = QPixmap(QSize(edge, edge))
+        pixmap.fill(Qt.transparent)
+        painter = QPainter(pixmap)
+        renderer.render(painter)
+        painter.end()
+        result.addPixmap(pixmap)
     _cache[key] = result
     return result

@@ -34,6 +34,7 @@ from PySide6.QtWidgets import (  # noqa: E402
 )
 
 from xrayui import paths  # noqa: E402
+from xrayui.core import chains as chain_core  # noqa: E402
 from xrayui.core import settings as app_settings  # noqa: E402
 from xrayui.core.profiles import Profile  # noqa: E402
 from xrayui.core.subscription import Subscription  # noqa: E402
@@ -45,6 +46,7 @@ from xrayui.ui.dialogs import (  # noqa: E402
     SubscriptionEditDialog,
 )
 from xrayui.ui.help import HELP_WIDTH, is_help  # noqa: E402
+from xrayui.ui.pages.chains_page import ChainEditor, ChainsPage  # noqa: E402
 from xrayui.ui.pages.dns_page import DnsPage  # noqa: E402
 from xrayui.ui.pages.routing_page import COL_ACTION, RoutingPage  # noqa: E402
 from xrayui.ui.rule_editor import RuleEditorDialog, default_rule  # noqa: E402
@@ -238,6 +240,67 @@ def test_subscriptions_and_activity_pages_are_explained(win):
     QApplication.processEvents()
     assert _missing(win.subs_panel) == []
     assert _missing(win.activity_page) == []
+
+
+# -- chains --------------------------------------------------------------------
+
+def _chain_profiles():
+    return [Profile(name=f"Hop {i}", protocol="vless", address="example.org", port=443,
+                    id="b1c2d3e4-0000-4000-8000-000000000001", uid=f"h{i}")
+            for i in range(3)]
+
+
+@pytest.mark.parametrize("lang", ["en", "fa"])
+def test_chains_page_is_explained(qapp, lang):
+    set_language(lang)
+    items = _chain_profiles()
+    chain = chain_core.Chain(name="Route", hops=[p.uid for p in items[:2]])
+    broken = chain_core.Chain(name="Open", hops=["h0"])
+    page = ChainsPage()
+    page.set_chains([chain, broken], items, {})
+    try:
+        assert _missing(page, include_hidden=True) == []
+        assert is_help(page.add_button.toolTip())
+        assert is_help(page.cancel_button.toolTip())
+        for card in page.cards:
+            assert is_help(card.path_view.toolTip())
+            assert is_help(card.expand.toolTip())
+            assert is_help(card.wiring_table.toolTip())
+            assert is_help(card.edit_button.toolTip())
+            assert is_help(card.duplicate_action.toolTip())
+            assert is_help(card.delete_button.toolTip())
+        card = page.cards[0]
+        for active in (True, False):
+            card.set_testing(active)
+            assert is_help(card.test_button.toolTip())
+    finally:
+        page.close()
+
+
+def test_empty_chains_page_is_explained(qapp):
+    page = ChainsPage()
+    page.set_chains([], [], {})
+    try:
+        assert _missing(page, include_hidden=True) == []
+    finally:
+        page.close()
+
+
+@pytest.mark.parametrize("lang", ["en", "fa"])
+def test_chain_editor_is_explained(qapp, lang):
+    set_language(lang)
+    items = _chain_profiles()
+    dlg = ChainEditor(items, {}, chain_core.Chain(name="Route", hops=["h0", "h1", "h0"]))
+    try:
+        assert _missing(dlg, include_hidden=True) == []
+        for widget in (dlg.available, dlg.path):
+            assert is_help(widget.toolTip())
+        handles = [w for w in dlg.findChildren(QLabel) if w.text() == "⠿"]
+        assert handles and all(is_help(w.toolTip()) for w in handles)
+        removers = [w for w in dlg.findChildren(QPushButton) if w.text() == "×"]
+        assert len(removers) == 3 and all(is_help(w.toolTip()) for w in removers)
+    finally:
+        dlg.close()
 
 
 # -- settings ---------------------------------------------------------------------

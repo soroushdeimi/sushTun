@@ -31,15 +31,26 @@ from PySide6.QtWidgets import (
 from ...core import chains, geo_exit
 from ...i18n import current, ltr, tr
 from ..flags import flag_icon, flag_pixmap
+from ..help import help_html, set_help
 from ..theme import ACCENT, ERR, LINE, MUTED, OK, SUNKEN, SURFACE, TEXT, WARN
 from .flow import FlowLayout
 
 
-def button(text, tip, slot):
+def button(text, help_text, slot):
     widget = QPushButton(text)
-    widget.setToolTip(tip)
+    set_help(widget, *help_text)
     widget.clicked.connect(slot)
     return widget
+
+
+def _new_chain_help():
+    return (tr('Build a path of two to eight servers.'),
+            tr('A relay inside the country, then a server abroad.'))
+
+
+def _path_help():
+    return (tr('The route in order: the first hop first, the last hop is your Internet exit.'),
+            tr('Drag a server up or down to reorder it.'))
 
 
 def label(text, muted=False):
@@ -76,6 +87,7 @@ class PathView(QWidget):
         self.profiles = profiles
         self.results = results or {}
         self.broken_at = broken_at
+        self.compact = compact
         self.testing_link = None
         self.phase = 0
         self.setLayoutDirection(Qt.RightToLeft if current() == 'fa' else Qt.LeftToRight)
@@ -84,7 +96,8 @@ class PathView(QWidget):
         self.timer = QTimer(self)
         self.timer.setInterval(50)
         self.timer.timeout.connect(self._pulse)
-        self.setToolTip(tr('Follow the arrows; 42 ms above a link is its added delay.'))
+        set_help(self, tr('Follow the arrows from you to the Internet; each link shows the delay it adds.'),
+                 tr('42 ms above a link means that hop adds 42 ms.'))
         self.setAccessibleName(tr('Ordered path'))
 
     def _pulse(self):
@@ -96,10 +109,17 @@ class PathView(QWidget):
         self.timer.start() if link else self.timer.stop()
         self.update()
 
-    def node_rects(self):
+    def _grid(self, width):
         count = len(self.profiles) + 2
-        columns = max(2, min(count, int((self.width() - 24 + 72) / 170)))
-        chip = min(116., (self.width() - 24 - (columns - 1) * 72) / columns)
+        # The compact preview packs its nodes closer so a path of up to four
+        # hops still fits one row at the editor's default width.
+        gap_min, pitch = (40., 127) if self.compact else (72., 170)
+        columns = max(2, min(count, int((width - 24 + gap_min) / pitch)))
+        chip = min(116., (width - 24 - (columns - 1) * gap_min) / columns)
+        return count, columns, chip
+
+    def node_rects(self):
+        count, columns, chip = self._grid(self.width())
         gap = (self.width() - 24 - columns * chip) / max(1, columns - 1)
         rects = []
         for index in range(count):
@@ -117,8 +137,8 @@ class PathView(QWidget):
         return True
 
     def heightForWidth(self, width):
-        columns = max(2, min(len(self.profiles) + 2, int((width + 48) / 170)))
-        return math.ceil((len(self.profiles) + 2) / columns) * 108
+        count, columns, _chip = self._grid(width)
+        return math.ceil(count / columns) * 108
 
     def resizeEvent(self, event):
         self.setMinimumHeight(self.heightForWidth(self.width()))
@@ -239,16 +259,20 @@ class ChainCard(QFrame):
         menu_button.setText('⋯')
         menu_button.setObjectName('IconButton')
         menu_button.setFixedSize(30, 30)
-        menu_button.setToolTip(tr('Manage this chain; duplicate it to try another exit.'))
+        set_help(menu_button, tr('Manage this chain: edit, duplicate or delete it.'),
+                 tr('Duplicate a chain to try another exit.'))
         menu_button.setPopupMode(QToolButton.InstantPopup)
         menu = QMenu(menu_button)
         menu.setToolTipsVisible(True)
         self.edit_button = menu.addAction(tr('Edit'), lambda: self.editRequested.emit(chain.uid))
-        self.edit_button.setToolTip(tr('Change the route; try a different exit for movie night.'))
+        set_help(self.edit_button, tr('Change the servers in this chain or their order.'),
+                 tr('Swap the last server to try a different exit.'))
         self.duplicate_action = menu.addAction(tr('Duplicate'), lambda: self.duplicateRequested.emit(chain.uid))
-        self.duplicate_action.setToolTip(tr('Copy this route; try another exit without losing the original.'))
+        set_help(self.duplicate_action, tr('Make a copy of this chain and keep the original.'),
+                 tr('Copy it, then change only the exit server.'))
         self.delete_button = menu.addAction(tr('Delete'), lambda: self.deleteRequested.emit(chain.uid))
-        self.delete_button.setToolTip(tr('Remove this saved path; your servers stay ready for another adventure.'))
+        set_help(self.delete_button, tr('Remove this saved chain; your servers stay in your list.'),
+                 tr('Delete a chain you no longer use.'))
         menu_button.setMenu(menu)
         header.addWidget(menu_button)
         outer.addLayout(header)
@@ -325,16 +349,19 @@ class ChainCard(QFrame):
         self.time_timer.timeout.connect(lambda: self.tested_time.setText(relative_time(report.get('timestamp'))))
         self.time_timer.start()
         self.expand = QLabel()
-        self.expand.setToolTip(tr('Peek under the hood: see which outbound carries each hop.'))
+        set_help(self.expand, tr('See which outbound carries each hop.'),
+                 tr('chain-1 carries the second server.'))
         self.expand.setTextInteractionFlags(Qt.LinksAccessibleByMouse | Qt.LinksAccessibleByKeyboard)
         self.expand.linkActivated.connect(self._toggle_wiring)
         footer.addWidget(self.expand)
         footer.addStretch()
-        self.test_button = button(tr('Test'), tr('Before a video call, test the path and the country websites see.'),
-                                  self._test)
+        self.test_button = button(tr('Test'), (tr('Check every link and the country websites see as your exit.'),
+                                   tr('Run it before a video call.')), self._test)
         self.connect_button = button(tr('Disconnect') if connected else tr('Connect'),
-            tr('End this connection; time for a pit stop.') if connected else
-            tr('Use this path for your traffic; take the scenic route to your next call.'),
+            (tr('Stop sending your traffic through this chain.'),
+             tr('Disconnect to go back to your normal connection.')) if connected else
+            (tr('Send all your traffic through this chain.'),
+             tr('Connect before opening sites that need the exit country.')),
             self.disconnectRequested.emit if connected else lambda: self._connect(chain, profiles))
         self.connect_button.setObjectName('Primary')
         footer.addWidget(self.test_button)
@@ -356,7 +383,8 @@ class ChainCard(QFrame):
         table.setObjectName('ChainWiringTable')
         table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         table.setSelectionMode(QAbstractItemView.NoSelection)
-        table.setToolTip(tr('Read the route; chain-1 carries the second server.'))
+        set_help(table, tr('One row per hop: its server, its outbound tag and what it dials through.'),
+                 tr('chain-1 carries the second server.'))
         table.verticalHeader().hide()
         wiring_rtl = current() == 'fa'
         table.setLayoutDirection(Qt.RightToLeft if wiring_rtl else Qt.LeftToRight)
@@ -421,8 +449,11 @@ class ChainCard(QFrame):
         self.testing_caption.setText(tr('Testing link {n} of {total}…', n=local_number(link),
                                         total=local_number(total or len(self.chain.hops) + 1)))
         self.test_button.setText(tr('Cancel test') if active else tr('Test'))
-        self.test_button.setToolTip(tr('Stop this test; save the bandwidth for your call.') if active else
-                                    tr('Before a video call, test the path and the country websites see.'))
+        set_help(self.test_button,
+                 *((tr('Stop the test that is running.'),
+                    tr('Cancel it if you need the bandwidth for a call.')) if active else
+                   (tr('Check every link and the country websites see as your exit.'),
+                    tr('Run it before a video call.'))))
         self._update_status()
 
     def _connect(self, chain, profiles):
@@ -448,14 +479,16 @@ class ChainsPage(QWidget):
         top = QHBoxLayout()
         intro = label(tr('Choose the route. Verify the exit.'), True)
         top.addWidget(intro, 1)
-        self.add_button = button(tr('New chain'), tr('Build a path with two to eight servers; give your relay a travel buddy.'), self.addRequested.emit)
+        self.add_button = button(tr('New chain'), _new_chain_help(), self.addRequested.emit)
         self.add_button.setObjectName('Primary')
         top.addWidget(self.add_button)
         outer.addLayout(top)
         self.progress = label('')
         self.progress.hide()
         outer.addWidget(self.progress)
-        self.cancel_button = button(tr('Cancel test'), tr('Stop this test; save the bandwidth for your call.'), self.cancelRequested.emit)
+        self.cancel_button = button(tr('Cancel test'), (tr('Stop the test that is running.'),
+                                                 tr('Cancel it if you need the bandwidth for a call.')),
+                                 self.cancelRequested.emit)
         self.cancel_button.hide()
         outer.addWidget(self.cancel_button, 0, Qt.AlignLeading)
         area = QScrollArea()
@@ -485,7 +518,7 @@ class ChainsPage(QWidget):
             title.setObjectName('H1')
             content.addWidget(title)
             content.addWidget(label(tr('Connect through a relay inside the country, then a server abroad. Test the path to check where your traffic exits.'), True))
-            content.addWidget(button(tr('New chain'), tr('Build a path with two to eight servers; give your relay a travel buddy.'), self.addRequested.emit), 0, Qt.AlignLeading)
+            content.addWidget(button(tr('New chain'), _new_chain_help(), self.addRequested.emit), 0, Qt.AlignLeading)
             self.rows.addWidget(empty)
         self.add_button.setVisible(bool(items))
         for chain in items:
@@ -538,15 +571,17 @@ class ChainEditor(QDialog):
         outer.addLayout(self.preview_host)
         outer.addWidget(label(tr('Name')))
         self.name = QLineEdit(self.chain.name)
-        self.name.setToolTip(tr('Name this route so you can find it later; try Evening detour.'))
+        set_help(self.name, tr('A name for this chain so you can spot it in the list.'),
+                 tr('Evening detour.'))
         outer.addWidget(self.name)
         columns = QHBoxLayout()
         self.available, self.path = QListWidget(), QListWidget()
         self.available.setIconSize(QSize(20, 15))
         self.path.setIconSize(QSize(20, 15))
         self.path.setItemDelegate(PathRowDelegate(self.path))
-        self.available.setToolTip(tr('Choose a server to add; start with your trusty relay.'))
-        self.path.setToolTip(tr('Drag servers to reorder them; the last one is your Internet exit.'))
+        set_help(self.available, tr('Servers you can add to the path; double-click one to add it.'),
+                 tr('Start with your relay inside the country.'))
+        set_help(self.path, *_path_help())
         self.path.setDragDropMode(QAbstractItemView.InternalMove)
         for title, widget in ((tr('Available servers'), self.available), (tr('Ordered path'), self.path)):
             col = QVBoxLayout()
@@ -560,10 +595,14 @@ class ChainEditor(QDialog):
             self.path.addItem(self._item(uid))
         actions = FlowLayout()
         for text, tip, slot in [
-            (tr('Add'), tr('Add the selected server; one more stop on the journey.'), self.add_hop),
-            (tr('Remove'), tr('Remove the selected hop; shorten your detour.'), self.remove_hop),
-            (tr('Move up'), tr('Move this server toward you; make it the first stop.'), lambda: self.move(-1)),
-            (tr('Move down'), tr('Move this server toward the Internet; choose your final stop.'), lambda: self.move(1)),
+            (tr('Add'), (tr('Add the selected server to the end of the path.'),
+                         tr('Select a server in Available servers and press Add.')), self.add_hop),
+            (tr('Remove'), (tr('Remove the selected hop from the path.'),
+                            tr('Drop a hop that slows things down.')), self.remove_hop),
+            (tr('Move up'), (tr('Move the selected hop one place toward you.'),
+                             tr('Put your relay inside the country first.')), lambda: self.move(-1)),
+            (tr('Move down'), (tr('Move the selected hop one place toward the Internet.'),
+                               tr('Put the foreign server last: it is your exit.')), lambda: self.move(1)),
         ]:
             actions.addWidget(button(text, tip, slot))
         outer.addLayout(actions)
@@ -572,8 +611,10 @@ class ChainEditor(QDialog):
         bottom = QHBoxLayout()
         bottom.addWidget(self.validation, 1)
         bottom.addStretch()
-        bottom.addWidget(button(tr('Cancel'), tr('Leave without saving; your old route is safe.'), self.reject))
-        self.save_button = button(tr('Save'), tr('Keep this route for later; your next detour is one click away.'), self.accept)
+        bottom.addWidget(button(tr('Cancel'), (tr('Close without saving; the saved chain stays as it was.'),
+                                               tr('Changed your mind? Cancel.')), self.reject))
+        self.save_button = button(tr('Save'), (tr('Save this chain to your list.'),
+                                               tr('Save it, then press Test on its card.')), self.accept)
         self.save_button.setObjectName('Primary')
         bottom.addWidget(self.save_button)
         outer.addLayout(bottom)
@@ -636,13 +677,13 @@ class ChainEditor(QDialog):
                 individual.append(tr('This server appears twice.'))
             if individual:
                 item.setText(item.text() + '\n' + '\n'.join(individual))
-            item.setToolTip('\n'.join(individual) or tr('Drag servers to reorder them; the last one is your Internet exit.'))
+            item.setToolTip('\n'.join(individual) or help_html(*_path_help()))
             row = QWidget()
             row.setStyleSheet('background:transparent;')
             box = QHBoxLayout(row)
             box.setContentsMargins(4, 4, 4, 4)
             handle = label('⠿', True)
-            handle.setToolTip(tr('Drag servers to reorder them; the last one is your Internet exit.'))
+            set_help(handle, *_path_help())
             handle.setAttribute(Qt.WA_TransparentForMouseEvents)
             box.addWidget(handle)
             text_box = QVBoxLayout()
@@ -655,7 +696,8 @@ class ChainEditor(QDialog):
                 error.setAttribute(Qt.WA_TransparentForMouseEvents)
                 text_box.addWidget(error)
             box.addLayout(text_box, 1)
-            remove = button('×', tr('Remove the selected hop; shorten your detour.'),
+            remove = button('×', (tr('Remove this hop from the path.'),
+                                  tr('Drop the middle hop to shorten the path.')),
                             lambda checked=False, item=item: self.remove_at(self.path.row(item)))
             remove.setFixedWidth(36)
             box.addWidget(remove)

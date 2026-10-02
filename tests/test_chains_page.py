@@ -1,3 +1,4 @@
+import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QLabel
 
@@ -82,3 +83,29 @@ def test_main_window_connects_resolved_chain(monkeypatch, tmp_path):
     finally:
         window.close()
         app.processEvents()
+
+
+def _preview_rows(lang, hop_count):
+    i18n.set_language(lang)
+    app = QApplication.instance() or QApplication([])
+    items = [Profile(uid=f'h{i}', name=f'Hop {i}', protocol='vless', address='example.org',
+                     id='11111111-1111-1111-1111-111111111111') for i in range(hop_count)]
+    editor = ChainEditor(items, {}, chains.Chain(name='Route', hops=[p.uid for p in items]))
+    editor.show()
+    app.processEvents()
+    view = editor.preview_host.itemAt(0).widget()
+    rects = view.node_rects()
+    editor.close()
+    return {round(rect.top()) for rect in rects}, min(rect.width() for rect in rects), view.height()
+
+
+@pytest.mark.parametrize('lang', ['en', 'fa'])
+@pytest.mark.parametrize('hop_count', [3, 4])
+def test_editor_preview_stays_on_one_row(lang, hop_count):
+    try:
+        rows, chip, height = _preview_rows(lang, hop_count)
+    finally:
+        i18n.set_language('en')
+    assert len(rows) == 1
+    assert chip >= 70
+    assert height <= 120

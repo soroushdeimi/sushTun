@@ -72,8 +72,12 @@ class SpotlightTour(QWidget):
         self.text_label = QLabel()
         self.text_label.setStyleSheet(f"color:{TEXT}; font-size:13px;")
         self.text_label.setWordWrap(True)
-        for label in (self.counter_label, self.title_label, self.text_label):
+        for label in (self.title_label, self.text_label):
             label.setAlignment(Qt.AlignLeading | Qt.AlignTop)
+        # The counter's text starts with a left-to-right mark, which made a
+        # leading alignment resolve to the left in Persian.
+        self.counter_label.setAlignment(
+            Qt.AlignAbsolute | (Qt.AlignRight if rtl else Qt.AlignLeft) | Qt.AlignTop)
         lay.addWidget(self.counter_label)
         lay.addWidget(self.title_label)
         lay.addWidget(self.text_label)
@@ -152,13 +156,18 @@ class SpotlightTour(QWidget):
             self.title_label.setText(step.title)
             self.text_label.setText(step.text)
             last = self.is_last()
-            self.next_button.setText(tr("Done") if last else tr("Next"))
+            self.next_button.setText(self._finish_text() if last else tr("Next"))
             self.back_button.setVisible(self._index > 0)
             self.skip_button.setVisible(not last)
             self._layout_step()
             QTimer.singleShot(0, self._relayout)
         except Exception:
             self._finish()
+
+    @staticmethod
+    def _finish_text() -> str:
+        # English keeps the shared "Done"; only Persian has a tour-specific word.
+        return tr("Finish tour") if current() == "fa" else tr("Done")
 
     def _finish(self) -> None:
         if self._done:
@@ -294,9 +303,11 @@ class SpotlightTour(QWidget):
 
     def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
         key = event.key()
-        if key in (Qt.Key_Right, Qt.Key_Return, Qt.Key_Enter):
+        forward, backward = ((Qt.Key_Left, Qt.Key_Right) if current() == "fa"
+                             else (Qt.Key_Right, Qt.Key_Left))
+        if key in (forward, Qt.Key_Return, Qt.Key_Enter):
             self.next()
-        elif key == Qt.Key_Left:
+        elif key == backward:
             self.back()
         elif key == Qt.Key_Escape:
             self.skip()

@@ -18,7 +18,7 @@ from PySide6.QtWidgets import QApplication, QPushButton  # noqa: E402
 
 from xrayui import paths  # noqa: E402
 from xrayui.core import settings as app_settings  # noqa: E402
-from xrayui.i18n import set_language  # noqa: E402
+from xrayui.i18n import set_language, tr  # noqa: E402
 from xrayui.ui import main_window as mw  # noqa: E402
 from xrayui.ui import tour as tour_mod  # noqa: E402
 from xrayui.ui.settings_window import SettingsWindow  # noqa: E402
@@ -299,3 +299,68 @@ def test_server_list_step_lights_the_toolbar_and_the_list(win):
     for w in (win.servers_page.core.btn_import, win.servers_page.core.btn_test,
               win.servers_page.frame):
         assert cut.contains(QRect(w.mapTo(win, QPoint(0, 0)), w.size()))
+
+
+@pytest.fixture
+def fa_win(qapp, tmp_path, monkeypatch):
+    monkeypatch.setattr(paths, "base_dir", lambda: tmp_path)
+    monkeypatch.setattr(paths, "state_dir", lambda: tmp_path / "state")
+    monkeypatch.setattr(paths, "profiles_dir", lambda: tmp_path / "profiles")
+    paths.ensure_dirs()
+    set_language("fa")
+    window = mw.MainWindow(elevated=True)
+    window.show()
+    qapp.processEvents()
+    yield window
+    window.close()
+
+
+def test_arrow_keys_mirror_in_persian(fa_win):
+    tour = _tour(fa_win)
+    QTest.keyClick(tour, Qt.Key_Left)
+    assert tour.index() == 1
+    QTest.keyClick(tour, Qt.Key_Right)
+    assert tour.index() == 0
+    QTest.keyClick(tour, Qt.Key_Left)
+    QTest.keyClick(tour, Qt.Key_Return)
+    assert tour.index() == 2
+    QTest.keyClick(tour, Qt.Key_Escape)
+    assert not tour.isVisible()
+
+
+def test_arrow_keys_keep_their_direction_in_english(win):
+    tour = _tour(win)
+    QTest.keyClick(tour, Qt.Key_Right)
+    assert tour.index() == 1
+    QTest.keyClick(tour, Qt.Key_Left)
+    assert tour.index() == 0
+
+
+def _ink_span(label):
+    image = label.grab().toImage()
+    xs = [x for x in range(image.width()) for y in range(image.height())
+          if image.pixelColor(x, y) != image.pixelColor(0, 0)]
+    return min(xs), max(xs), image.width()
+
+
+def test_counter_sits_on_the_reading_start_side_in_persian(fa_win, qapp):
+    tour = _tour(fa_win)
+    tour.go_to(3)
+    qapp.processEvents()
+    first, _last, width = _ink_span(tour.counter_label)
+    assert first > width / 2
+
+
+def test_counter_sits_on_the_reading_start_side_in_english(win, qapp):
+    tour = _tour(win)
+    tour.go_to(3)
+    qapp.processEvents()
+    _first, last, width = _ink_span(tour.counter_label)
+    assert last < width / 2
+
+
+def test_last_button_reads_finish_in_persian(fa_win, qapp):
+    tour = _tour(fa_win)
+    tour.go_to(tour.step_count() - 1)
+    assert tour.next_button.text() == "تمام"
+    assert tour.next_button.text() != tr("Done")
