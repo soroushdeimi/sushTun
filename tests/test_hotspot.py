@@ -557,3 +557,74 @@ def test_failed_windows_apply_keeps_the_edit_pending(monkeypatch, tmp_path):
     monkeypatch.setattr(connection.hotspot, "configure_tethering", lambda *a, **k: False)
     conn._configure_windows_hotspot(app_settings.load()["gateway"])
     assert app_settings.load()["gateway"]["apply_on_windows"] is True
+
+
+# -- Windows: the switch and the hotspot must agree --------------------------
+# sushTun switches the Windows Mobile Hotspot on itself when it is off, then
+# points sharing at the tunnel. When that second step failed, the switch went
+# back to "off" while the hotspot it had just started stayed on -- handing its
+# devices the plain, untunneled connection.
+def _win_gateway(monkeypatch, tmp_path, tethering="Off", share_fails=False):
+    from xrayui import paths
+    from xrayui.core import connection
+    monkeypatch.setattr(paths, "base_dir", lambda: tmp_path)
+    monkeypatch.setattr(paths, "state_dir", lambda: tmp_path)
+    monkeypatch.setattr(connection, "IS_WIN", True)
+    calls = []
+    monkeypatch.setattr(connection.hotspot, "tethering_state", lambda: tethering)
+    monkeypatch.setattr(connection.hotspot, "start_tethering", lambda: calls.append("start") or True)
+    monkeypatch.setattr(connection.hotspot, "stop_tethering", lambda: calls.append("stop") or True)
+    monkeypatch.setattr(connection.hotspot, "wait_for_hotspot_adapter",
+                        lambda timeout=15.0: "Local Area Connection* 3")
+    monkeypatch.setattr(connection.hotspot, "disable", lambda: calls.append("disable"))
+
+    def share(public_name="xray0", private_name=None):
+        if share_fails:
+            raise RuntimeError("Windows did not accept 'xray0' as the shared connection")
+        calls.append("share")
+
+    monkeypatch.setattr(connection.hotspot, "enable", share)
+    return connection.Connection(), calls
+
+
+def test_a_hotspot_sushtun_started_is_switched_off_when_sharing_fails(monkeypatch, tmp_path):
+    conn, calls = _win_gateway(monkeypatch, tmp_path, share_fails=True)
+    with pytest.raises(RuntimeError, match="shared connection"):
+        conn._start_gateway({})
+    assert calls == ["start", "stop"]
+
+
+def test_a_hotspot_the_user_started_is_left_on_when_sharing_fails(monkeypatch, tmp_path):
+    conn, calls = _win_gateway(monkeypatch, tmp_path, tethering="On", share_fails=True)
+    with pytest.raises(RuntimeError):
+        conn._start_gateway({})
+    assert "stop" not in calls
+
+
+def test_switching_sharing_off_also_stops_the_hotspot_sushtun_started(monkeypatch, tmp_path):
+    conn, calls = _win_gateway(monkeypatch, tmp_path)
+    conn._start_gateway({})
+    conn.stop_gateway()
+    assert calls == ["start", "share", "disable", "stop"]
+
+
+def test_switching_sharing_off_leaves_the_users_own_hotspot_on(monkeypatch, tmp_path):
+    conn, calls = _win_gateway(monkeypatch, tmp_path, tethering="On")
+    conn._start_gateway({})
+    conn.stop_gateway()
+    assert calls == ["share", "disable"]
+
+
+def test_disconnecting_stops_the_hotspot_sushtun_started(monkeypatch, tmp_path):
+    from xrayui import paths
+    from xrayui.core import connection
+    conn, calls = _win_gateway(monkeypatch, tmp_path)
+    monkeypatch.setattr(paths, "runtime_config", lambda: tmp_path / "cfg.json")
+    monkeypatch.setattr(connection.network, "remove_routes", lambda ip=None: None)
+    monkeypatch.setattr(connection.network, "restore_dns", lambda *a, **k: True)
+    monkeypatch.setattr(connection.network, "release_stranded_dns", lambda exclude=None: [])
+    monkeypatch.setattr(connection.bootrestore, "uninstall", lambda: None)
+    conn._start_gateway({})
+    conn.xray.stop = lambda: calls.append("xray")
+    conn._restore()
+    assert calls.index("stop") < calls.index("xray")
