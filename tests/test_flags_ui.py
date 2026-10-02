@@ -224,3 +224,26 @@ def test_mode_is_passed_from_settings(window, monkeypatch):
     window._start_test([p.uid], True)
     _pump(lambda: window._test_cancel is None)
     assert seen["mode"] == "cold"
+
+
+def test_flag_emoji_is_the_pair_of_regional_indicators(qapp):
+    assert flags.flag_emoji("de") == "\U0001F1E9\U0001F1EA"
+    assert flags.flag_emoji("JP") == "\U0001F1EF\U0001F1F5"
+    assert flags.flag_emoji("zz") == ""      # not a country the app names
+    assert flags.flag_emoji(None) == ""
+
+
+def test_a_flag_pixmap_is_drawn_without_an_emoji_font_too(qapp, monkeypatch):
+    monkeypatch.setattr(flags, "_emoji_family", lambda: "")
+    assert flags._fit_emoji_font("\U0001F1E9\U0001F1EA", 20, 15) is None
+
+    pix = flags.flag_pixmap("de")  # the Windows path: the bundled SVG
+    assert pix is not None and not pix.isNull()
+
+
+def test_the_emoji_path_draws_a_flag_when_the_system_has_one(qapp):
+    if not flags._emoji_family():
+        pytest.skip("this system has no colour emoji font")
+    pix = flags.flag_pixmap("de", 20, 15)
+    assert pix is not None and not pix.isNull()
+
