@@ -12,8 +12,10 @@ from PySide6.QtCore import QAbstractTableModel, QModelIndex, QSortFilterProxyMod
 from PySide6.QtGui import QColor, QPixmap
 from PySide6.QtWidgets import QApplication, QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
 
+from ..core import geo_exit
 from ..core.profiles import Profile
-from ..i18n import ltr, tr
+from ..i18n import current, ltr, tr
+from .flags import flag_icon
 from .theme import ERR, MUTED, OK, WARN
 
 COLUMNS = ["", "Name", "Delay", "Transport", "Subscription", "Type"]
@@ -24,6 +26,8 @@ OPTIONAL_COLUMNS = ((COL_TRANSPORT, "Transport"), (COL_SUB, "Subscription"), (CO
 # Thresholds match v2rayN's rough real-delay bands.
 _OK_MS = 300
 _WARN_MS = 800
+
+_EXIT_KEYS = ("country", "exit_ip")
 
 _ROOT = QModelIndex()  # a fresh QModelIndex() per call is a ruff B008 default-arg smell
 
@@ -83,10 +87,28 @@ class ProfileTableModel(QAbstractTableModel):
     def update_result(
         self, uid: str, delay_ms: float | None, error: str | None, skipped: bool = False,
     ) -> None:
-        self._results[uid] = {"delay_ms": delay_ms, "error": error, "skipped": skipped}
+        entry = {"delay_ms": delay_ms, "error": error, "skipped": skipped}
+        # The exit is a property of the server, not of one measurement: a
+        # failed or skipped run must not wipe what an earlier one learned.
+        for key in _EXIT_KEYS:
+            if key in self._results.get(uid, {}):
+                entry[key] = self._results[uid][key]
+        self._results[uid] = entry
+        self._row_changed(uid)
+
+    def update_detail(self, uid: str, fields: dict) -> None:
+        entry = dict(self._results.get(uid, {}))
+        entry.update(fields)
+        self._results[uid] = entry
+        self._row_changed(uid)
+
+    def _row_changed(self, uid: str) -> None:
         row = self.row_of_uid(uid)
         if row is not None:
             self.dataChanged.emit(self.index(row, 0), self.index(row, len(COLUMNS) - 1))
+
+    def country_of(self, uid: str) -> str | None:
+        return geo_exit.normalize((self._results.get(uid) or {}).get("country"))
 
     # -- lookups ---------------------------------------------------------
     def profile_at(self, row: int) -> Profile | None:
@@ -111,6 +133,16 @@ class ProfileTableModel(QAbstractTableModel):
             if v is not None and v < best:
                 best, best_uid = v, p.uid
         return best_uid
+
+    def _exit_tooltip(self, result: dict) -> str:
+        code = geo_exit.normalize(result.get("country"))
+        if not code:
+            return tr("Press Test to find out where this server exits")
+        country = geo_exit.country_name(code, current())
+        ip = result.get("exit_ip")
+        if ip:
+            return tr("Exits in {country} · {ip}", country=country, ip=ip)
+        return tr("Exits in {country}", country=country)
 
     # -- Qt model interface ------------------------------------------------
     def rowCount(self, parent=_ROOT) -> int:
@@ -159,8 +191,19 @@ class ProfileTableModel(QAbstractTableModel):
                 return tr("Failed") if result.get("error") else "—"
             return None
 
+        if role == Qt.DecorationRole and col == COL_NAME:
+            return flag_icon(result.get("country"))
+
+        if role == Qt.ToolTipRole and col == COL_NAME:
+            return self._exit_tooltip(result)
+
         if role == Qt.ToolTipRole and col == COL_DELAY:
-            return result.get("error") or None
+            if result.get("error"):
+                return result["error"]
+            cold = result.get("cold_ms")
+            if cold is not None and result.get("delay_ms") is not None:
+                return tr("First connection: {time}", time=ltr(f"{round(cold)} ms"))
+            return None
 
         if role == Qt.ForegroundRole and col == COL_DELAY:
             if result.get("skipped"):

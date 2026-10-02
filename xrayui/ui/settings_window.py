@@ -202,6 +202,18 @@ class _GeneralPage(QWidget):
         self.ping_target.setLayoutDirection(Qt.LeftToRight)
         group.add_row(tr("Ping target"), self.ping_target)
 
+        self.delay_mode = QComboBox()
+        self.delay_mode.addItem(tr("Round trip (like v2rayN)"), "warm")
+        self.delay_mode.addItem(tr("First connection"), "cold")
+        mode = (self._settings.get("speedtest") or {}).get("mode", "warm")
+        self.delay_mode.setCurrentIndex(max(0, self.delay_mode.findData(mode)))
+        self.delay_mode.setToolTip(tr(
+            "Round trip times a second request on the connection the first one "
+            "opened, which is what v2rayN shows. First connection includes the "
+            "time to set the connection up, so the numbers are higher."
+        ))
+        group.add_row(tr("Delay test"), self.delay_mode)
+
         self.sample_seconds = QSpinBox()
         self.sample_seconds.setRange(1, 60)
         self.sample_seconds.setValue(int(self._settings.get("sample_seconds", 5)))
@@ -275,6 +287,8 @@ class _GeneralPage(QWidget):
             "tun_mtu": self.tun_mtu.value(),
             "log_level": self.log_level.currentText(),
             "updates": {"check": self.check_updates.isChecked()},
+            "speedtest": {**(self._settings.get("speedtest") or {}),
+                          "mode": self.delay_mode.currentData()},
         }
 
     def apply_to(self, target: dict) -> None:
@@ -1569,6 +1583,7 @@ class SettingsWindow(QDialog):
             "sample_seconds": self._pages["general"].sample_seconds.value(),
             "tun_mtu": self._pages["general"].tun_mtu.value(),
             "log_level": self._pages["general"].log_level.currentText(),
+            "speedtest": self._pages["general"].collect()["speedtest"],
             "language": self._pages["language"].language.currentData() or "en",
             "geo": self._pages["geo-data"].collect(),
             "core": core_cfg,

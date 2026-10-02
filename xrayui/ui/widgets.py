@@ -4,7 +4,7 @@ from __future__ import annotations
 import html
 from collections.abc import Callable
 
-from PySide6.QtCore import QItemSelection, QItemSelectionModel, Qt, Signal
+from PySide6.QtCore import QItemSelection, QItemSelectionModel, QSize, Qt, Signal
 from PySide6.QtGui import QFont, QTextCursor
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 from ..core import share as share_mod
 from ..core.profiles import Profile
 from ..i18n import ltr, tr
+from .flags import FLAG_H, FLAG_W
 from .server_table import (
     COL_ACTIVE,
     COL_DELAY,
@@ -188,6 +189,7 @@ class _ServerTableCore(QWidget):
         self.table.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.table.verticalHeader().setVisible(False)
         self.table.setTextElideMode(Qt.ElideRight)
+        self.table.setIconSize(QSize(FLAG_W, FLAG_H))
 
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(COL_NAME, QHeaderView.Stretch)
@@ -302,6 +304,9 @@ class _ServerTableCore(QWidget):
         self, uid: str, delay_ms: float | None, error: str | None, skipped: bool = False,
     ) -> None:
         self.model.update_result(uid, delay_ms, error, skipped)
+
+    def update_detail(self, uid: str, fields: dict) -> None:
+        self.model.update_detail(uid, fields)
 
     def set_testing(self, active: bool) -> None:
         self._testing = active

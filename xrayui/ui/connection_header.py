@@ -27,12 +27,15 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..i18n import ltr, tr
+from ..core import geo_exit
+from ..i18n import current, ltr, tr
+from .flags import flag_pixmap
 from .icons import icon
 from .mac import IconButton
 from .theme import MUTED, OK
 
 _NARROW_THRESHOLD = 640
+_META_ORDER = ("country", "relay", "protocol", "delay", "iface")
 
 
 class ConnectionHeader(QFrame):
@@ -98,13 +101,22 @@ class ConnectionHeader(QFrame):
         self._row2 = QHBoxLayout()
         self._row2.setSpacing(16)
 
+        # The exit country's flag leads the meta line; hidden until known.
+        self._flag = QLabel()
+        self._flag.setFixedSize(20, 15)
+        self._flag.setVisible(False)
+        lead = QHBoxLayout()
+        lead.setSpacing(8)
+        lead.addWidget(self._flag, 0, Qt.AlignVCenter)
+
         # Empty until something is known; a lone "—" read as a stray mark.
         self._meta = QLabel("")
         self._meta.setObjectName("Muted")
         # Ignored lets the meta shrink below its full text so it never forces
         # the header wide; _elide_meta keeps it readable and truthful instead.
         self._meta.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
-        self._row2.addWidget(self._meta, 1)
+        lead.addWidget(self._meta, 1)
+        self._row2.addLayout(lead, 1)
 
         self._stats_box = QWidget(self)
         self._stats_box.setObjectName("HeaderStats")
@@ -221,13 +233,25 @@ class ConnectionHeader(QFrame):
 
     def _set_meta(self, slot: str, text: str) -> None:
         if text:
-            self._meta_parts[slot] = ltr(text)
+            # The country is a word in the UI language: isolating it as LTR
+            # would pin the whole line to the left edge in Persian, away from
+            # the flag that leads it.
+            self._meta_parts[slot] = text if slot == "country" else ltr(text)
         else:
             self._meta_parts.pop(slot, None)
-        self._meta_full = (
-            " · ".join(self._meta_parts.values()) if self._meta_parts else ""
-        )
+        ordered = sorted(self._meta_parts, key=lambda k: _META_ORDER.index(k)
+                         if k in _META_ORDER else len(_META_ORDER))
+        self._meta_full = " · ".join(self._meta_parts[k] for k in ordered)
         self._elide_meta()
+
+    def set_exit(self, code: str | None) -> None:
+        """The country traffic leaves from: its flag and name lead the meta."""
+        code = geo_exit.normalize(code)
+        pix = flag_pixmap(code)
+        self._flag.setVisible(pix is not None)
+        if pix is not None:
+            self._flag.setPixmap(pix)
+        self._set_meta("country", geo_exit.country_name(code, current()) if pix else "")
 
     def set_timer(self, text: str) -> None:
         self._timer_pill.setText(text)

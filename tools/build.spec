@@ -34,6 +34,13 @@ if _fonts.is_dir():
     for _font in sorted(_fonts.glob("*.ttf")):
         datas.append((str(_font), "assets/fonts"))
 
+# Exit-country flags and their names, looked up by country code at runtime.
+_flags = ROOT / "assets" / "flags"
+if _flags.is_dir():
+    for _pattern in ("*.svg", "*.json", "LICENSE-*"):
+        for _flag in sorted(_flags.glob(_pattern)):
+            datas.append((str(_flag), "assets/flags"))
+
 ico = ROOT / "assets" / "icon.ico"
 exe_icon = str(ico) if ico.exists() else None
 # Written into the .app's Info.plist, so Finder and "About" show the real
