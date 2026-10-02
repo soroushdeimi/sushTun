@@ -179,9 +179,16 @@ jobs:
       - name: Write SHA256SUMS
         working-directory: artifacts
         run: sha256sum * > SHA256SUMS
+      # Written for people in CHANGELOG.md, English then Persian; a tag with no
+      # section fails here rather than shipping a bare GitHub compare link.
+      - uses: actions/checkout@v4
+        with:
+          path: source
+      - name: Write release notes
+        run: python3 source/scripts/release_notes.py "${GITHUB_REF_NAME#v}" > release_notes.md
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           files: artifacts/*
-          generate_release_notes: true
+          body_path: release_notes.md
           fail_on_unmatched_files: true

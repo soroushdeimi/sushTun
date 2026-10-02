@@ -143,10 +143,18 @@ def test_an_installed_windows_build_installs_the_setup_exe(monkeypatch):
     assert updates.installed_windows() and not updates.installed_deb()
 
 
-def test_the_deb_is_left_to_dpkg(monkeypatch):
+def test_the_deb_installs_its_own_package(monkeypatch):
     _build(monkeypatch, "linux", installed=True)
-    assert updates.asset_for_this_build(_release()) is None
+    deb = {"sushtun_0.5.0_amd64.deb": "https://x/deb"}
+    with_deb = updates.Release(tag="v0.5.0", url="https://x", assets=deb)
     assert updates.installed_deb()
+    assert updates.asset_for_this_build(with_deb) == "sushtun_0.5.0_amd64.deb"
+    assert updates.asset_for_this_build(_release()) is None  # release without the .deb
+
+
+def test_the_macos_app_is_still_sent_to_the_release_page(monkeypatch):
+    _build(monkeypatch, "darwin", installed=True)
+    assert updates.asset_for_this_build(_release()) is None
 
 
 def test_a_source_checkout_never_installs_a_binary(monkeypatch):
@@ -332,3 +340,64 @@ def test_clean_previous_removes_last_updates_leftovers(monkeypatch, tmp_path):
     updates.clean_previous()
 
     assert not aside.exists() and not staging.exists()
+
+
+# -- installing the .deb ----------------------------------------------------
+
+class _Proc:
+    def __init__(self, code=0, err=""):
+        self.returncode, self.stderr, self.stdout = code, err, ""
+
+
+def _fake_run(monkeypatch, results):
+    calls = []
+
+    def run(args, **kw):
+        calls.append((args, kw))
+        return results[len(calls) - 1]
+
+    monkeypatch.setattr(updates.proc, "run", run)
+    monkeypatch.setattr(updates, "installed_windows", lambda: False)
+    monkeypatch.setattr(updates, "installed_deb", lambda: True)
+    return calls
+
+
+def test_the_deb_is_installed_through_dpkg(monkeypatch, tmp_path):
+    calls = _fake_run(monkeypatch, [_Proc()])
+    pkg = tmp_path / "sushtun_1_amd64.deb"
+    pkg.write_bytes(b"x")
+    updates.install(pkg)
+    assert [c[0] for c in calls] == [["dpkg", "-i", str(pkg)]]
+    assert calls[0][1].get("timeout", 0) >= 120
+
+
+def test_a_failed_dpkg_is_retried_once_after_apt_repairs_dependencies(monkeypatch, tmp_path):
+    calls = _fake_run(monkeypatch, [_Proc(1, "dependency problems"), _Proc(0),
+                                    _Proc(0)])
+    pkg = tmp_path / "a.deb"
+    updates.install(pkg)
+    assert [c[0] for c in calls] == [
+        ["dpkg", "-i", str(pkg)], ["apt-get", "install", "-y", "--no-remove", "-f"],
+        ["dpkg", "-i", str(pkg)]]
+    assert "--no-remove" in calls[1][0]
+
+
+def test_the_deb_install_reports_the_last_stderr_line_when_dpkg_still_fails(
+        monkeypatch, tmp_path):
+    calls = _fake_run(monkeypatch, [
+        _Proc(1, "first\n"), _Proc(0),
+        _Proc(1, "noise\ndpkg: error processing archive: broken\n\n")])
+    with pytest.raises(updates.UpdateError, match="error processing archive: broken"):
+        updates.install(tmp_path / "a.deb")
+    assert len(calls) == 3
+
+
+def test_a_missing_dpkg_is_an_update_error(monkeypatch, tmp_path):
+    _fake_run(monkeypatch, [])
+
+    def boom(args, **kw):
+        raise FileNotFoundError("dpkg")
+
+    monkeypatch.setattr(updates.proc, "run", boom)
+    with pytest.raises(updates.UpdateError):
+        updates.install(tmp_path / "a.deb")

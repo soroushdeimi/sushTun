@@ -6,16 +6,17 @@ downloading -> ready to restart. The download runs off the UI thread and can
 be called off at any point; nothing on disk changes until it has arrived
 whole and matched the checksum published with the release.
 
-Builds that cannot replace themselves (a source checkout, the Linux .deb)
+Builds that cannot replace themselves (a source checkout, the macOS .app)
 get the same dialog with the release page as the button instead, so the
 answer to "there is an update" is never just a version number.
 """
 from __future__ import annotations
 
+import re
 import threading
 
 from PySide6.QtCore import Qt, QThreadPool, QUrl, Signal
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtGui import QDesktopServices, QTextCursor
 from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
@@ -26,11 +27,23 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from .. import __version__
-from ..core import desktop
+from .. import __version__, i18n
+from ..core import desktop, release_notes
 from ..core import updates as updates_mod
 from ..i18n import ltr, tr
 from .workers import Worker
+
+# Qt's rich text subset: no blue underline on links, air between bullets.
+_NOTES_CSS = """
+body { line-height: 140%; }
+h1, h2 { font-size: 15pt; margin-top: 14px; margin-bottom: 4px; }
+h3, h4 { font-size: 12pt; margin-top: 12px; margin-bottom: 4px; }
+li { margin-bottom: 6px; }
+p { margin-top: 4px; margin-bottom: 6px; }
+a { text-decoration: none; }
+"""
+
+
 
 
 def _mb(count: int) -> str:
@@ -79,7 +92,7 @@ class UpdateDialog(QDialog):
         # reach the user's browser from this elevated process (core/desktop.py).
         self.notes.setOpenExternalLinks(False)
         self.notes.anchorClicked.connect(lambda link: self._open(link.toString()))
-        self.notes.setMarkdown(self._release.notes or tr("No release notes."))
+        self._show_notes()
         self.notes.setAccessibleName(tr("What's new"))
         layout.addWidget(self.notes, 1)
 
@@ -120,10 +133,43 @@ class UpdateDialog(QDialog):
             self.btn_primary.setText(tr("Open the download page"))
             self.subtitle.setText(self._why_not_automatic())
 
+    def _show_notes(self) -> None:
+        lang = i18n.current()
+        text = release_notes.clean(release_notes.pick_language(self._release.notes, lang))
+        rtl = lang == "fa"
+        self.notes.setLayoutDirection(Qt.RightToLeft if rtl else Qt.LeftToRight)
+        self.notes.document().setDefaultStyleSheet(_NOTES_CSS)
+        if rtl and text:
+            # Markdown lists lay their bullets out left-to-right in Qt whatever
+            # the block direction; plain paragraphs lead with the bullet instead.
+            text = re.sub(r"^[-*+] ", "\n\u2022 ", release_notes.isolate_latin(text),
+                          flags=re.M)
+        self.notes.setMarkdown(text or tr("No release notes."))
+        if rtl:
+            self._right_to_left_blocks()
+        option = self.notes.document().defaultTextOption()
+        option.setTextDirection(Qt.RightToLeft if rtl else Qt.LeftToRight)
+        option.setAlignment(Qt.AlignRight if rtl else Qt.AlignLeft)
+        self.notes.document().setDefaultTextOption(option)
+
+    def _right_to_left_blocks(self) -> None:
+        """Bullets sit on the side the block's own direction says, and Qt
+        takes that from the first strong character -- a Latin word first would
+        put the bullet mid-line."""
+        doc = self.notes.document()
+        cursor = QTextCursor(doc)
+        cursor.beginEditBlock()
+        block = doc.begin()
+        while block.isValid():
+            cursor.setPosition(block.position())
+            fmt = block.blockFormat()
+            fmt.setLayoutDirection(Qt.RightToLeft)
+            fmt.setAlignment(Qt.AlignRight)
+            cursor.setBlockFormat(fmt)
+            block = block.next()
+        cursor.endEditBlock()
+
     def _why_not_automatic(self) -> str:
-        if updates_mod.installed_deb():
-            return tr("You installed sushTun from a .deb package — update it with "
-                      "apt so the package stays consistent.")
         return tr("This copy can't update itself. Download {version} and replace "
                   "it by hand.", version=ltr(self._release.version))
 

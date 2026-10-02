@@ -10,10 +10,9 @@ What "install" means depends on how this copy was installed:
 
   portable (Windows, Linux, macOS)  replace the executable in place, relaunch
   installed (Windows)               run the downloaded Inno Setup installer
-  installed (Linux, the .deb)       nothing -- dpkg owns /opt/sushtun, and
-                                    overwriting files inside an installed
-                                    package leaves it inconsistent, so those
-                                    builds are pointed at the release page
+  installed (Linux, the .deb)       dpkg -i the downloaded package, so the
+                                    package database stays truthful
+  installed (macOS, the .app)       nothing -- see installed_macos_app
 
 A note on trust: the checksum comes from the same release as the download, so
 it catches a truncated, corrupted or mirror-mangled file, not a GitHub account
@@ -54,6 +53,7 @@ CHECKSUMS = "SHA256SUMS"
 PORTABLE_ASSETS = {"win32": "sushTun-windows.exe", "darwin": "sushTun-macos"}
 PORTABLE_LINUX = "sushTun-linux"
 SETUP_ASSET = "sushTun-Setup-{version}.exe"
+DEB_ASSET = "sushtun_{version}_amd64.deb"
 
 # A download that came up this short is an error page, not a build.
 _MIN_SIZE = 2 * 1024 * 1024
@@ -138,8 +138,8 @@ def installed_windows() -> bool:
 
 
 def installed_deb() -> bool:
-    """The Linux .deb. dpkg owns those files; replacing them behind its back
-    leaves the package database describing a version that is no longer there."""
+    """The Linux .deb. dpkg owns those files, so it is updated by running dpkg
+    on the new package rather than by replacing the executable."""
     return not IS_WIN and not IS_MAC and paths.installed()
 
 
@@ -156,10 +156,14 @@ def asset_for_this_build(release: Release) -> str | None:
     install anything itself and the user has to be sent to the release page."""
     if not getattr(sys, "frozen", False):
         return None  # a source checkout updates with git, not with a binary
-    if installed_deb() or installed_macos_app():
+    if installed_macos_app():
         return None
-    name = (SETUP_ASSET.format(version=release.version) if installed_windows()
-            else PORTABLE_ASSETS.get(sys.platform, PORTABLE_LINUX))
+    if installed_windows():
+        name = SETUP_ASSET.format(version=release.version)
+    elif installed_deb():
+        name = DEB_ASSET.format(version=release.version)
+    else:
+        name = PORTABLE_ASSETS.get(sys.platform, PORTABLE_LINUX)
     return name if name in release.assets else None
 
 
@@ -236,9 +240,9 @@ def _staging_dir() -> Path:
 
     Next to the executable when we mean to replace it, because os.replace
     cannot move a file across volumes and %TEMP% is very often a different
-    one. The installer path does not care, so it uses the system temp
-    directory and leaves the install directory alone."""
-    if installed_windows():
+    one. The installer paths do not care, so they use the system temp
+    directory and leave the install directory alone (dpkg owns it)."""
+    if installed_windows() or installed_deb():
         return Path(tempfile.mkdtemp(prefix="sushtun-update-"))
     staging = paths.base_dir() / "update.tmp"
     shutil.rmtree(staging, ignore_errors=True)
@@ -293,8 +297,43 @@ def install(downloaded: Path) -> None:
     renamed aside by the time this returns."""
     if installed_windows():
         _run_installer(downloaded)
+    elif installed_deb():
+        _install_deb(downloaded)
     else:
         _replace_executable(downloaded)
+
+
+_DPKG_TIMEOUT = 300
+
+
+def _last_line(proc_result) -> str:
+    lines = [ln.strip() for ln in (proc_result.stderr or "").splitlines() if ln.strip()]
+    return lines[-1] if lines else f"exit status {proc_result.returncode}"
+
+
+def _install_deb(package: Path) -> None:
+    """dpkg -i, with one apt-get repair pass when it cannot finish.
+
+    This process is already root, and going through dpkg is what keeps the
+    package database describing what is on disk. A failed dpkg usually means a
+    dependency the new version added; apt-get -f installs it and the second
+    dpkg run completes the half-configured package. --no-remove keeps the
+    repair from deleting other packages to resolve a conflict: it fixes the
+    problem or fails."""
+    def dpkg():
+        return proc.run(["dpkg", "-i", str(package)], timeout=_DPKG_TIMEOUT)
+
+    try:
+        result = dpkg()
+        if result.returncode != 0:
+            proc.run(["apt-get", "install", "-y", "--no-remove", "-f"], timeout=_DPKG_TIMEOUT)
+            result = dpkg()
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise UpdateError(f"could not run dpkg: {exc}") from exc
+    finally:
+        shutil.rmtree(package.parent, ignore_errors=True)
+    if result.returncode != 0:
+        raise UpdateError(_last_line(result))
 
 
 def _run_installer(setup: Path) -> None:
