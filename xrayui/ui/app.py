@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sys
+
 from PySide6.QtCore import QEvent, Qt
 from PySide6.QtWidgets import QApplication
 
@@ -74,6 +76,10 @@ def run(argv: list[str], elevated: bool = True, autostart: bool = False) -> int:
     # once the process that was running it has gone -- which is now.
     updates_mod.clean_previous()
     app = Application(argv)
+    if sys.platform == "darwin" and elevated:
+        from .clipboard_bridge import SessionClipboard
+        # Parented to the app, which keeps it alive for the whole session.
+        SessionClipboard(app)
     load_bundled_fonts()
     app.setApplicationName("sushTun")
     # GNOME on Wayland pairs a window with its launcher (and so its dock and

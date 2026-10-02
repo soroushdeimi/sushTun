@@ -118,3 +118,47 @@ def open_url(url: str) -> bool:
         if done.returncode == 0:
             return True
     return False
+
+
+# -- the clipboard -------------------------------------------------------------
+# macOS: the pasteboard belongs to the logged-in user, and the elevated copy of
+# sushTun (root, behind the osascript password prompt) reads it as empty. Every
+# paste into the app found nothing while other apps pasted fine, and a link
+# copied out of the app never reached anything else. Reading and writing it as
+# the user who elevated us goes through their pasteboard instead.
+_CLIP_TIMEOUT = 5.0
+
+
+def _clipboard_tool(tool: str, data: bytes | None = None) -> subprocess.CompletedProcess | None:
+    if sys.platform != "darwin" or not hasattr(os, "geteuid") or os.geteuid() != 0:
+        return None
+    who = session_user()
+    if who is None or not shutil.which(tool):
+        return None
+    uid, gid, name = who
+    argv = _as_user(uid, gid, name, [tool])
+    if argv is None:
+        return None
+    # pbpaste/pbcopy pick their text encoding from the locale; without a UTF-8
+    # one anything outside ASCII (a Persian server name) came back as "?".
+    env = {"LANG": "en_US.UTF-8", "PATH": os.environ.get("PATH") or "/usr/bin:/bin"}
+    try:
+        return subprocess.run(argv, env=env, input=data, capture_output=True,
+                              timeout=_CLIP_TIMEOUT)
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def session_clipboard_text() -> str | None:
+    """The user's clipboard text, or None when this process can read the
+    clipboard itself (not elevated, not macOS) or the read did not work."""
+    done = _clipboard_tool("pbpaste")
+    if done is None or done.returncode != 0:
+        return None
+    return done.stdout.decode("utf-8", "replace")
+
+
+def set_session_clipboard_text(text: str) -> bool:
+    """Put `text` on the user's clipboard. False when it is not needed or failed."""
+    done = _clipboard_tool("pbcopy", text.encode("utf-8"))
+    return done is not None and done.returncode == 0
