@@ -43,6 +43,7 @@ from ..i18n import ltr, tr
 from .dialogs import ImportDialog, ProfileEditDialog, SubscriptionEditDialog
 from .dns_dialog import DnsDialog
 from .flags import flag_pixmap
+from .help import set_help
 from .icons import icon
 from .log_tailer import LogTailer
 from .mac import PopupButton
@@ -80,6 +81,19 @@ PAGE_DNS = 3
 PAGE_ACTIVITY = 4
 
 _MIN_W, _MIN_H = 820, 560
+
+
+def _help_routing_action(action: QAction, value: str) -> None:
+    if value == "simple":
+        set_help(action,
+                 tr("The everyday rules: a few switches for ads, your local network "
+                    "and your country's sites. Edit them on the Routing page."),
+                 tr("Good for most days; keep it unless you need something special."))
+    else:
+        set_help(action,
+                 tr("Uses the rules in this set of yours instead of the Simple "
+                    "switches. Edit it on the Routing page."),
+                 tr("Pick your movie-night set, then switch back when the credits roll."))
 
 
 # ── toolbar ──────────────────────────────────────────────────────────────
@@ -126,6 +140,13 @@ class _Toolbar(QWidget):
 
         # trailing: routing popup, anti-filter, low-usage, filter
         self.btn_routing_popup = PopupButton(tr("Routing"), tr("Simple"))
+        set_help(
+            self.btn_routing_popup,
+            tr("Picks the rules that decide which sites use the tunnel and which "
+               "go straight out. Simple covers the usual cases; your own rule sets "
+               "are listed here too."),
+            tr("Switch to your \"Work\" set on office days and back to Simple at home."),
+            title=tr("Routing"))
         self.btn_fragment = QPushButton(tr("Anti-filter"))
         self.btn_fragment.setCheckable(True)
         # Initial state set before the toggled hookup so a startup value that
@@ -133,9 +154,11 @@ class _Toolbar(QWidget):
         # emits on an actual state flip).
         self.btn_fragment.setChecked(
             self._win.settings["core"]["fragment"]["enabled"])
-        self.btn_fragment.setToolTip(tr(
-            "Splits the TLS handshake into small pieces so filtering can't "
-            "read it — try this if servers connect but sites won't load."))
+        set_help(
+            self.btn_fragment,
+            tr("Cuts the start of every secure connection into small pieces so "
+               "filters can't recognise it. Takes effect when you reconnect."),
+            tr("Servers connect but pages just spin? Switch this on and reconnect."))
         self.btn_fragment.setIcon(icon("anti-filter", TEXT))
         self.btn_fragment.setIconSize(self.btn_fragment.iconSize())
         self.btn_fragment.toggled.connect(self._win._toggle_fragment)
@@ -143,12 +166,23 @@ class _Toolbar(QWidget):
         self.btn_low.setIcon(icon("leaf", TEXT))
         self.btn_low.setCheckable(True)
         self.btn_low.setChecked(self._win.settings["routing"]["low_usage"])
-        self.btn_low.setToolTip(tr("Low usage"))
         self.btn_low.setAccessibleName(tr("Low usage"))
+        set_help(
+            self.btn_low,
+            tr("Lets your computer's update and background-report traffic skip "
+               "the tunnel, so it stops using up the server's data. Those "
+               "downloads use your normal internet instead."),
+            tr("On a server with a monthly data cap, stop Windows updates from "
+               "eating your gigabytes."))
         self.btn_low.toggled.connect(self._win._toggle_low_usage)
         self.filter_edit = QLineEdit()
         self.filter_edit.setPlaceholderText(tr("Filter…"))
         self.filter_edit.setMaximumWidth(150)
+        set_help(
+            self.filter_edit,
+            tr("Shows only the servers whose name or address contains what you "
+               "type. Test works on just the ones shown."),
+            tr("Type \"de\" to see only your German servers."))
         self.filter_edit.setVisible(False)
         self.filter_edit.setStyleSheet(
             "font-size:12px; padding:4px 8px; border-radius:6px;")
@@ -1462,6 +1496,8 @@ class MainWindow(QMainWindow):
             action.triggered.connect(
                 lambda _c=False, v=value: self._set_routing_mode(v))
             group.addAction(action)
+            _help_routing_action(action, value)
+        menu.setToolTipsVisible(True)
         self.toolbar.btn_routing_popup.set_menu(menu)
 
     def _on_routing_combo_changed(self, _index: int) -> None:
@@ -1512,6 +1548,8 @@ class MainWindow(QMainWindow):
             action.triggered.connect(
                 lambda _c=False, v=value: self._set_routing_mode(v))
             group.addAction(action)
+            _help_routing_action(action, value)
+        self.routing_menu.setToolTipsVisible(True)
 
     def _set_routing_mode(self, mode: str) -> None:
         if mode == (self.settings["routing"].get("mode") or "simple"):

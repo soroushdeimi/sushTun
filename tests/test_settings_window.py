@@ -82,7 +82,7 @@ def test_sidebar_covers_every_topic_with_a_tooltip_and_accessible_name(qapp, def
     assert [k for k, *_ in sw_mod.TOPICS] == list(win._pages)
     for item in win._sidebar_items:
         assert item.text()
-        assert item.toolTip() == item.text()
+        assert item.text() in item.toolTip()
         assert item.accessibleName() == item.text()
         assert item.isCheckable()
 

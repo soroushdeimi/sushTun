@@ -119,11 +119,11 @@ def test_dirty_revert_and_applied_signal(qapp, monkeypatch):
 def test_rule_move_buttons_have_tooltip_and_accessible_name(qapp):
     page = RoutingPage(DEFAULTS["routing"])
     page._add_set("empty")
-    move = {b for b in page.findChildren(QToolButton) if b.toolTip()}
-    tips = {b.toolTip() for b in move}
-    assert tips == {"Move rule up", "Move rule down"}
+    move = {b for b in page.findChildren(QToolButton)
+            if b.accessibleName() in ("Move rule up", "Move rule down")}
+    assert {b.accessibleName() for b in move} == {"Move rule up", "Move rule down"}
     for b in move:
-        assert b.accessibleName() == b.toolTip()
+        assert b.accessibleName() in b.toolTip()
 
 
 def test_enter_in_the_domains_editor_inserts_a_newline_not_an_apply(qapp, monkeypatch):

@@ -16,6 +16,7 @@ from ..core import geo_exit
 from ..core.profiles import Profile
 from ..i18n import current, ltr, tr
 from .flags import flag_icon
+from .help import help_html
 from .theme import ERR, MUTED, OK, WARN
 
 COLUMNS = ["", "Name", "Delay", "Transport", "Subscription", "Type"]
@@ -36,6 +37,42 @@ def _transport_text(p: Profile) -> str:
     if (p.protocol or "").lower() == "wireguard":
         return "wg"
     return f"{p.network}/{p.security}"
+
+
+def _column_help(section: int) -> str:
+    if section == COL_ACTIVE:
+        return help_html(
+            tr("A dot marks the server Connect will use."),
+            tr("Not sure which one is live? Look for the dot."),
+            title=tr("Active"))
+    if section == COL_NAME:
+        return help_html(
+            tr("The server's name. Double-click a row to edit it."),
+            tr("Rename \"server-7\" to \"Berlin, fast\" so you know it next week."),
+            title=tr("Name"))
+    if section == COL_DELAY:
+        return help_html(
+            tr("How long the server took to answer in the last test. Lower is "
+               "better; click the header to sort."),
+            tr("Under 300 ms feels snappy, over 800 ms feels like wading through honey."),
+            title=tr("Delay"))
+    if section == COL_TRANSPORT:
+        return help_html(
+            tr("How the server's traffic is carried and protected, such as "
+               "tcp/reality or ws/tls."),
+            tr("If one transport is blocked on your network, try a server with "
+               "another."),
+            title=tr("Transport"))
+    if section == COL_SUB:
+        return help_html(
+            tr("The subscription the server came from, or a dash if you added "
+               "it yourself."),
+            tr("Find every server one provider gave you."),
+            title=tr("Subscription"))
+    return help_html(
+        tr("The server's protocol, such as vless, vmess or trojan."),
+        tr("Handy when a provider says \"use a Trojan server\"."),
+        title=tr("Type"))
 
 
 class ProfileTableModel(QAbstractTableModel):
@@ -154,6 +191,8 @@ class ProfileTableModel(QAbstractTableModel):
     def headerData(self, section, orientation, role=Qt.DisplayRole):
         if orientation == Qt.Horizontal and role == Qt.DisplayRole:
             return tr(COLUMNS[section])
+        if orientation == Qt.Horizontal and role == Qt.ToolTipRole:
+            return _column_help(section)
         return None
 
     def data(self, index, role=Qt.DisplayRole):

@@ -112,7 +112,7 @@ def test_subscription_page_buttons(win):
     win.subs.save(Subscription(name="Main", url="https://sub.example/x"))
     win._reload_subs()
     QApplication.processEvents()
-    icons = {b.toolTip(): b for b in page.findChildren(IconButton)}
+    icons = {b.accessibleName(): b for b in page.findChildren(IconButton)}
     assert _clicked(win, icons[tr("Edit subscription")].click) == ["_edit_sub"]
     assert _clicked(win, icons[tr("Update now")].click) == ["_refresh_sub"]
     assert _clicked(win, icons[tr("Delete subscription")].click) == ["_delete_sub"]

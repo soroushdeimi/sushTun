@@ -47,6 +47,7 @@ from PySide6.QtWidgets import (
 from ...core import routing as routing_mod
 from ...core import routing_io, userfs, xraycheck
 from ...i18n import ltr, tr
+from ..help import help_html, set_help
 from ..rule_editor import CollapsibleSection, RuleEditorDialog, default_rule
 from ..theme import ACCENT, ERR, OK
 from ..workers import Worker
@@ -59,6 +60,30 @@ _RULE_COLS = ["", "Remarks", "Action", "Match"]
 COL_ENABLED, COL_REMARKS, COL_ACTION, COL_MATCH = range(4)
 _ACTION_COLORS = {"proxy": ACCENT, "direct": OK, "block": ERR}
 _ACTION_LABELS = {"proxy": "Proxy", "direct": "Direct", "block": "Block"}
+
+def _rule_column_help(section: int) -> str:
+    if section == COL_ENABLED:
+        return help_html(
+            tr("Tick a rule to use it; untick to keep it without applying it."),
+            tr("Pause the streaming rule for a week without losing it."),
+            title=tr("On"))
+    if section == COL_REMARKS:
+        return help_html(
+            tr("Your own note about what the rule is for."),
+            tr("\"Banks stay direct\" beats a rule you can't remember."),
+            title=tr("Remarks"))
+    if section == COL_ACTION:
+        return help_html(
+            tr("What happens to traffic that matches: Proxy goes through the "
+               "tunnel, Direct goes straight out, Block is dropped."),
+            tr("Block a tracker, send your own country's sites direct."),
+            title=tr("Action"))
+    return help_html(
+        tr("What the rule looks for: domains, addresses, ports and so on. Rules "
+           "are checked from the top, and the first match wins."),
+        tr("Put the specific rules above the broad ones."),
+        title=tr("Match"))
+
 
 _ROOT = QModelIndex()  # a fresh QModelIndex() per call is a ruff B008 default-arg smell
 
@@ -183,6 +208,8 @@ class RuleTableModel(QAbstractTableModel):
     def headerData(self, section, orientation, role=Qt.DisplayRole):
         if orientation == Qt.Horizontal and role == Qt.DisplayRole:
             return tr(_RULE_COLS[section])
+        if orientation == Qt.Horizontal and role == Qt.ToolTipRole:
+            return _rule_column_help(section)
         return None
 
     def flags(self, index):
@@ -251,12 +278,24 @@ class RoutingPage(QWidget):
         active_label.setWordWrap(True)
         mode_row.addWidget(active_label)
         self.mode_combo = QComboBox()
+        mode_help = (
+            tr("Which rules are in charge: Simple, or one of your own rule sets. "
+               "It's the same choice as the Routing button in the toolbar."),
+            tr("Keep a \"Work\" set for office days and flip back to Simple at home."))
+        set_help(self.mode_combo, *mode_help)
+        set_help(active_label, *mode_help)
         mode_row.addWidget(self.mode_combo, 1)
         layout.addLayout(mode_row)
 
         self.tabs = QTabWidget()
         self.tabs.addTab(self._build_simple_tab(routing_cfg), tr("Simple"))
         self.tabs.addTab(self._build_sets_tab(), tr("Rule sets"))
+        self.tabs.setTabToolTip(0, help_html(
+            tr("A few easy switches for the usual cases."),
+            tr("Most people never need more than this tab.")))
+        self.tabs.setTabToolTip(1, help_html(
+            tr("Build your own sets of rules, one rule at a time."),
+            tr("A set for streaming nights, another for work.")))
         layout.addWidget(self.tabs, 1)
 
         self.status_label = QLabel("")
@@ -268,9 +307,16 @@ class RoutingPage(QWidget):
         self.btn_revert = QPushButton(tr("Revert"))
         self.btn_revert.clicked.connect(self.revert)
         self.btn_revert.setEnabled(False)
+        set_help(self.btn_revert,
+                 tr("Throws away your unsaved edits and goes back to the saved routing."),
+                 tr("Changed your mind halfway through? Revert and start clean."))
         self.btn_apply = QPushButton(tr("Apply"))
         self.btn_apply.clicked.connect(self.apply)
         self.btn_apply.setEnabled(False)
+        set_help(self.btn_apply,
+                 tr("Saves your routing changes. If you are connected, reconnect "
+                    "afterwards to use them."),
+                 tr("Edit as much as you like; nothing changes until you press this."))
         bottom.addWidget(self.btn_revert)
         bottom.addWidget(self.btn_apply)
         layout.addLayout(bottom)
@@ -317,6 +363,31 @@ class RoutingPage(QWidget):
         self.cb_iran = QCheckBox(tr("Iran sites && IPs direct"))
         self.cb_russia = QCheckBox(tr("Russia sites && IPs direct"))
         self.cb_china = QCheckBox(tr("China sites && IPs direct"))
+        set_help(self.cb_low,
+                 tr("Lets your computer's update and background-report traffic skip "
+                    "the tunnel, so it stops using up the server's data. Those "
+                    "downloads use your normal internet instead."),
+                 tr("On a server with a monthly data cap, stop Windows updates from "
+                    "eating your gigabytes."))
+        set_help(self.cb_ads,
+                 tr("Blocks known ad and tracker domains, so they never load."),
+                 tr("Fewer banners, and pages feel lighter."))
+        set_help(self.cb_private,
+                 tr("Keeps addresses on your own network, like 192.168.x.x, out of "
+                    "the tunnel."),
+                 tr("Your printer and home router stay reachable while you're connected."))
+        set_help(self.cb_iran,
+                 tr("Iranian websites and IP addresses connect directly instead of "
+                    "through the tunnel."),
+                 tr("Your bank's site loads as usual while everything else is tunnelled."))
+        set_help(self.cb_russia,
+                 tr("Russian websites and IP addresses connect directly instead of "
+                    "through the tunnel."),
+                 tr("Local delivery and banking apps keep working like they always did."))
+        set_help(self.cb_china,
+                 tr("Chinese websites and IP addresses connect directly instead of "
+                    "through the tunnel."),
+                 tr("Local video apps keep loading at full speed."))
         boxes = (self.cb_low, self.cb_ads, self.cb_private,
                  self.cb_iran, self.cb_russia, self.cb_china)
         for i, cb in enumerate(boxes):
@@ -329,6 +400,13 @@ class RoutingPage(QWidget):
         self.domains = QPlainTextEdit()
         self.domains.setPlaceholderText("example.com\ngeosite:google")
         self.domains.setLayoutDirection(Qt.LeftToRight)
+        domains_help = (
+            tr("Websites that skip the tunnel, one per line. A plain name like "
+               "example.com also covers its subdomains; groups such as geosite:google "
+               "work too."),
+            tr("Add your university's site so its library login sees your real address."))
+        set_help(self.domains, *domains_help)
+        set_help(bypass_label, *domains_help)
         layout.addWidget(self.domains)
 
         ips_label = QLabel(tr("Bypass IPs / CIDRs (one per line — direct):"))
@@ -337,6 +415,13 @@ class RoutingPage(QWidget):
         self.ips = QPlainTextEdit()
         self.ips.setPlaceholderText("10.0.0.0/8\ngeoip:ir")
         self.ips.setLayoutDirection(Qt.LeftToRight)
+        ips_help = (
+            tr("Addresses or ranges that skip the tunnel, one per line. 10.0.0.0/8 "
+               "covers a whole range at once."),
+            tr("Add your NAS's range so file copies don't crawl through a server "
+               "abroad."))
+        set_help(self.ips, *ips_help)
+        set_help(ips_label, *ips_help)
         layout.addWidget(self.ips)
 
         proxy_label = QLabel(tr("Force through tunnel (one per line — proxy):"))
@@ -344,6 +429,13 @@ class RoutingPage(QWidget):
         layout.addWidget(proxy_label)
         self.proxy = QPlainTextEdit()
         self.proxy.setLayoutDirection(Qt.LeftToRight)
+        proxy_help = (
+            tr("Websites to send through the tunnel, one per line. Anything a direct "
+               "rule above also catches still goes direct."),
+            tr("List streaming.example.com here to spell out that it should always "
+               "use the tunnel."))
+        set_help(self.proxy, *proxy_help)
+        set_help(proxy_label, *proxy_help)
         layout.addWidget(self.proxy)
 
         self._populate_simple(routing)
@@ -371,6 +463,10 @@ class RoutingPage(QWidget):
 
         left = QVBoxLayout()
         self.sets_list = QListWidget()
+        set_help(self.sets_list,
+                 tr("Your rule sets. Click one to edit it; the active one is chosen "
+                    "at the top of the page."),
+                 tr("Keep one set per situation and switch with a click."))
         self.sets_list.currentRowChanged.connect(self._on_set_selected)
         left.addWidget(self.sets_list, 1)
 
@@ -379,15 +475,35 @@ class RoutingPage(QWidget):
         self.btn_add_set.setText(tr("Add"))
         self.btn_add_set.setPopupMode(QToolButton.InstantPopup)
         add_menu = QMenu(self.btn_add_set)
-        add_menu.addAction(tr("Empty"), lambda: self._add_set("empty"))
-        add_menu.addAction(tr("Global"), lambda: self._add_set("global"))
-        add_menu.addAction(tr("Like Simple"), lambda: self._add_set("like_simple"))
-        add_menu.addAction(tr("Chocolate4U Iran rules"), lambda: self._add_set("chocolate4u"))
+        set_help(add_menu.addAction(tr("Empty"), lambda: self._add_set("empty")),
+                 tr("A blank set; you add every rule yourself."),
+                 tr("Start from scratch when you know exactly what you want."))
+        set_help(add_menu.addAction(tr("Global"), lambda: self._add_set("global")),
+                 tr("Sends everything through the tunnel, except your own local network."),
+                 tr("When you want no exceptions at all."))
+        set_help(add_menu.addAction(tr("Like Simple"), lambda: self._add_set("like_simple")),
+                 tr("Starts with the same rules the Simple switches make right now."),
+                 tr("Begin from what you have, then add a few special cases."))
+        set_help(add_menu.addAction(tr("Chocolate4U Iran rules"),
+                                    lambda: self._add_set("chocolate4u")),
+                 tr("Downloads a ready-made rule set for Iran from the Chocolate4U "
+                    "project. Needs an internet connection."),
+                 tr("Iranian sites go direct without you writing a single rule."))
+        add_menu.setToolTipsVisible(True)
         self.btn_add_set.setMenu(add_menu)
+        set_help(self.btn_add_set,
+                 tr("Creates a new rule set from a template."),
+                 tr("Make a \"Movie night\" set in a few clicks."))
         btn_dup = QPushButton(tr("Duplicate"))
         btn_dup.clicked.connect(self._duplicate_set)
+        set_help(btn_dup,
+                 tr("Makes a copy of the selected set."),
+                 tr("Try risky changes on a copy and keep the original safe."))
         btn_del = QPushButton(tr("Delete"))
         btn_del.clicked.connect(self._delete_set)
+        set_help(btn_del,
+                 tr("Removes the selected rule set."),
+                 tr("Clear out the sets you stopped using."))
         for b in (self.btn_add_set, btn_dup, btn_del):
             set_btns.addWidget(b)
         left.addLayout(set_btns)
@@ -397,17 +513,37 @@ class RoutingPage(QWidget):
         btn_import.setText(tr("Import"))
         btn_import.setPopupMode(QToolButton.InstantPopup)
         import_menu = QMenu(btn_import)
-        import_menu.addAction(tr("From file…"), self._import_from_file)
-        import_menu.addAction(tr("From clipboard"), self._import_from_clipboard)
-        import_menu.addAction(tr("From URL…"), self._import_from_url)
+        set_help(import_menu.addAction(tr("From file…"), self._import_from_file),
+                 tr("Loads rule sets from a file on your computer."),
+                 tr("A friend sent you their rules as a file."))
+        set_help(import_menu.addAction(tr("From clipboard"), self._import_from_clipboard),
+                 tr("Loads rule sets from text you just copied."),
+                 tr("Copy rules from a chat message, then import them."))
+        set_help(import_menu.addAction(tr("From URL…"), self._import_from_url),
+                 tr("Downloads rule sets from a web address."),
+                 tr("A community list published online? Paste its link."))
+        import_menu.setToolTipsVisible(True)
         btn_import.setMenu(import_menu)
+        set_help(btn_import,
+                 tr("Brings in rule sets made elsewhere."),
+                 tr("Borrow a tested set instead of writing one."))
         btn_export = QToolButton()
         btn_export.setText(tr("Export"))
         btn_export.setPopupMode(QToolButton.InstantPopup)
         export_menu = QMenu(btn_export)
-        export_menu.addAction(tr("To file…"), lambda: self._export_current(to_file=True))
-        export_menu.addAction(tr("Copy to clipboard"), lambda: self._export_current(to_file=False))
+        set_help(export_menu.addAction(tr("To file…"),
+                                       lambda: self._export_current(to_file=True)),
+                 tr("Saves the selected set to a file."),
+                 tr("Keep a backup before experimenting."))
+        set_help(export_menu.addAction(tr("Copy to clipboard"),
+                                       lambda: self._export_current(to_file=False)),
+                 tr("Copies the selected set as text you can paste anywhere."),
+                 tr("Send your rules to a friend in one message."))
+        export_menu.setToolTipsVisible(True)
         btn_export.setMenu(export_menu)
+        set_help(btn_export,
+                 tr("Shares the selected rule set with others or saves a copy."),
+                 tr("Give your setup to someone who just installed sushTun."))
         io_btns.addWidget(btn_import)
         io_btns.addWidget(btn_export)
         left.addLayout(io_btns)
@@ -417,6 +553,9 @@ class RoutingPage(QWidget):
         name_row = QHBoxLayout()
         name_row.addWidget(QLabel(tr("Name:")))
         self.set_name = QLineEdit()
+        set_help(self.set_name,
+                 tr("The name this set has in the lists."),
+                 tr("\"Work\" is easier to find than \"New set 3\"."))
         name_row.addWidget(self.set_name, 1)
         right.addLayout(name_row)
 
@@ -429,6 +568,10 @@ class RoutingPage(QWidget):
             self.rules_table.horizontalHeader().setSectionResizeMode(
                 col, QHeaderView.ResizeToContents)
         self.rules_table.doubleClicked.connect(lambda _i: self._edit_rule())
+        set_help(self.rules_table,
+                 tr("The rules of this set, checked from the top. The first one that "
+                    "matches decides. Double-click a rule to edit it."),
+                 tr("Block ads first, send local sites direct, tunnel the rest."))
         right.addWidget(self.rules_table, 1)
 
         rule_btns = QHBoxLayout()
@@ -438,15 +581,30 @@ class RoutingPage(QWidget):
         btn_edit_rule.clicked.connect(self._edit_rule)
         btn_del_rule = QPushButton(tr("Delete"))
         btn_del_rule.clicked.connect(self._delete_rule)
+        set_help(btn_add_rule,
+                 tr("Writes a new rule for this set."),
+                 tr("Send a streaming site through the tunnel."))
+        set_help(btn_edit_rule,
+                 tr("Changes the selected rule."),
+                 tr("Add one more domain to a rule you already made."))
+        set_help(btn_del_rule,
+                 tr("Removes the selected rule."),
+                 tr("That rule that never mattered? Gone."))
         btn_up = QToolButton()
         btn_up.setText("↑")
-        btn_up.setToolTip(tr("Move rule up"))
         btn_up.setAccessibleName(tr("Move rule up"))
+        set_help(btn_up,
+                 tr("Moves the selected rule up. Higher rules are checked first."),
+                 tr("Put \"block ads\" above \"allow everything\"."),
+                 title=tr("Move rule up"))
         btn_up.clicked.connect(lambda: self._move_rule(-1))
         btn_down = QToolButton()
         btn_down.setText("↓")
-        btn_down.setToolTip(tr("Move rule down"))
         btn_down.setAccessibleName(tr("Move rule down"))
+        set_help(btn_down,
+                 tr("Moves the selected rule down. Lower rules are checked later."),
+                 tr("Let a general rule wait until the special ones had their turn."),
+                 title=tr("Move rule down"))
         btn_down.clicked.connect(lambda: self._move_rule(1))
         for b in (btn_add_rule, btn_edit_rule, btn_del_rule, btn_up, btn_down):
             rule_btns.addWidget(b)
@@ -461,7 +619,16 @@ class RoutingPage(QWidget):
         for label, value in domain_strategies:
             self.domain_strategy_combo.addItem(label, value)
         adv_row.addWidget(self.domain_strategy_combo, 1)
-        right.addWidget(CollapsibleSection(tr("Advanced"), adv))
+        set_help(self.domain_strategy_combo,
+                 tr("How domain names are matched against address rules. Inherit "
+                    "uses the global choice; the others decide when a name is looked "
+                    "up to get its IP."),
+                 tr("Leave it on Inherit unless a rule with IP addresses misses its target."))
+        adv_section = CollapsibleSection(tr("Advanced"), adv)
+        set_help(adv_section.toggle,
+                 tr("Shows the rarely needed options."),
+                 tr("Skip it until a guide tells you otherwise."))
+        right.addWidget(adv_section)
 
         row.addLayout(right, 2)
         self._set_right_enabled(False)

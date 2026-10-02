@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..i18n import ltr
+from .help import is_help
 from .icons import icon
 from .theme import ACCENT, MUTED, TEXT
 
@@ -299,7 +300,10 @@ class PopupButton(QToolButton):
         self.setAccessibleName(f"{self._label}: {self._value}".strip(": ") or self._label)
         # The button paints its own text, so Qt sees an empty button: the
         # tooltip is the only hint a hovering user gets.
-        self.setToolTip(self._full_text() or self._label)
+        # A help tooltip set by the owner explains the control better than
+        # echoing the value the button already paints.
+        if not is_help(self.toolTip()):
+            self.setToolTip(self._full_text() or self._label)
 
 
     def sizeHint(self) -> QSize:

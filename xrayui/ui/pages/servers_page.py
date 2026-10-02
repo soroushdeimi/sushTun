@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 
 from ...i18n import tr
 from ..connection_header import ConnectionHeader
+from ..help import set_help
 from ..mac import IconButton
 from ..theme import LINE, SUNKEN
 from ..widgets import _ServerTableCore
@@ -56,6 +57,9 @@ class ServersPage(QWidget):
         for w in (self.core.btn_import, self.core.btn_test, self.core.btn_fastest):
             tool.addWidget(w)
         self.more_btn = IconButton("ellipsis", tr("More server actions"))
+        set_help(self.more_btn,
+                 tr("Cleanup tools for the server list."),
+                 tr("Tidy up after a big import in two clicks."))
         self.more_btn.setPopupMode(QToolButton.InstantPopup)
         self.more_btn.setMenu(self.core.btn_more.menu())
         # The core's own ⋯ button is not placed in this layout; hide it so

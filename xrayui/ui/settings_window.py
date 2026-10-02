@@ -44,6 +44,7 @@ from ..core import settings as app_settings
 from ..core import updates as updates_mod
 from ..core.profiles import Profile
 from ..i18n import ltr, tr
+from .help import set_help
 from .icons import icon
 from .mac import InsetGroup, Switch
 from .titlebar import TrafficLight, _LightGroup
@@ -70,6 +71,45 @@ TOPICS = [
     ("backup", "Backup", "archive", "#64d2ff"),
     ("language", "Language", "language", "#ff375f"),
 ]
+
+
+def _topic_help(key: str) -> tuple[str, str]:
+    """What a settings topic holds and one reason to visit it. Built on call,
+    not at import, so the language chosen at startup applies."""
+    if key == "general":
+        return (tr("Everyday basics: how delays are measured, the log level and "
+                   "update checks."),
+                tr("Check here whether a newer version is out."))
+    if key == "anti-filter":
+        return (tr("Tricks that make your traffic harder for filters to spot or "
+                   "slow down."),
+                tr("Connected but nothing loads? Start here."))
+    if key == "local-proxy":
+        return (tr("The proxy port other programs can use, and whether other devices "
+                   "may share it."),
+                tr("Let your phone borrow the tunnel."))
+    if key == "geo-data":
+        return (tr("The country and website lists that routing relies on, and how "
+                   "they stay fresh."),
+                tr("A site is routed wrongly? Update these lists."))
+    if key == "hotspot":
+        return (tr("The name and password of the Wi-Fi hotspot that shares the tunnel."),
+                tr("Pick a name your guests will recognise."))
+    if key == "startup":
+        return (tr("What happens when you turn on your computer."),
+                tr("Have sushTun waiting in the tray before you open a browser."))
+    if key == "exits":
+        return (tr("One local port where each username leaves through a different "
+                   "server."),
+                tr("Two browsers, two countries, at the same time."))
+    if key == "forwards":
+        return (tr("Local ports that always lead to one fixed address."),
+                tr("Reach your home server's SSH from anywhere."))
+    if key == "backup":
+        return (tr("Save your servers and settings to a file, or load them back."),
+                tr("Moving to a new computer? Start here."))
+    return (tr("The language of the app."),
+            tr("Prefer to read it in فارسی? Change it here."))
 
 
 class _IconTile(QWidget):
@@ -201,32 +241,41 @@ class _GeneralPage(QWidget):
         self.ping_target = QLineEdit(str(self._settings.get("ping_target", "1.1.1.1")))
         self.ping_target.setLayoutDirection(Qt.LeftToRight)
         group.add_row(tr("Ping target"), self.ping_target)
+        set_help(self.ping_target,
+                 tr("The address the Ping tool contacts to check that the internet "
+                    "itself is reachable."),
+                 tr("Prefer something close to home? Put your ISP's address here."))
 
         self.delay_mode = QComboBox()
         self.delay_mode.addItem(tr("Round trip (like v2rayN)"), "warm")
         self.delay_mode.addItem(tr("First connection"), "cold")
         mode = (self._settings.get("speedtest") or {}).get("mode", "warm")
         self.delay_mode.setCurrentIndex(max(0, self.delay_mode.findData(mode)))
-        self.delay_mode.setToolTip(tr(
-            "Round trip times a second request on the connection the first one "
-            "opened, which is what v2rayN shows. First connection includes the "
-            "time to set the connection up, so the numbers are higher."
-        ))
         group.add_row(tr("Delay test"), self.delay_mode)
+        set_help(self.delay_mode,
+                 tr("Round trip times a second request on the connection the first one "
+                    "opened, which is what v2rayN shows. First connection includes the "
+                    "time to set the connection up, so the numbers are higher."),
+                 tr("Comparing your numbers with v2rayN? Keep Round trip."))
 
         self.sample_seconds = QSpinBox()
         self.sample_seconds.setRange(1, 60)
         self.sample_seconds.setValue(int(self._settings.get("sample_seconds", 5)))
         group.add_row(tr("Throughput sample (s)"), self.sample_seconds)
+        set_help(self.sample_seconds,
+                 tr("How many seconds the Throughput and Baseline tools watch the "
+                    "tunnel before reporting."),
+                 tr("A bursty connection? A longer sample gives a steadier number."))
 
         self.tun_mtu = QSpinBox()
         self.tun_mtu.setRange(576, 9000)
         self.tun_mtu.setValue(int(self._settings.get("tun_mtu", 1420)))
-        self.tun_mtu.setToolTip(tr(
-            "Tunnel MTU. Lower leaves more headroom for encapsulation; "
-            "higher reduces per-packet overhead. 1420 is a safe default."
-        ))
         group.add_row(tr("Tunnel MTU"), self.tun_mtu)
+        set_help(self.tun_mtu,
+                 tr("MTU is the largest packet the tunnel sends. A lower value leaves "
+                    "room for the extra wrapping a tunnel adds; 1420 works almost "
+                    "everywhere."),
+                 tr("Small pages load but big ones stall? Try 1380."))
 
         self.log_level = QComboBox()
         self.log_level.addItems(app_settings.LOG_LEVELS)
@@ -234,10 +283,18 @@ class _GeneralPage(QWidget):
         if current in app_settings.LOG_LEVELS:
             self.log_level.setCurrentText(current)
         group.add_row(tr("Xray log level"), self.log_level)
+        set_help(self.log_level,
+                 tr("How much detail Xray writes to the log. Warning stays quiet; "
+                    "debug is very chatty."),
+                 tr("Chasing a problem? Raise it for a while, then put it back."))
 
         self.check_updates = Switch()
         self.check_updates.setChecked(bool((self._settings.get("updates") or {}).get("check", True)))
         group.add_row(tr("Check for updates"), self.check_updates)
+        set_help(self.check_updates,
+                 tr("Looks for a new sushTun version now and then, and lets you know "
+                    "when there is one."),
+                 tr("Never miss the fix for last week's annoying bug."))
 
         # The version and a way to check right now, next to the switch that
         # decides whether sushTun checks on its own: someone who has just
@@ -254,6 +311,12 @@ class _GeneralPage(QWidget):
         vr.addWidget(self.update_status, 1)
         vr.addWidget(self.btn_check_now)
         group.add_row(tr("Version {version}", version=ltr(__version__)), version_row)
+        set_help(self.btn_check_now,
+                 tr("Looks for a new version right now."),
+                 tr("Just heard about a release? Don't wait, check."))
+        set_help(version_row,
+                 tr("The version you are running, and a button to check for a newer one."),
+                 tr("Handy to mention when you report a problem."))
 
         layout.addWidget(group)
         layout.addStretch(1)
@@ -326,23 +389,43 @@ class _AntiFilterPage(QWidget):
             self.frag_enabled,
             tr("Try this if servers connect but sites won't load.")
         )
+        set_help(self.frag_enabled,
+                 tr("Cuts the start of every secure (TLS) connection into small "
+                    "pieces so filters can't recognise it. Works with TLS and Reality "
+                    "servers over TCP."),
+                 tr("Servers connect but pages won't load? Try this first."))
 
         self.frag_packets = QLineEdit(str(self._frag_cfg.get("packets") or "tlshello"))
         self.frag_packets.setLayoutDirection(Qt.LeftToRight)
         frag_group.add_row(tr("Packets"), self.frag_packets)
+        set_help(self.frag_packets,
+                 tr("Which packets to cut up: tlshello is the secure handshake's "
+                    "opening message, or a range like 1-3 for the first few packets."),
+                 tr("The default tlshello is right for nearly everyone."))
 
         self.frag_length = QLineEdit(str(self._frag_cfg.get("length") or "100-200"))
         self.frag_length.setLayoutDirection(Qt.LeftToRight)
         frag_group.add_row(tr("Length"), self.frag_length)
+        set_help(self.frag_length,
+                 tr("How big each piece is, in bytes. A range such as 100-200 picks a "
+                    "random size each time."),
+                 tr("Still blocked? Try smaller pieces, like 10-30."))
 
         self.frag_interval = QLineEdit(str(self._frag_cfg.get("interval") or "10-20"))
         self.frag_interval.setLayoutDirection(Qt.LeftToRight)
         frag_group.add_row(tr("Interval"), self.frag_interval)
+        set_help(self.frag_interval,
+                 tr("The pause between pieces, in milliseconds. A range such as 10-20 "
+                    "picks a random pause each time."),
+                 tr("Too slow to connect? Shorten the pause."))
 
         self.frag_max_split = QSpinBox()
         self.frag_max_split.setRange(0, 10000)
         self.frag_max_split.setValue(int(self._frag_cfg.get("max_split") or 0))
         frag_group.add_row(tr("Max split"), self.frag_max_split)
+        set_help(self.frag_max_split,
+                 tr("The most pieces one message may be cut into. 0 means no limit."),
+                 tr("Leave it at 0 unless a guide gives you a number."))
 
         layout.addWidget(frag_group)
 
@@ -360,16 +443,28 @@ class _AntiFilterPage(QWidget):
         self.mux_enabled = Switch()
         self.mux_enabled.setChecked(bool(self._mux_cfg.get("enabled")))
         mux_group.add_row(tr("Multiplexing"), self.mux_enabled)
+        set_help(self.mux_enabled,
+                 tr("Carries many connections inside one connection to the server, "
+                    "which saves set-up time. It is skipped for servers that use a "
+                    "flow such as Vision."),
+                 tr("Pages with dozens of small files can open noticeably faster."))
 
         self.mux_concurrency = QSpinBox()
         self.mux_concurrency.setRange(1, 1024)
         self.mux_concurrency.setValue(int(self._mux_cfg.get("concurrency") or 8))
         mux_group.add_row(tr("Concurrency"), self.mux_concurrency)
+        set_help(self.mux_concurrency,
+                 tr("How many connections may share one tunnel connection."),
+                 tr("Lower it if one slow download holds everything else up."))
 
         self.mux_xudp_concurrency = QSpinBox()
         self.mux_xudp_concurrency.setRange(1, 1024)
         self.mux_xudp_concurrency.setValue(int(self._mux_cfg.get("xudp_concurrency") or 16))
         mux_group.add_row(tr("XUDP concurrency"), self.mux_xudp_concurrency)
+        set_help(self.mux_xudp_concurrency,
+                 tr("The same idea for UDP traffic, such as calls and games: how "
+                    "many UDP sessions share one connection."),
+                 tr("Voice calls stutter? Try a smaller number."))
 
         self.mux_xudp_udp443 = QComboBox()
         self.mux_xudp_udp443.addItems(list(coreopts.XUDP_UDP443_CHOICES))
@@ -377,6 +472,12 @@ class _AntiFilterPage(QWidget):
         if current_udp443 in coreopts.XUDP_UDP443_CHOICES:
             self.mux_xudp_udp443.setCurrentText(current_udp443)
         mux_group.add_row(tr("XUDP UDP443"), self.mux_xudp_udp443)
+        set_help(self.mux_xudp_udp443,
+                 tr("What to do with UDP traffic on port 443 (QUIC, used by HTTP/3): "
+                    "reject it so apps fall back to normal TCP, allow it, or skip "
+                    "the multiplexing for it."),
+                 tr("Browsers retry over TCP when it is rejected, which is usually the "
+                    "smoothest."))
 
         layout.addWidget(mux_group)
 
@@ -386,10 +487,18 @@ class _AntiFilterPage(QWidget):
         self.tcp_fast_open.setChecked(self._sockopt_cfg.get("tcp_fast_open") is True)
         tcp_group.add_row(tr("TCP Fast Open"), self.tcp_fast_open,
                           tr("Saves a round trip when opening connections."))
+        set_help(self.tcp_fast_open,
+                 tr("Lets the first data travel with the connection request, saving "
+                    "one back-and-forth when connecting to the server."),
+                 tr("Shaves a little off the wait for every new page."))
         self.tcp_mptcp = Switch()
         self.tcp_mptcp.setChecked(self._sockopt_cfg.get("tcp_mptcp") is True)
         tcp_group.add_row(tr("Multipath TCP"), self.tcp_mptcp,
                           tr("Falls back to normal TCP if the system can't use it."))
+        set_help(self.tcp_mptcp,
+                 tr("Lets one connection use several network paths at once, such as "
+                    "Wi-Fi and cable, when your system and the server both support it."),
+                 tr("Wi-Fi and a cable both up? If one drops, the connection carries on."))
         # Only algorithms this kernel has: an unavailable one fails every dial.
         self.tcp_congestion = QComboBox()
         self.tcp_congestion.addItem(tr("System default"), "")
@@ -400,6 +509,10 @@ class _AntiFilterPage(QWidget):
         # Windows and macOS ignore the setting, so don't offer it there.
         if self.tcp_congestion.count() > 1:
             tcp_group.add_row(tr("Congestion control"), self.tcp_congestion)
+            set_help(self.tcp_congestion,
+                     tr("The method your system uses to decide how fast to send data "
+                        "on the link to the server. System default is the safe choice."),
+                     tr("On a long, lossy link, bbr can help keep speeds up."))
         layout.addWidget(tcp_group)
 
         # UDP noise before a Hysteria2 handshake
@@ -411,10 +524,22 @@ class _AntiFilterPage(QWidget):
                                "Hysteria2 servers only."))
         self.noise_length = QLineEdit(str(self._noise_cfg.get("length") or "10-20"))
         self.noise_length.setLayoutDirection(Qt.LeftToRight)
+        set_help(self.noise_enabled,
+                 tr("Sends a few random packets before a Hysteria2 connection starts, "
+                    "to blur its first moments. Other server types ignore it."),
+                 tr("A Hysteria2 server that gets blocked at the first packet? Try it."))
         noise_group.add_row(tr("Packet size"), self.noise_length)
+        set_help(self.noise_length,
+                 tr("How big each random packet is, in bytes. A range such as 10-20 "
+                    "picks a random size each time."),
+                 tr("Leave it alone unless a guide suggests a value."))
         self.noise_delay = QLineEdit(str(self._noise_cfg.get("delay") or "10-16"))
         self.noise_delay.setLayoutDirection(Qt.LeftToRight)
         noise_group.add_row(tr("Delay (ms)"), self.noise_delay)
+        set_help(self.noise_delay,
+                 tr("The pause after each random packet, in milliseconds. A range "
+                    "such as 10-16 picks a random pause each time."),
+                 tr("Longer pauses make the connection slower to start."))
         layout.addWidget(noise_group)
         layout.addStretch(1)
 
@@ -481,11 +606,19 @@ class _ExitsPage(QWidget):
         self.enabled.setChecked(cfg.get("enabled") is True)
         group.add_row(tr("Multi-exit port"), self.enabled,
                       tr("One local SOCKS port where the username picks the server."))
+        set_help(self.enabled,
+                 tr("Opens one local port where the username you log in with decides "
+                    "which of your servers the connection leaves from."),
+                 tr("Browser A as \"germany\", browser B as \"japan\": two countries "
+                    "at the same time."))
         self.port = QSpinBox()
         self.port.setRange(1024, 65535)
         port = cfg.get("port")
         self.port.setValue(port if isinstance(port, int) and 1024 <= port <= 65535 else 10809)
         group.add_row(tr("Port"), self.port)
+        set_help(self.port,
+                 tr("The local port apps connect to for the multi-exit proxy."),
+                 tr("Pick a free one above 1024 if the default is already taken."))
         # A password is required (the username only means something with auth),
         # so there is always one to show.
         self.password = QLineEdit(str(cfg.get("password") or "") or secrets.token_urlsafe(9))
@@ -501,6 +634,15 @@ class _ExitsPage(QWidget):
         pw_layout.addWidget(self.password, 1)
         pw_layout.addWidget(self.btn_show)
         group.add_row(tr("Password"), pw_row)
+        exit_pw_help = (
+            tr("The password apps send along with their username. Required, "
+               "because the username only means something with a login."),
+            tr("Keep the generated one; you'll paste it into your apps anyway."))
+        set_help(pw_row, *exit_pw_help)
+        set_help(self.password, *exit_pw_help)
+        set_help(self.btn_show,
+                 tr("Shows or hides the password."),
+                 tr("Peek at it, then hide it again."))
         layout.addWidget(group)
 
         # Made before the rows: adding a row updates it.
@@ -516,6 +658,9 @@ class _ExitsPage(QWidget):
                 self._add_row(str(item.get("user") or ""), item.get("profile_uid"))
         self.btn_add = QPushButton(tr("Add exit"))
         self.btn_add.clicked.connect(lambda: self._add_row("", None))
+        set_help(self.btn_add,
+                 tr("Adds a username and the server it should use."),
+                 tr("Add \"germany\" and pick your Frankfurt server."))
         layout.addWidget(self.btn_add, 0, Qt.AlignLeading)
 
         hint = QLabel(tr("Use socks5://USERNAME:PASSWORD@127.0.0.1:PORT. TCP only."))
@@ -541,10 +686,18 @@ class _ExitsPage(QWidget):
         if uid:
             server.setCurrentIndex(max(server.findData(uid), 0))
         server.currentIndexChanged.connect(self._update_warning)
+        set_help(name,
+                 tr("The username apps log in with to use this exit."),
+                 tr("Something short you will remember, like \"germany\"."))
+        set_help(server,
+                 tr("The server this username's connections leave from."),
+                 tr("Frankfurt for \"germany\", Tokyo for \"japan\"."))
         remove = QPushButton()
         remove.setIcon(icon("close"))
-        remove.setToolTip(tr("Remove exit"))
         remove.setAccessibleName(tr("Remove exit"))
+        set_help(remove,
+                 tr("Deletes this username and its server choice."),
+                 tr("Retire an exit you no longer use."))
         entry = (row, name, server)
         remove.clicked.connect(lambda: self._remove_row(entry))
         box.addWidget(name, 1)
@@ -635,6 +788,9 @@ class _HotspotPage(QWidget):
             # which beats showing a name the user never chose.
             self.ssid.setPlaceholderText(tr("Keep the name Windows already uses"))
         group.add_row(tr("Network name"), self.ssid)
+        set_help(self.ssid,
+                 tr("The Wi-Fi name other devices see when they look for the hotspot."),
+                 tr("Something friendly like \"Living room\"."))
 
         self.password = QLineEdit(str(cfg.get("password") or ""))
         self.password.setEchoMode(QLineEdit.Password)
@@ -646,7 +802,10 @@ class _HotspotPage(QWidget):
         self.btn_show.toggled.connect(lambda on: self.password.setEchoMode(
             QLineEdit.Normal if on else QLineEdit.Password))
         self.btn_new = QPushButton(tr("New"))
-        self.btn_new.setToolTip(tr("Make a new random password"))
+        set_help(self.btn_new,
+                 tr("Makes a new random password. Devices already connected will "
+                    "need the new one next time."),
+                 tr("Someone you don't know joined? Change it."))
         self.btn_new.clicked.connect(
             lambda: self.password.setText(secrets.token_urlsafe(9)))
         pw_row = QWidget()
@@ -657,6 +816,15 @@ class _HotspotPage(QWidget):
         pw_layout.addWidget(self.btn_show)
         pw_layout.addWidget(self.btn_new)
         group.add_row(tr("Password"), pw_row)
+        hotspot_pw_help = (
+            tr("The password other devices type to join the hotspot. It needs "
+               "at least 8 characters."),
+            tr("Press New for a random one and read it off to your guests."))
+        set_help(pw_row, *hotspot_pw_help)
+        set_help(self.password, *hotspot_pw_help)
+        set_help(self.btn_show,
+                 tr("Shows or hides the password."),
+                 tr("Check it before reading it out loud."))
 
         self.security = QComboBox()
         if self._win:
@@ -665,6 +833,10 @@ class _HotspotPage(QWidget):
         self.security.addItem(tr("WPA3 (if your Wi-Fi card supports it)"), "wpa3")
         self.security.setCurrentIndex(max(self.security.findData(cfg.get("security")), 0))
         group.add_row(tr("Security"), self.security)
+        set_help(self.security,
+                 tr("How the hotspot's Wi-Fi is protected. WPA2 works with nearly every "
+                    "device; WPA3 is newer and stronger but older devices can't join."),
+                 tr("Old tablet won't connect? Choose WPA2."))
 
         self.band = QComboBox()
         if self._win:
@@ -676,6 +848,10 @@ class _HotspotPage(QWidget):
         group.add_row(tr("Band"), self.band,
                       None if self._win else
                       tr("While this computer is on Wi-Fi, the hotspot uses the same band."))
+        set_help(self.band,
+                 tr("Which Wi-Fi band the hotspot uses. 2.4 GHz reaches farther; "
+                    "5 GHz is faster over a short distance."),
+                 tr("Phone in the next room? 2.4 GHz. Sitting beside it? 5 GHz."))
 
         # Windows' hotspot API exposes neither of these, so offering them
         # would be a switch that silently does nothing.
@@ -684,11 +860,19 @@ class _HotspotPage(QWidget):
             self.hidden = Switch()
             self.hidden.setChecked(cfg.get("hidden") is True)
             group.add_row(tr("Hide the network name"), self.hidden)
+            set_help(self.hidden,
+                     tr("The hotspot stops announcing its name, so devices must type it "
+                        "in to join."),
+                     tr("Keeps it out of the neighbours' Wi-Fi list."))
 
             self.isolation = Switch()
             self.isolation.setChecked(cfg.get("isolation") is True)
             group.add_row(tr("Keep devices apart"), self.isolation,
                           tr("Devices on the hotspot can't reach each other."))
+            set_help(self.isolation,
+                     tr("Devices on the hotspot can reach the internet but not each "
+                        "other."),
+                     tr("Guests share your connection without seeing each other's phones."))
         layout.addWidget(group)
 
         if self._win:
@@ -821,6 +1005,9 @@ class _ForwardsPage(QWidget):
                 self._add_row(item)
         self.btn_add = QPushButton(tr("Add forward"))
         self.btn_add.clicked.connect(lambda: self._add_row({}))
+        set_help(self.btn_add,
+                 tr("Adds a local port that always leads to one fixed address."),
+                 tr("Make port 2222 lead to your home server's SSH."))
         layout.addWidget(self.btn_add, 0, Qt.AlignLeading)
         note = QLabel(tr("Newer Xray servers refuse private addresses such as the server's "
                          "own 127.0.0.1, so a forward to them will not connect. A shared "
@@ -838,29 +1025,49 @@ class _ForwardsPage(QWidget):
         port.setRange(1024, 65535)
         value = item.get("port")
         port.setValue(value if isinstance(value, int) and 1024 <= value <= 65535 else 2222)
-        port.setToolTip(tr("Local port"))
+        set_help(port,
+                 tr("The port on this computer that apps connect to."),
+                 tr("Connect to localhost:2222 and the forward does the rest."))
         target = QLineEdit(str(item.get("target") or ""))
         target.setPlaceholderText(tr("host:port"))
         target.setLayoutDirection(Qt.LeftToRight)
+        set_help(target,
+                 tr("The address and port the forward leads to, as host:port."),
+                 tr("home.example.com:22 for SSH to your home server."))
         via = QComboBox()
         via.addItem(tr("Through the tunnel"), "proxy")
         via.addItem(tr("Direct"), "direct")
         via.setCurrentIndex(max(via.findData(item.get("via")), 0))
+        set_help(via,
+                 tr("Whether the connection to the target goes through the tunnel or "
+                    "straight out from your computer."),
+                 tr("Through the tunnel to reach a server that only your VPN can see."))
         network = QComboBox()
         for key, label in self._NETWORKS:
             network.addItem(label, key)
         network.setCurrentIndex(max(network.findData(item.get("network")), 0))
+        set_help(network,
+                 tr("Which kind of traffic the forward carries. TCP suits most things "
+                    "such as SSH and websites; UDP suits calls and games."),
+                 tr("SSH and web servers use TCP."))
         enabled = QCheckBox()
         enabled.setChecked(item.get("enabled", True) is not False)
-        enabled.setToolTip(tr("Use this forward"))
         enabled.setAccessibleName(tr("Use this forward"))
+        set_help(enabled,
+                 tr("Untick to pause this forward without deleting it."),
+                 tr("Switch the SSH forward off for the weekend."),
+                 title=tr("Use this forward"))
         lan = QCheckBox(tr("LAN"))
         lan.setChecked(item.get("lan") is True)
-        lan.setToolTip(tr("Let other devices on your network use this forward."))
+        set_help(lan,
+                 tr("Let other devices on your network use this forward."),
+                 tr("Your phone on the same Wi-Fi can reach it through this computer's address."))
         remove = QPushButton()
         remove.setIcon(icon("close"))
-        remove.setToolTip(tr("Remove forward"))
         remove.setAccessibleName(tr("Remove forward"))
+        set_help(remove,
+                 tr("Deletes this forward."),
+                 tr("Tidy up forwards you no longer need."))
         entry = {"row": row, "enabled": enabled, "port": port, "target": target,
                  "via": via, "network": network, "lan": lan}
         remove.clicked.connect(lambda: self._remove_row(entry))
@@ -920,19 +1127,35 @@ class _LocalProxyPage(QWidget):
         self.socks_port.setRange(1024, 65535)
         self.socks_port.setValue(coreopts.valid_socks_port(self._core_cfg.get("socks_port")))
         group.add_row(tr("Port"), self.socks_port)
+        set_help(self.socks_port,
+                 tr("The local port where programs can reach the tunnel as a SOCKS5 "
+                    "proxy on 127.0.0.1."),
+                 tr("Point a browser or download manager at 127.0.0.1 and this port."))
 
         self.allow_lan = Switch()
         self.allow_lan.setChecked(bool(self._core_cfg.get("allow_lan")))
         group.add_row(tr("Allow other devices on your network"), self.allow_lan)
+        set_help(self.allow_lan,
+                 tr("Lets other devices on your network use this proxy too. Set a "
+                    "user and password below so strangers can't."),
+                 tr("Your phone on the same Wi-Fi can borrow the tunnel."))
 
         self.lan_user = QLineEdit(str(self._core_cfg.get("lan_user") or ""))
         self.lan_user.setLayoutDirection(Qt.LeftToRight)
         group.add_row(tr("User"), self.lan_user)
+        set_help(self.lan_user,
+                 tr("A username that other devices must give. It only counts when a "
+                    "password is set too."),
+                 tr("Anything simple, like \"family\"."))
 
         self.lan_pass = QLineEdit(str(self._core_cfg.get("lan_pass") or ""))
         self.lan_pass.setEchoMode(QLineEdit.Password)
         self.lan_pass.setLayoutDirection(Qt.LeftToRight)
         group.add_row(tr("Password"), self.lan_pass)
+        set_help(self.lan_pass,
+                 tr("The password that goes with the username. Without both, anyone "
+                    "on your network can use the proxy."),
+                 tr("Pick one you'd be happy to read out to a houseguest."))
 
         self.lan_warning = QLabel(tr(
             "LAN sharing is on with no password — anyone on your network can use this proxy."
@@ -950,10 +1173,19 @@ class _LocalProxyPage(QWidget):
         self.sniff_enabled = Switch()
         self.sniff_enabled.setChecked(bool(self._core_cfg.get("sniffing", {}).get("enabled", True)))
         group.add_row(tr("Sniffing"), self.sniff_enabled)
+        set_help(self.sniff_enabled,
+                 tr("Peeks at the start of a connection to learn the website's name, "
+                    "so name-based routing rules still work when an app connects by "
+                    "number."),
+                 tr("Needed for \"send this site direct\" to work with every app."))
 
         self.sniff_route_only = Switch()
         self.sniff_route_only.setChecked(bool(self._core_cfg.get("sniffing", {}).get("route_only")))
         group.add_row(tr("Route only"), self.sniff_route_only)
+        set_help(self.sniff_route_only,
+                 tr("Uses the discovered name only to choose the route, and still "
+                    "connects to the address the app asked for."),
+                 tr("Handy if a game or app breaks when its destination is rewritten."))
 
         self.default_fp = QComboBox()
         self.default_fp.addItem(tr("(off)"), "")
@@ -962,6 +1194,10 @@ class _LocalProxyPage(QWidget):
         current_fp = str(self._core_cfg.get("default_fp") or "")
         self.default_fp.setCurrentIndex(max(0, self.default_fp.findData(current_fp)))
         group.add_row(tr("Default TLS fingerprint"), self.default_fp)
+        set_help(self.default_fp,
+                 tr("Which browser's way of starting a secure connection to imitate, "
+                    "for servers that don't pick one themselves. Off leaves it as is."),
+                 tr("Blocked for looking unlike a browser? Try chrome."))
 
         layout.addWidget(group)
         layout.addStretch(1)
@@ -1018,6 +1254,9 @@ class _GeoDataPage(QWidget):
         if current_source in geo_mod.SOURCES:
             self.geo_source.setCurrentText(current_source)
         group.add_row(tr("Source"), self.geo_source)
+        set_help(self.geo_source,
+                 tr("Where the country and website lists used by routing come from."),
+                 tr("Chocolate4U (Iran) has extra lists made for Iranian sites."))
 
         update_cell = QWidget()
         update_row = QHBoxLayout(update_cell)
@@ -1030,12 +1269,23 @@ class _GeoDataPage(QWidget):
         update_row.addWidget(self.btn_geo_update)
         update_row.addWidget(self.geo_status, 1)
         group.add_row("", update_cell)
+        set_help(self.btn_geo_update,
+                 tr("Downloads fresh country and website lists now."),
+                 tr("A site is routed wrongly? Update the lists, then reconnect."))
+        set_help(update_cell,
+                 tr("Downloads fresh country and website lists now, and shows when "
+                    "they were last updated."),
+                 tr("A site is routed wrongly? Update the lists, then reconnect."))
 
         self.geo_auto_hours = QSpinBox()
         self.geo_auto_hours.setRange(0, 168)
         self.geo_auto_hours.setValue(int(self._geo_cfg.get("auto_update_hours", 0)))
         self.geo_auto_hours.setSpecialValueText(tr("Off"))
         group.add_row(tr("Auto-update every (hours)"), self.geo_auto_hours)
+        set_help(self.geo_auto_hours,
+                 tr("How often the lists refresh by themselves. Off means only when "
+                    "you press Update now."),
+                 tr("24 refreshes them once a day."))
 
         layout.addWidget(group)
         layout.addStretch(1)
@@ -1125,14 +1375,24 @@ class _StartupPage(QWidget):
         if not self._autostart_ok:
             self.start_on_login.setToolTip(tr(autostart_reason))
         group.add_row(tr("Start sushTun when I log in"), self.start_on_login)
+        if self._autostart_ok:
+            set_help(self.start_on_login,
+                     tr("Opens sushTun by itself whenever you sign in to your computer."),
+                     tr("Boot up and it is already waiting in the tray."))
 
         self.start_minimized = Switch()
         self.start_minimized.setChecked(bool(self._startup_cfg.get("start_minimized")))
         group.add_row(tr("Start minimized to the tray"), self.start_minimized)
+        set_help(self.start_minimized,
+                 tr("Starts hidden in the tray instead of opening its window."),
+                 tr("It runs quietly until you need it."))
 
         self.auto_connect = Switch()
         self.auto_connect.setChecked(bool(self._startup_cfg.get("auto_connect")))
         group.add_row(tr("Connect automatically on start"), self.auto_connect)
+        set_help(self.auto_connect,
+                 tr("Connects to your active server as soon as sushTun starts."),
+                 tr("Turn on your computer and you're protected before the browser opens."))
 
         layout.addWidget(group)
         layout.addStretch(1)
@@ -1184,6 +1444,13 @@ class _BackupPage(QWidget):
         self.btn_restore = QPushButton(tr("Restore…"))
         self.btn_restore.clicked.connect(self._restore_now)
 
+        set_help(self.btn_backup,
+                 tr("Saves your servers, subscriptions and settings to one file."),
+                 tr("Moving to a new computer? Take this file with you."))
+        set_help(self.btn_restore,
+                 tr("Loads a backup file and replaces your current servers and "
+                    "settings with what it holds."),
+                 tr("Fresh install? Restore and everything is back."))
         backup_cell = QWidget()
         backup_row = QHBoxLayout(backup_cell)
         backup_row.setContentsMargins(0, 0, 0, 0)
@@ -1276,6 +1543,10 @@ class _LanguagePage(QWidget):
         idx = self.language.findData(self._current_lang)
         self.language.setCurrentIndex(idx if idx >= 0 else 0)
         group.add_row(tr("Language"), self.language)
+        set_help(self.language,
+                 tr("The language of the app's menus and messages. Persian also "
+                    "flips the layout to right-to-left."),
+                 tr("Switch to فارسی and everything reads from the right."))
 
         layout.addWidget(group)
         layout.addStretch(1)
@@ -1368,6 +1639,7 @@ class SettingsWindow(QDialog):
             # Translate at build time so a language switch mid-session sticks.
             item = SettingsSidebarItem(tr(label), icon_name, color)
             item.setProperty("topic_key", key)
+            set_help(item, *_topic_help(key), title=tr(label))
             item.clicked.connect(lambda checked=False, k=key: self._select_topic(k))
             sidebar_layout.addWidget(item)
             self._sidebar_items.append(item)

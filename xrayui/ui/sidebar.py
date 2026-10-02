@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 
 from ..core.alerts import human_bytes
 from ..i18n import ltr, tr
+from .help import set_help
 from .icons import icon
 from .mac import SidebarItem, SidebarSection, Switch
 from .theme import MUTED, SIDEBAR, SIDEBAR_EDGE
@@ -101,6 +102,25 @@ class Sidebar(QFrame):
         self.item_dns = self._add_nav(tr("DNS"), "dns")
         self.item_activity = self._add_nav(tr("Activity"), "activity")
         self.item_servers.setChecked(True)
+        set_help(self.item_servers,
+                 tr("Your list of servers: pick one, test how fast they are, and "
+                    "connect."),
+                 tr("Twenty servers and no idea which one? Start here."))
+        set_help(self.item_subs,
+                 tr("Links that keep your server list up to date by themselves."),
+                 tr("Your provider adds new servers every month? A subscription "
+                    "fetches them for you."))
+        set_help(self.item_routing,
+                 tr("Decide which sites go through the tunnel and which go "
+                    "straight out."),
+                 tr("Keep your local bank direct and everything else tunnelled."))
+        set_help(self.item_dns,
+                 tr("Choose who looks up website addresses for you."),
+                 tr("Sites won't open but the connection is fine? A different DNS "
+                    "can help."))
+        set_help(self.item_activity,
+                 tr("The live log, handy tools and diagnostics."),
+                 tr("Something odd? Look here before asking anyone for help."))
 
         # ── subscriptions section ──────────────────────────────────────
         outer.addSpacing(4)
@@ -125,6 +145,14 @@ class Sidebar(QFrame):
         hr.addWidget(hotspot_label, 1)
         self.btn_gateway = Switch()
         self.btn_gateway.setAccessibleName(tr("Share via hotspot"))
+        hotspot_what = tr(
+            "Shares the tunnel with other devices through a Wi-Fi hotspot, so "
+            "they need no setup. It starts when you connect; the name and "
+            "password are in Settings.")
+        hotspot_example = tr(
+            "A friend's phone needs the tunnel? Let it join your laptop's hotspot.")
+        set_help(self.btn_gateway, hotspot_what, hotspot_example)
+        set_help(self._hotspot_row, hotspot_what, hotspot_example)
         self.btn_gateway.toggled.connect(self.hotspotToggled)
         hr.addWidget(self.btn_gateway)
         outer.addWidget(self._hotspot_row)
@@ -149,6 +177,10 @@ class Sidebar(QFrame):
         sr.addWidget(settings_label, 1)
         self._settings_row.mousePressEvent = lambda _: self.settingsRequested.emit()
         self._settings_row.setCursor(QCursor(Qt.PointingHandCursor))
+        set_help(self._settings_row,
+                 tr("Opens the settings: startup, local proxy, anti-filter tricks, "
+                    "language and more."),
+                 tr("Want sushTun to start with your computer? It's in there."))
         outer.addWidget(self._settings_row)
 
     # ── helpers ───────────────────────────────────────────────────────────
