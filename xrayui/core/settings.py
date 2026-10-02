@@ -91,6 +91,9 @@ DEFAULTS: dict = {
         "url": "https://www.google.com/generate_204",
         "timeout_s": 10,
         "batch_size": 50,
+        # "warm": two requests on one connection, the smaller wins (what
+        # v2rayN reports); "cold": a single request on a fresh connection.
+        "mode": "warm",
     },
     "geo": {
         # Matches the source scripts/fetch_deps.py bundles.

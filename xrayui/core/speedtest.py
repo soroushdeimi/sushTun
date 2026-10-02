@@ -6,6 +6,8 @@ tunnel is up. Never touches the live connection's process, config or log.
 """
 from __future__ import annotations
 
+import functools
+import http.client
 import json
 import os
 import socket
@@ -13,15 +15,17 @@ import subprocess
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from .. import paths
-from . import coreopts, metrics, outbounds, proc
+from . import coreopts, geo_exit, metrics, outbounds, proc
 from .profiles import Profile
 
 OnResult = Callable[[str, "float | None", "str | None"], None]
+OnDetail = Callable[[str, dict], None]
 RunBatch = Callable[..., bool]
 
 _CONFIG_NAME = "speedtest.json"
@@ -127,7 +131,34 @@ def _short_config_error() -> str:
     return _last_log_line().rsplit(" > ", 1)[-1].strip()
 
 
-def _measure_one(port: int, url: str, timeout: float) -> tuple[float | None, str | None]:
+class Measured(tuple):
+    """(delay_ms, error), unpackable as a pair; `cold` is the first request's
+    time when a warm measurement made two."""
+
+    cold: float | None
+
+    def __new__(cls, delay: float | None, error: str | None, cold: float | None = None):
+        self = super().__new__(cls, (delay, error))
+        self.cold = cold
+        return self
+
+
+MODES = ("warm", "cold")
+_WARM_GAP_S = 0.1
+
+
+def _status_error(status: int) -> str | None:
+    if status == 204 or 200 <= status < 300:
+        return None
+    if status == 503:
+        # Xray's HTTP inbound answers 503 itself when its outbound couldn't
+        # connect -- the target was never reached, so this isn't the
+        # target's answer at all.
+        return "connection failed"
+    return f"HTTP {status}"
+
+
+def _measure_cold(port: int, url: str, timeout: float) -> Measured:
     proxy_url = f"http://127.0.0.1:{port}"
     opener = urllib.request.build_opener(
         urllib.request.ProxyHandler({"http": proxy_url, "https": proxy_url})
@@ -143,38 +174,91 @@ def _measure_one(port: int, url: str, timeout: float) -> tuple[float | None, str
         # image-name caveat below), DNS failure, TLS errors, timeouts: all
         # of it just means "this server didn't work", not a bug to raise
         # from a worker thread.
-        return None, str(e)
+        return Measured(None, str(e))
     elapsed_ms = (time.perf_counter() - start) * 1000
-    if status == 204 or 200 <= status < 300:
-        return elapsed_ms, None
-    if status == 503:
-        # Xray's HTTP inbound answers 503 itself when its outbound couldn't
-        # connect -- the target was never reached, so this isn't the
-        # target's answer at all.
-        return None, "connection failed"
-    return None, f"HTTP {status}"
+    error = _status_error(status)
+    return Measured(None if error else elapsed_ms, error)
+
+
+def _measure_warm(port: int, url: str, timeout: float) -> Measured:
+    """Two GETs on one kept-alive connection; the smaller time is the delay.
+
+    The first request pays for the connection, the VLESS handshake and TLS to
+    the target; the second only for the round trip, which is what other
+    clients (v2rayN) report.
+    """
+    parts = urllib.parse.urlsplit(url)
+    https = parts.scheme == "https"
+    if https:
+        conn = http.client.HTTPSConnection("127.0.0.1", port, timeout=timeout)
+        conn.set_tunnel(parts.hostname, parts.port or 443)
+        target = parts.path or "/"
+        if parts.query:
+            target += "?" + parts.query
+    else:
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=timeout)
+        target = url  # a proxy wants the absolute URL
+    times: list[float] = []
+    try:
+        for attempt in range(2):
+            if attempt:
+                time.sleep(_WARM_GAP_S)
+            start = time.perf_counter()
+            conn.request("GET", target)
+            resp = conn.getresponse()
+            resp.read()
+            elapsed_ms = (time.perf_counter() - start) * 1000
+            error = _status_error(resp.status)
+            if error:
+                if attempt:
+                    break  # the first one worked; keep it
+                return Measured(None, error)
+            times.append(elapsed_ms)
+    except Exception as e:
+        if not times:
+            return Measured(None, str(e))
+    finally:
+        conn.close()
+    return Measured(min(times), None, times[0])
+
+
+def _measure_one(port: int, url: str, timeout: float, mode: str = "warm") -> Measured:
+    if mode == "cold":
+        return _measure_cold(port, url, timeout)
+    return _measure_warm(port, url, timeout)
 
 
 def _measure_group(
     profiles: list[Profile], ports: list[int], *,
     url: str, timeout: float, on_result: OnResult, cancel: threading.Event,
+    mode: str = "warm", on_detail: OnDetail | None = None,
 ) -> None:
+    def one(p: Profile, port: int) -> None:
+        m = _measure_one(port, url, timeout, mode)
+        delay, error = m
+        on_result(p.uid, delay, error)
+        if delay is None or on_detail is None:
+            return
+        fields = {"cold_ms": m.cold}
+        info = geo_exit.detect(f"http://127.0.0.1:{port}", timeout)
+        if info:
+            fields.update(country=info.country, exit_ip=info.ip)
+        on_detail(p.uid, fields)
+
     with ThreadPoolExecutor(max_workers=max(1, len(profiles))) as pool:
-        futures = {}
+        futures = []
         for p, port in zip(profiles, ports, strict=True):
             if cancel.is_set():
                 break
-            futures[pool.submit(_measure_one, port, url, timeout)] = p
+            futures.append(pool.submit(one, p, port))
         for fut in as_completed(futures):
-            p = futures[fut]
-            delay, error = fut.result()
-            on_result(p.uid, delay, error)
+            fut.result()
 
 
 def _run_batch(
     profiles: list[Profile], ports: list[int], *,
     url: str, timeout: float, iface_alias: str, on_result: OnResult, cancel: threading.Event,
-    core_cfg: dict | None = None,
+    core_cfg: dict | None = None, mode: str = "warm", on_detail: OnDetail | None = None,
 ) -> bool:
     """Start our own throwaway xray for this batch and measure it.
 
@@ -204,7 +288,8 @@ def _run_batch(
             if not _wait_ready(popen, ports, time.monotonic() + timeout):
                 return False
             _measure_group(profiles, ports, url=url, timeout=timeout,
-                            on_result=on_result, cancel=cancel)
+                            on_result=on_result, cancel=cancel,
+                            mode=mode, on_detail=on_detail)
             return True
         finally:
             # NEVER xray._kill_all() / XrayProcess.stop() here: both match
@@ -265,8 +350,12 @@ def real_delay_all(
     connected: bool = False,
     run_batch: RunBatch | None = None,
     core_cfg: dict | None = None,
+    mode: str = "warm",
+    on_detail: OnDetail | None = None,
 ) -> None:
-    run_batch = run_batch or _run_batch
+    # A custom run_batch keeps the plain contract; mode and details only
+    # travel with the real one.
+    run_batch = run_batch or functools.partial(_run_batch, mode=mode, on_detail=on_detail)
 
     testable: list[Profile] = []
     for p in profiles:
