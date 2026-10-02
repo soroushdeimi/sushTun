@@ -1799,3 +1799,69 @@ def test_cmd_q_really_quits_on_macos(window, monkeypatch):
     assert window.act_settings.menuRole() == QAction.PreferencesRole
     window.act_quit.trigger()
     assert window._quitting is True and quit_calls == [1]
+
+
+# -- switching servers while connected ---------------------------------------
+# A click in the server table set a new active server in silence: the tunnel
+# kept carrying the old one, the status card already showed the new one's
+# address, and nothing said a reconnect was needed.
+def _connected_to(window, monkeypatch, profile):
+    from xrayui.core.network import DnsState, Interface
+    window.conn.state.save(Interface("eth0", "192.0.2.2", "192.0.2.1"),
+                           "203.0.113.10", 7, DnsState(), profile_uid=profile.uid)
+    monkeypatch.setattr(window.conn, "is_connected", lambda: True)
+
+
+def _two_servers(window):
+    a = window.store.save(Profile(name="A", address="a.example.com", port=443, id="u1"))
+    b = window.store.save(Profile(name="B", address="b.example.com", port=8443, id="u2"))
+    window.store.set_active(a.uid)
+    window._reload_profiles()
+    return a, b
+
+
+def test_picking_another_server_while_connected_asks_for_a_reconnect(window, monkeypatch):
+    a, b = _two_servers(window)
+    _connected_to(window, monkeypatch, a)
+    window._set_active(b.uid)
+    assert not window.btn_reconnect.isHidden()
+    assert "Active server changed" in window.step_label.text()
+
+
+def test_picking_the_connected_server_again_clears_the_prompt(window, monkeypatch):
+    a, b = _two_servers(window)
+    _connected_to(window, monkeypatch, a)
+    window._set_active(b.uid)
+    window._set_active(a.uid)
+    assert window.btn_reconnect.isHidden()
+    assert window.step_label.text() == ""
+
+
+def test_reselecting_the_connected_server_never_prompts(window, monkeypatch):
+    a, _b = _two_servers(window)
+    _connected_to(window, monkeypatch, a)
+    window._set_active(a.uid)
+    assert window.btn_reconnect.isHidden()
+
+
+def test_status_shows_the_server_carrying_traffic_not_the_selected_one(window, monkeypatch):
+    a, b = _two_servers(window)
+    _connected_to(window, monkeypatch, a)
+    # The status card is skipped while the window is hidden, as it always is
+    # offscreen; pretend it is on screen.
+    monkeypatch.setattr(window, "isVisible", lambda: True)
+    monkeypatch.setattr(window, "isMinimized", lambda: False)
+    shown = {}
+    real_set = window.status_card.set
+    monkeypatch.setattr(window.status_card, "set",
+                        lambda key, value: (shown.__setitem__(key, value), real_set(key, value)))
+    window._set_active(b.uid)
+    assert shown["endpoint"] == a.endpoint
+    assert "A" in window.toolbar.subtitle.text()
+
+
+def test_a_connection_with_no_recorded_profile_falls_back_to_the_active_one(window, monkeypatch):
+    # Connected by a build that did not record it: show what was shown before.
+    a, _b = _two_servers(window)
+    monkeypatch.setattr(window.conn, "is_connected", lambda: True)
+    assert window._connected_profile().uid == a.uid

@@ -219,7 +219,7 @@ class Connection:
 
         # Persist backup + a boot restore task BEFORE hijacking DNS. Static
         # 127.0.0.1 survives a power-off; the task puts the adapter back.
-        self.state.save(iface, server_ip, tun, dns)
+        self.state.save(iface, server_ip, tun, dns, profile_uid=profile.uid)
         try:
             bootrestore.install()
         except Exception as exc:
@@ -351,7 +351,7 @@ class Connection:
             self.xray.stop()
             self._start_macos_bridge(build, exits, forwards, core_cfg, server_ip)
 
-        self.state.save(iface, server_ip, 0, dns)
+        self.state.save(iface, server_ip, 0, dns, profile_uid=profile.uid)
         try:
             bootrestore.install()
         except Exception as exc:

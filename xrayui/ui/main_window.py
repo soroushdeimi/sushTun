@@ -620,7 +620,7 @@ class MainWindow(QMainWindow):
 
     def _refresh_status_subtitle(self) -> None:
         connected = self.conn.is_connected()
-        profile = self._active_profile()
+        profile = self._connected_profile()
         if connected and profile:
             self.toolbar.subtitle.setText(
                 ltr(tr("Connected · {server}",
@@ -638,6 +638,16 @@ class MainWindow(QMainWindow):
             {s.uid: s.name for s in self.subs.list()})
         self.profiles.set_profiles(profiles, self.store.active_uid())
         self._rebuild_servers_tray_menu()
+
+    def _connected_profile(self) -> Profile | None:
+        """The profile the running tunnel was built from, when it is known.
+
+        A connection made by a build that did not record it falls back to the
+        active profile, which is what the window always showed before."""
+        if not self.conn.is_connected():
+            return None
+        uid = self.conn.state.profile_uid
+        return self.store.get(uid) if uid else self._active_profile()
 
     def _active_profile(self) -> Profile | None:
         uid = self.store.active_uid() or self.profiles.current_uid()
@@ -700,12 +710,20 @@ class MainWindow(QMainWindow):
         self.store.set_active(uid)
         self.profiles.set_active(uid)
         self._rebuild_servers_tray_menu()
+        # A click in the server table lands here too, and used to change the
+        # active server in silence: the tunnel kept carrying the old one while
+        # the status card already showed the new one's address. Only a server
+        # other than the one actually connected needs a reconnect.
+        if self.conn.is_connected():
+            if uid != self.conn.state.profile_uid:
+                self._needs_reconnect(tr("Active server changed"))
+            else:
+                self.status_card.hide_reconnect()
+                self.step_label.setText("")
         self._refresh_status()
 
     def _activate_from_tray(self, uid: str) -> None:
         self._set_active(uid)
-        if self.conn.is_connected():
-            self._needs_reconnect(tr("Active server changed"))
 
     def _paste_import(self) -> None:
         text = QApplication.clipboard().text()
@@ -1158,7 +1176,9 @@ class MainWindow(QMainWindow):
             return
         connected = self.conn.is_connected()
         self.status_card.set_connected(connected)
-        profile = self._active_profile()
+        # Connected, this is the server carrying traffic -- not whichever row
+        # happens to be selected.
+        profile = self._connected_profile() if connected else self._active_profile()
         self.status_card.set("endpoint",
                              profile.endpoint if profile else "—")
         self.status_card.set(

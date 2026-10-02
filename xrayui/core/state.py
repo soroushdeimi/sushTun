@@ -7,7 +7,7 @@ from .network import DnsState, Interface
 _FILES = (
     "active_if.txt", "active_ip.txt", "gateway.txt", "relay_ip.txt",
     "tunidx.txt", "connected.flag", "dns-mode.txt", "dns-servers.txt",
-    "gateway.flag",
+    "gateway.flag", "profile.txt",
 )
 
 
@@ -25,8 +25,16 @@ class State:
     def _write(self, name: str, value: object) -> None:
         self._p(name).write_text(str(value), encoding="utf-8")
 
-    def save(self, iface: Interface, server_ip: str, tun_index: int, dns: DnsState) -> None:
+    def save(self, iface: Interface, server_ip: str, tun_index: int, dns: DnsState,
+             profile_uid: str = "") -> None:
         self.dir.mkdir(parents=True, exist_ok=True)
+        # Which profile this tunnel was built from. The active profile is only
+        # what the UI has selected; without this the window could not tell a
+        # click on another server from the server actually carrying traffic.
+        if profile_uid:
+            self._write("profile.txt", profile_uid)
+        else:
+            self._p("profile.txt").unlink(missing_ok=True)
         self._write("active_if.txt", iface.alias)
         self._write("active_ip.txt", iface.ipv4)
         self._write("gateway.txt", iface.gateway)
@@ -57,6 +65,10 @@ class State:
     @property
     def server_ip(self) -> str | None:
         return self._read("relay_ip.txt") or None
+
+    @property
+    def profile_uid(self) -> str | None:
+        return self._read("profile.txt") or None
 
     @property
     def tun_index(self) -> int | None:

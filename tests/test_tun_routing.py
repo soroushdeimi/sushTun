@@ -166,7 +166,7 @@ def _iface():
 
 def test_server_route_is_pinned_before_xray_dials(monkeypatch, tmp_path):
     conn, calls = _stub_connect(monkeypatch, tmp_path)
-    conn._connect_generic(types.SimpleNamespace(), _iface(), "185.229.204.23",
+    conn._connect_generic(types.SimpleNamespace(uid="p1"), _iface(), "185.229.204.23",
                           DnsState(mode="DHCP", servers=[]))
 
     assert calls.index("add_host_route") < calls.index("xray_start")
@@ -179,7 +179,7 @@ def test_connect_fails_and_cleans_up_when_the_tun_has_no_address(monkeypatch, tm
     conn, calls = _stub_connect(monkeypatch, tmp_path, tun_addressed=False)
 
     with pytest.raises(connection.ConnectError, match="carry no traffic"):
-        conn._connect_generic(types.SimpleNamespace(), _iface(), "185.229.204.23",
+        conn._connect_generic(types.SimpleNamespace(uid="p1"), _iface(), "185.229.204.23",
                               DnsState(mode="DHCP", servers=[]))
 
     assert "xray_stop" in calls
@@ -193,7 +193,7 @@ def test_connect_fails_and_cleans_up_when_the_tun_never_appears(monkeypatch, tmp
     conn, calls = _stub_connect(monkeypatch, tmp_path, tun=None)
 
     with pytest.raises(connection.ConnectError, match="did not appear"):
-        conn._connect_generic(types.SimpleNamespace(), _iface(), "185.229.204.23",
+        conn._connect_generic(types.SimpleNamespace(uid="p1"), _iface(), "185.229.204.23",
                               DnsState(mode="DHCP", servers=[]))
 
     assert "configure_tun" not in calls
@@ -209,7 +209,7 @@ def test_xray_dying_at_startup_reports_its_own_error(monkeypatch, tmp_path):
     monkeypatch.setattr(paths, "log_file", lambda: log)
 
     with pytest.raises(connection.ConnectError, match="address already in use"):
-        conn._connect_generic(types.SimpleNamespace(), _iface(), "185.229.204.23",
+        conn._connect_generic(types.SimpleNamespace(uid="p1"), _iface(), "185.229.204.23",
                               DnsState(mode="DHCP", servers=[]))
     assert "xray_stop" in calls
 
