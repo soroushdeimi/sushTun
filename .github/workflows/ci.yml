@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   test:
@@ -28,3 +29,52 @@ jobs:
         run: python -m pytest -q
         env:
           QT_QPA_PLATFORM: offscreen
+
+  test-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade pip -r requirements-dev.txt
+      # Fetches the bundled binaries so the asset-gated tests run, not skip.
+      - run: python scripts/fetch_deps.py
+      # -rs lists why each test was skipped, which is what matters on macOS.
+      - name: Test
+        run: python -m pytest -q -rs
+        env:
+          QT_QPA_PLATFORM: offscreen
+      # Evidence for the clipboard fix: reports only, never fails the job.
+      - name: Pasteboard seen from root
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -u
+          echo "RUNNER_USER: $(id -un) (uid $(id -u))"
+          echo "PBCOPY: $(command -v pbcopy || echo missing)"
+          echo "PBPASTE: $(command -v pbpaste || echo missing)"
+          TOKEN="sushtun-$(python3 -c 'import secrets; print(secrets.token_hex(8))')"
+          printf '%s' "$TOKEN" | pbcopy
+          echo "TOKEN: $TOKEN"
+          USER_SEES="$(pbpaste)"
+          echo "AS_USER pbpaste: [$USER_SEES]"
+          ROOT_SEES="$(sudo pbpaste 2>&1)"
+          echo "AS_ROOT sudo pbpaste: [$ROOT_SEES]"
+          VIA_SEES="$(sudo sudo -u "$USER" pbpaste 2>&1)"
+          echo "AS_ROOT sudo sudo -u $USER pbpaste: [$VIA_SEES]"
+          PY="$(command -v python)"
+          echo "PY: $PY"
+          APP_SEES="$(sudo env PYTHONPATH="$PWD" "$PY" -c '
+          import subprocess
+          from xrayui.core import desktop
+          su = desktop.session_user()
+          print("session_user:", su, file=__import__("sys").stderr)
+          argv = desktop._as_user(*su, ["pbpaste"]) if su else None
+          print("argv:", argv, file=__import__("sys").stderr)
+          if argv:
+              print(subprocess.run(argv, capture_output=True, text=True, timeout=10).stdout, end="")
+          ' 2>&1)"
+          echo "APP_PATH (as root, via session_user/_as_user): [$APP_SEES]"
+          yn() { case "$1" in *"$TOKEN"*) echo y;; *) echo n;; esac; }
+          echo "PASTEBOARD: root_sees_token=$(yn "$ROOT_SEES") user_via_sudo_sees_token=$(yn "$VIA_SEES")"
