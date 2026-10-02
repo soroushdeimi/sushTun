@@ -101,7 +101,7 @@ def subscription_url(text: str) -> str:
     here instead and kept as a subscription, which is what the user wants
     from a subscription link anyway: one that keeps updating.
     """
-    value = text.strip()
+    value = text.lstrip("\ufeff").strip()
     if not value or any(c.isspace() for c in value):
         return ""  # several lines, or a link with a comment after it
     return value if value.lower().startswith(("http://", "https://")) else ""
@@ -120,13 +120,21 @@ class SubscriptionStore:
         self.file = paths.profiles_dir() / SUBSCRIPTIONS_FILENAME
 
     def list(self) -> list[Subscription]:
-        if not self.file.exists():
-            return []
         try:
-            return [Subscription.from_dict(d) for d in
-                    json.loads(self.file.read_text(encoding="utf-8"))]
+            data = json.loads(self.file.read_text(encoding="utf-8"))
         except (ValueError, OSError):
             return []
+        if not isinstance(data, list):
+            return []  # hand-edited or corrupt: start with no subscriptions
+        subs = []
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            try:
+                subs.append(Subscription.from_dict(item))
+            except (TypeError, ValueError, AttributeError):
+                continue  # one broken entry must not hide the others
+        return subs
 
     def _write(self, subs: list[Subscription]) -> None:
         self.file.parent.mkdir(parents=True, exist_ok=True)

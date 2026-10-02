@@ -118,7 +118,7 @@ def import_rules(text: str, fetch: Fetch | None = None) -> tuple[list[dict], int
     and were dropped, for the caller to show the user.
     """
     try:
-        data = json.loads(text)
+        data = json.loads(text.lstrip("\ufeff"))  # json refuses a BOM outright
     except ValueError:
         return [], 0
 

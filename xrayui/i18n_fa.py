@@ -250,6 +250,8 @@ TRANSLATIONS_FA: dict[str, str] = {
     "Peer public key": "کلید عمومی Peer",
     "Reality public key": "کلید عمومی Reality",
     "Invalid JSON": "JSON نامعتبر",
+    "A server is written as one JSON object, inside { }.":
+        "هر سرور به‌صورت یک شیء JSON داخل { } نوشته می‌شود.",
     "Invalid xhttp extra": "xhttp extra نامعتبر",
     "xhttp extra must be a JSON object, e.g. {\"headers\": {\"X-Extra\": \"1\"}}.":
         "xhttp extra باید یک شیء JSON باشد، مثلاً {\"headers\": {\"X-Extra\": \"1\"}}.",

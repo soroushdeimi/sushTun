@@ -123,10 +123,22 @@ def server_reason(entry: str) -> tuple[str, str] | None:
     if any(c.isspace() for c in value):
         return value, REASON_SPACES
     if value.startswith(_SCHEMES):
-        # Everything after the scheme is host[:port][/path]; require a host.
-        rest = value.split("://", 1)[1]
-        if not rest.split("/", 1)[0]:
+        # Everything after the scheme is host[:port][/path]; require a host,
+        # and a port, when there is one, that Xray will accept.
+        hostport = value.split("://", 1)[1].split("/", 1)[0]
+        if not hostport:
             return value, REASON_NO_HOST
+        if hostport.startswith("["):
+            inside, closed, tail = hostport[1:].partition("]")
+            if not closed or not inside or (tail and not tail.startswith(":")):
+                return value, REASON_UNRECOGNIZED
+            port = tail[1:] if tail else None
+        elif hostport.count(":") == 1:
+            port = hostport.split(":", 1)[1]
+        else:
+            port = None  # a bare host, or an unbracketed IPv6 address
+        if port is not None and not (port.isdigit() and 1 <= int(port) <= 65535):
+            return value, REASON_INVALID_PORT
         return None
     if _valid_address(value):
         return None

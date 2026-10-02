@@ -485,6 +485,10 @@ class ProfileEditDialog(QDialog):
                 # Python's own JSON parser message -- stays in English.
                 QMessageBox.warning(self, tr("Invalid JSON"), str(exc))
                 return
+            if not isinstance(data, dict):
+                QMessageBox.warning(self, tr("Invalid JSON"),
+                                    tr("A server is written as one JSON object, inside { }."))
+                return
             data["uid"] = self._profile.uid
             self._profile = Profile.from_dict(data)
         else:

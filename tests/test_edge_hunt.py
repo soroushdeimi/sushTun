@@ -33,22 +33,17 @@ def base(tmp_path, monkeypatch):
 
 
 # 1
-@pytest.mark.xfail(strict=True, reason="BUG: parse_share_text lets ValueError escape for a "
-                   "WireGuard .conf with a bad or missing Endpoint")
 @pytest.mark.parametrize("endpoint", ["1.2.3.4:abc", ""])
 def test_bad_wg_conf_is_skipped_not_raised(endpoint):
     assert importer.parse_share_text(WG_CONF.format(endpoint)) == []
 
 
 # 2
-@pytest.mark.xfail(strict=True, reason="BUG: a leading BOM (Notepad files) makes every share "
-                   "link, base64 body and wg .conf import as nothing")
 @pytest.mark.parametrize("body", [VLESS, base64.b64encode(VLESS.encode()).decode()])
 def test_share_text_with_bom_imports(body):
     assert len(importer.parse_share_text("﻿" + body)) == 1
 
 
-@pytest.mark.xfail(strict=True, reason="BUG: a BOM-prefixed routing JSON file imports as nothing")
 def test_routing_import_with_bom():
     text = "﻿" + json.dumps([{"outboundTag": "direct", "domain": ["a.com"]}])
     sets, _ = routing_io.import_rules(text)
@@ -56,8 +51,6 @@ def test_routing_import_with_bom():
 
 
 # 3
-@pytest.mark.xfail(strict=True, reason="BUG: out-of-range server ports (0, 65536, -1) are "
-                   "accepted from a vmess JSON link and a wg .conf endpoint")
 @pytest.mark.parametrize("text", [_vmess(65536), _vmess(-1), _vmess(0),
                                   WG_CONF.format("1.2.3.4:99999")])
 def test_out_of_range_server_port_is_rejected(text):
@@ -65,9 +58,9 @@ def test_out_of_range_server_port_is_rejected(text):
 
 
 # 4
-@pytest.mark.xfail(strict=True, reason="BUG: routing rule ports above 65535 pass through and "
-                   "make Xray refuse to start")
-@pytest.mark.parametrize("port", ["99999", "0", "70000-80000"])
+# Xray itself accepts "0", "0-65535" and a reversed "10-5"; only a number above
+# 65535 makes it refuse the whole config.
+@pytest.mark.parametrize("port", ["99999", "65536", "70000-80000", "80,70000"])
 def test_rule_port_out_of_range_is_dropped(port):
     out = routing.convert_user_rule({"enabled": True, "outbound": "direct",
                                      "port": port, "domain": ["x.com"]})
@@ -75,8 +68,6 @@ def test_rule_port_out_of_range_is_dropped(port):
 
 
 # 5
-@pytest.mark.xfail(strict=True, reason="BUG: DNS servers with a scheme accept any port text "
-                   "and unbalanced brackets")
 @pytest.mark.parametrize("entry", ["udp://8.8.8.8:99999", "udp://8.8.8.8:abc",
                                    "tcp://1.1.1.1:0", "udp://[::1"])
 def test_dns_scheme_server_with_bad_port_is_rejected(entry):
@@ -84,8 +75,6 @@ def test_dns_scheme_server_with_bad_port_is_rejected(entry):
 
 
 # 6
-@pytest.mark.xfail(strict=True, reason="BUG: settings.load raises TypeError when "
-                   "schema_version is not an int")
 @pytest.mark.parametrize("value", ['"x"', "[]"])
 def test_settings_with_non_int_schema_version_loads(base, value):
     (base / "settings.json").write_text(f'{{"schema_version": {value}}}', encoding="utf-8")
@@ -93,8 +82,6 @@ def test_settings_with_non_int_schema_version_loads(base, value):
 
 
 # 7
-@pytest.mark.xfail(strict=True, reason="BUG: ProfileStore.get/active raise on an empty, "
-                   "truncated or non-object active profile file (list() skips them)")
 @pytest.mark.parametrize("content", ["", '{"name": "x", "por', "[]"])
 def test_active_profile_with_corrupt_file_is_none(base, content):
     store = ProfileStore()
@@ -105,8 +92,6 @@ def test_active_profile_with_corrupt_file_is_none(base, content):
 
 
 # 8
-@pytest.mark.xfail(strict=True, reason="BUG: one profile file with a null/non-string name "
-                   "makes ProfileStore.list raise, emptying the whole server list")
 @pytest.mark.parametrize("name", ["null", "5", '["a"]'])
 def test_profile_list_survives_a_non_string_name(base, name):
     store = ProfileStore()
@@ -116,8 +101,6 @@ def test_profile_list_survives_a_non_string_name(base, name):
 
 
 # 9
-@pytest.mark.xfail(strict=True, reason="BUG: SubscriptionStore.list raises on a subscriptions "
-                   "file that is an object or holds non-object / mistyped entries")
 @pytest.mark.parametrize("text", ['{"a": 1}', '["a"]', "[null]", '[{"usage": "x"}]',
                                   '[{"profile_uids": 5}]'])
 def test_subscription_list_survives_wrong_shapes(base, text):
@@ -128,8 +111,6 @@ def test_subscription_list_survives_wrong_shapes(base, text):
 
 
 # 10
-@pytest.mark.xfail(strict=True, reason="BUG: the profile editor's raw JSON tab raises "
-                   "TypeError when the JSON is not an object")
 @pytest.mark.parametrize("raw", ["[]", "null", "5"])
 def test_edit_dialog_raw_json_must_be_an_object(raw, monkeypatch):
     from PySide6.QtWidgets import QApplication, QMessageBox
