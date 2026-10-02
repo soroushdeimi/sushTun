@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
 from ..core import geo_exit
 from ..i18n import current, ltr, tr
 from .flags import flag_pixmap
+from .help import set_help
 from .icons import icon
 from .mac import IconButton
 from .theme import MUTED, OK
@@ -73,6 +74,9 @@ class ConnectionHeader(QFrame):
         self._timer_pill = QLabel("")
         self._timer_pill.setObjectName("PillOn")
         self._timer_pill.setVisible(False)
+        set_help(self._timer_pill,
+                 tr("How long this connection has been up."),
+                 tr("Handy for noticing that a call dropped the tunnel an hour ago."))
         title_row.addWidget(self._state)
         title_row.addWidget(self._timer_pill)
         title_row.addStretch(1)
@@ -84,9 +88,18 @@ class ConnectionHeader(QFrame):
         self.btn_connect = QPushButton(tr("Connect"))
         self.btn_connect.setObjectName("Primary")
         self.btn_connect.clicked.connect(self.connectRequested)
+        set_help(self.btn_connect,
+                 tr("Turns the tunnel on. Your internet then goes through the "
+                    "active server (the one with the dot), following your routing "
+                    "rules."),
+                 tr("Press it before settling into a café's Wi-Fi, then forget about it."))
         self.btn_disconnect = QPushButton(tr("Disconnect"))
         self.btn_disconnect.setObjectName("HeaderAction")
         self.btn_disconnect.clicked.connect(self.disconnectRequested)
+        set_help(self.btn_disconnect,
+                 tr("Turns the tunnel off and puts your network back the way it was."),
+                 tr("A site that dislikes VPNs? One click and you're on your normal "
+                    "connection again."))
         actions.addWidget(self.btn_connect)
         actions.addWidget(self.btn_disconnect)
         self.btn_more = self._build_more_button()
@@ -105,9 +118,17 @@ class ConnectionHeader(QFrame):
         self._flag = QLabel()
         self._flag.setFixedSize(20, 15)
         self._flag.setVisible(False)
-        lead = QHBoxLayout()
+        # A container so the help sits on the whole line while the label's own
+        # tooltip stays free for the full text when the line is cut short.
+        self._lead_box = QWidget(self)
+        lead = QHBoxLayout(self._lead_box)
+        lead.setContentsMargins(0, 0, 0, 0)
         lead.setSpacing(8)
         lead.addWidget(self._flag, 0, Qt.AlignVCenter)
+        set_help(self._lead_box,
+                 tr("The server you are using, its protocol and delay, the network "
+                    "adapter, and the country your traffic comes out in."),
+                 tr("Flag not where you wanted to be? Pick another server."))
 
         # Empty until something is known; a lone "—" read as a stray mark.
         self._meta = QLabel("")
@@ -116,15 +137,21 @@ class ConnectionHeader(QFrame):
         # the header wide; _elide_meta keeps it readable and truthful instead.
         self._meta.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         lead.addWidget(self._meta, 1)
-        self._row2.addLayout(lead, 1)
+        self._row2.addWidget(self._lead_box, 1)
 
         self._stats_box = QWidget(self)
         self._stats_box.setObjectName("HeaderStats")
         stats_layout = QHBoxLayout(self._stats_box)
         stats_layout.setContentsMargins(0, 0, 0, 0)
         stats_layout.setSpacing(22)
-        self._down_up_col = self._build_stat_fig(stats_layout, tr("Down / Up"))
-        self._session_col = self._build_stat_fig(stats_layout, tr("This session"))
+        self._down_up_col = self._build_stat_fig(
+            stats_layout, tr("Down / Up"),
+            tr("How fast data is flowing through the tunnel right now."),
+            tr("Watch it while a download runs to see what the server can really do."))
+        self._session_col = self._build_stat_fig(
+            stats_layout, tr("This session"),
+            tr("How much data has gone through the tunnel since you connected."),
+            tr("Keeping an eye on a monthly data cap? Check it here."))
         self._row2.addWidget(self._stats_box)
         outer.addLayout(self._row2)
 
@@ -142,6 +169,10 @@ class ConnectionHeader(QFrame):
         self.btn_reconnect = QPushButton(tr("Reconnect now"))
         self.btn_reconnect.setObjectName("Primary")
         self.btn_reconnect.clicked.connect(self.reconnectRequested)
+        set_help(self.btn_reconnect,
+                 tr("Restarts the connection so the change you just made takes effect."),
+                 tr("Changed the routing mode while connected? Press this and it "
+                    "applies in a few seconds."))
         notice = QHBoxLayout()
         notice.addWidget(self._notice_label, 1)
         notice.addWidget(self.btn_reconnect)
@@ -154,7 +185,7 @@ class ConnectionHeader(QFrame):
     # ── helpers ──────────────────────────────────────────────────────────
 
     def _build_stat_fig(
-        self, layout: QHBoxLayout, label_text: str,
+        self, layout: QHBoxLayout, label_text: str, what: str, example: str,
     ) -> tuple[QLabel, QLabel]:
         col = QVBoxLayout()
         col.setSpacing(2)
@@ -167,13 +198,23 @@ class ConnectionHeader(QFrame):
         col.addWidget(lbl)
         col.addWidget(val)
         layout.addLayout(col)
+        set_help(lbl, what, example)
+        set_help(val, what, example)
         return lbl, val
 
     def _build_more_button(self) -> QToolButton:
         more = IconButton("ellipsis", tr("More connection actions"))
+        set_help(more,
+                 tr("Extra tools for when the connection misbehaves."),
+                 tr("The internet feels stuck after a crash? Open this and restore the network."))
         more.setPopupMode(QToolButton.InstantPopup)
         menu = QMenu(more)
-        menu.addAction(tr("Restore network"), self.restoreNetworkRequested.emit)
+        restore = menu.addAction(tr("Restore network"), self.restoreNetworkRequested.emit)
+        set_help(restore,
+                 tr("Undoes the tunnel's changes to your routes, DNS and hotspot "
+                    "sharing so the internet works normally again."),
+                 tr("Closed the app badly and now no site loads? Try this first."))
+        menu.setToolTipsVisible(True)
         more.setMenu(menu)
         return more
 

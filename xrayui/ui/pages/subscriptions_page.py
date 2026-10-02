@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 from ...core.alerts import human_bytes
 from ...core.subscription import Subscription
 from ...i18n import ltr, tr
+from ..help import set_help
 from ..mac import IconButton
 from ..subscription_panel import _ago, _bar_color
 
@@ -45,6 +46,17 @@ class _PageSubscriptionRow(QFrame):
         edit = IconButton("pencil", tr("Edit subscription"))
         refresh = IconButton("refresh", tr("Update now"))
         delete = IconButton("close", tr("Delete subscription"))
+        set_help(edit,
+                 tr("Changes this subscription's name, address, update schedule "
+                    "and filter."),
+                 tr("Provider moved to a new address? Paste it here."))
+        set_help(refresh,
+                 tr("Downloads this subscription's server list again right now."),
+                 tr("New servers announced? Don't wait for the schedule."))
+        set_help(delete,
+                 tr("Removes this subscription and the servers it brought. You are "
+                    "asked first."),
+                 tr("Cancelled with that provider? Clear out their servers in one go."))
         edit.clicked.connect(lambda: self.editRequested.emit(self.uid))
         refresh.clicked.connect(lambda: self.refreshRequested.emit(self.uid))
         delete.clicked.connect(lambda: self.deleteRequested.emit(self.uid))
@@ -109,9 +121,16 @@ class SubscriptionsPage(QWidget):
         title.setObjectName("H1")
         update_all = QPushButton(tr("Update all"))
         update_all.clicked.connect(self.updateAllRequested)
+        set_help(update_all,
+                 tr("Downloads every enabled subscription again right now."),
+                 tr("Monday morning: refresh all your lists in one click."))
         add = QPushButton(tr("Add"))
         add.setObjectName("Primary")
         add.clicked.connect(self.addRequested)
+        set_help(add,
+                 tr("Adds a subscription: a web address that hands out a list of "
+                    "servers. sushTun downloads it now and keeps it updated."),
+                 tr("Your provider gave you one link instead of fifty? This is where it goes."))
         head.addWidget(title)
         head.addStretch(1)
         head.addWidget(update_all)

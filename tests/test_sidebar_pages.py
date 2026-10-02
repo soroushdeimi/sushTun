@@ -123,13 +123,13 @@ def test_servers_page_filter_narrows_visible_uids(qapp):
 def test_servers_page_import_button_carries_the_ellipsis(qapp):
     page = ServersPage()
     assert page.core.btn_import.text() == "Import…"
-    assert page.core.btn_import.toolTip() == ""
+    assert page.core.btn_import.toolTip().startswith("<table")
 
 
 def test_servers_page_more_button_is_an_accessible_icon_button(qapp):
     page = ServersPage()
     assert isinstance(page.more_btn, QToolButton)
-    assert page.more_btn.toolTip() == tr("More server actions")
+    assert tr("More server actions") in page.more_btn.toolTip()
     assert page.more_btn.accessibleName() == tr("More server actions")
     assert page.more_btn.menu() is page.core.btn_more.menu()
     labels = [a.text() for a in page.more_btn.menu().actions()]
@@ -250,10 +250,10 @@ def test_subscriptions_page_rows_with_tooltipped_icon_buttons(qapp):
     assert len(rows) == 2
     tips = {tr("Edit subscription"), tr("Update now"), tr("Delete subscription")}
     for row in rows:
-        row_tips = {b.toolTip() for b in row.findChildren(QToolButton)}
+        row_tips = {b.accessibleName() for b in row.findChildren(QToolButton)}
         assert row_tips == tips
         for b in row.findChildren(QToolButton):
-            assert b.accessibleName() == b.toolTip()
+            assert b.accessibleName() in b.toolTip()
             assert not b.text()  # icon-only
 
 

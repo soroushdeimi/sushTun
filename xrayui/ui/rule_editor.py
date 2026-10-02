@@ -22,8 +22,21 @@ from PySide6.QtWidgets import (
 )
 
 from ..i18n import tr
+from .help import set_help
 
 _PROTOCOLS = ["http", "tls", "bittorrent"]
+
+
+def _protocol_help(name: str) -> tuple[str, str]:
+    if name == "http":
+        return (tr("Matches plain, unencrypted web traffic."),
+                tr("Catch the old sites that still don't use HTTPS."))
+    if name == "tls":
+        return (tr("Matches encrypted connections, which is nearly all modern web "
+                   "traffic."),
+                tr("Catch every secure connection, whatever the website."))
+    return (tr("Matches BitTorrent traffic."),
+            tr("Block torrents on a server with a data cap."))
 
 
 class CollapsibleSection(QWidget):
@@ -53,6 +66,10 @@ class CollapsibleSection(QWidget):
         layout.addWidget(self._toggle)
         layout.addWidget(content)
         content.setVisible(False)
+
+    @property
+    def toggle(self) -> QToolButton:
+        return self._toggle
 
     def _update_text(self, expanded: bool) -> None:
         if expanded:
@@ -86,12 +103,24 @@ class RuleEditorDialog(QDialog):
 
         form = QFormLayout()
         self.remarks = QLineEdit(r.get("remarks", ""))
+        set_help(self.remarks,
+                 tr("Your own note about what this rule is for."),
+                 tr("\"Banks stay direct\" beats a rule you can't remember."))
         form.addRow(tr("Remarks"), self.remarks)
 
         action_row = QHBoxLayout()
         self.rb_proxy = QRadioButton(tr("Proxy"))
         self.rb_direct = QRadioButton(tr("Direct"))
         self.rb_block = QRadioButton(tr("Block"))
+        set_help(self.rb_proxy,
+                 tr("Traffic that matches goes through the tunnel."),
+                 tr("A site that's blocked where you live."))
+        set_help(self.rb_direct,
+                 tr("Traffic that matches skips the tunnel and goes straight out."),
+                 tr("Your bank, which dislikes foreign addresses."))
+        set_help(self.rb_block,
+                 tr("Traffic that matches is dropped and goes nowhere."),
+                 tr("Ads, trackers, and that one app that phones home."))
         for rb in (self.rb_proxy, self.rb_direct, self.rb_block):
             action_row.addWidget(rb)
         {"proxy": self.rb_proxy, "direct": self.rb_direct,
@@ -107,18 +136,31 @@ class RuleEditorDialog(QDialog):
         self.domains.setPlaceholderText("domain:example.com\nfull:exact.example.com\n"
                                         "geosite:google\nkeyword:ads")
         self.domains.setLayoutDirection(Qt.LeftToRight)
+        set_help(self.domains,
+                 tr("Websites to match, one per line. domain:example.com covers a "
+                    "site and its subdomains, full: an exact name, keyword: any name "
+                    "containing a word, geosite: a ready-made group."),
+                 tr("geosite:google matches Google's whole family of sites."))
         layout.addWidget(self.domains, 1)
 
         layout.addWidget(QLabel(tr("IPs / CIDRs (one per line):")))
         self.ips = QPlainTextEdit("\n".join(r.get("ip") or []))
         self.ips.setPlaceholderText("10.0.0.0/8\ngeoip:ir")
         self.ips.setLayoutDirection(Qt.LeftToRight)
+        set_help(self.ips,
+                 tr("Addresses to match, one per line. A range like 10.0.0.0/8 covers "
+                    "many at once, and geoip:ir covers a whole country."),
+                 tr("192.168.0.0/16 matches everything on a typical home network."))
         layout.addWidget(self.ips, 1)
 
         adv_widget = QWidget()
         adv_form = QFormLayout(adv_widget)
         self.port = QLineEdit(r.get("port", ""))
         self.port.setPlaceholderText("443 or 1000-2000 or 80,443,8000-9000")
+        set_help(self.port,
+                 tr("Only match traffic going to these ports: one port, a range, or "
+                    "a comma-separated list."),
+                 tr("80,443 matches ordinary web browsing."))
         adv_form.addRow(tr("Port"), self.port)
 
         self.network = QComboBox()
@@ -127,6 +169,10 @@ class RuleEditorDialog(QDialog):
             self.network.addItem(label, value)
         idx = self.network.findData(r.get("network", ""))
         self.network.setCurrentIndex(idx if idx >= 0 else 0)
+        set_help(self.network,
+                 tr("Only match this kind of traffic. TCP covers most things; UDP "
+                    "covers calls, games and QUIC."),
+                 tr("Leave it on Any unless the rule is only for one of them."))
         adv_form.addRow(tr("Network"), self.network)
 
         proto_row = QHBoxLayout()
@@ -134,16 +180,25 @@ class RuleEditorDialog(QDialog):
         for name in _PROTOCOLS:
             cb = QCheckBox(name)
             cb.setChecked(name in (r.get("protocol") or []))
+            set_help(cb, *_protocol_help(name))
             self.protocol_boxes[name] = cb
             proto_row.addWidget(cb)
         adv_form.addRow(tr("Protocol"), proto_row)
 
         self.process = QPlainTextEdit("\n".join(r.get("process") or []))
-        self.process.setToolTip(tr("Linux/Windows process names"))
+        set_help(self.process,
+                 tr("Names of programs to match, one per line, such as firefox. "
+                    "Works on Linux and Windows."),
+                 tr("Name your download manager here and choose Direct to keep it "
+                    "off the tunnel."))
         self.process.setMaximumHeight(70)
         adv_form.addRow(tr("Process"), self.process)
 
-        layout.addWidget(CollapsibleSection(tr("Advanced"), adv_widget))
+        adv_section = CollapsibleSection(tr("Advanced"), adv_widget)
+        set_help(adv_section.toggle,
+                 tr("Shows the rarely needed conditions."),
+                 tr("Skip it for simple rules."))
+        layout.addWidget(adv_section)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         buttons.button(QDialogButtonBox.Save).setText(tr("Save"))

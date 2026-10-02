@@ -29,6 +29,7 @@ from ..core import share as share_mod
 from ..core.profiles import Profile
 from ..i18n import ltr, tr
 from .flags import FLAG_H, FLAG_W
+from .help import set_help
 from .server_table import (
     COL_ACTIVE,
     COL_DELAY,
@@ -177,6 +178,10 @@ class _ServerTableCore(QWidget):
         # a consumer that skips one from leaving it orphaned and top-level.
         self.filter_edit = QLineEdit(self)
         self.filter_edit.setPlaceholderText(tr("Filter by name or address…"))
+        set_help(self.filter_edit,
+                 tr("Shows only the servers whose name or address contains what you "
+                    "type. Test works on just the ones shown."),
+                 tr("Type \"de\" to see only your German servers."))
 
         self.model = ProfileTableModel()
         self.proxy = ProfileFilterProxy()
@@ -231,18 +236,39 @@ class _ServerTableCore(QWidget):
         self.btn_import = QPushButton(tr("Import"), self)
         self.btn_import.setObjectName("Primary")
         self.btn_import.clicked.connect(self.importRequested)
+        set_help(self.btn_import,
+                 tr("Adds servers: paste a link or a subscription address, a config, "
+                    "or load a QR image."),
+                 tr("A friend sent you a vless:// link? Paste it here and you're done."))
 
         self.btn_test = QToolButton(self)
         self.btn_test.setText(tr("Test"))
         self.btn_test.setPopupMode(QToolButton.MenuButtonPopup)
         self.btn_test.clicked.connect(lambda: self._start_test(real=True))
+        set_help(self.btn_test,
+                 tr("Checks how quickly the servers in the list answer and fills the "
+                    "Delay column. While it runs, this button becomes Cancel."),
+                 tr("Back from a trip? Re-test to see which servers still work."))
         test_menu = QMenu(self.btn_test)
-        test_menu.addAction(tr("Real delay"), lambda: self._start_test(real=True))
-        test_menu.addAction(tr("TCP ping"), lambda: self._start_test(real=False))
+        real = test_menu.addAction(tr("Real delay"), lambda: self._start_test(real=True))
+        set_help(real,
+                 tr("Loads a small page through each server, like a real visit. "
+                    "Slower, but it shows what you will actually get."),
+                 tr("A server that answers ping yet won't open pages? This catches it."))
+        ping = test_menu.addAction(tr("TCP ping"), lambda: self._start_test(real=False))
+        set_help(ping,
+                 tr("Only checks that each server's port answers, without loading "
+                    "anything. Quick, but it can't tell whether the server really works."),
+                 tr("Hundreds of servers? Ping them first to weed out the dead ones."))
+        test_menu.setToolTipsVisible(True)
         self.btn_test.setMenu(test_menu)
 
         self.btn_fastest = QPushButton(tr("Use fastest"), self)
         self.btn_fastest.clicked.connect(self._use_fastest)
+        set_help(self.btn_fastest,
+                 tr("Switches to the server with the lowest delay in your last test. "
+                    "Run Test first, otherwise there is nothing to compare."),
+                 tr("Twenty servers and no idea which one? One click picks the quickest."))
 
         self.btn_more = QToolButton(self)
         self.btn_more.setText("⋯")
@@ -250,14 +276,27 @@ class _ServerTableCore(QWidget):
         more_menu = QMenu(self.btn_more)
         # addAction takes a callable; a SignalInstance is not one, so trigger
         # it via a lambda or the menu action dies with "not callable".
-        more_menu.addAction(
+        failed = more_menu.addAction(
             tr("Remove failed"), lambda checked=False: self.removeFailedRequested.emit()
         )
-        more_menu.addAction(
+        set_help(failed,
+                 tr("Deletes the servers whose last test failed, except the active "
+                    "one. You are asked first."),
+                 tr("Imported 80 servers and half are dead? Test, then sweep them away."))
+        dupes = more_menu.addAction(
             tr("Remove duplicates"),
             lambda checked=False: self.removeDuplicatesRequested.emit(),
         )
+        set_help(dupes,
+                 tr("Deletes extra copies of the same server (same protocol, address, "
+                    "port and ID) and keeps one. You are asked first."),
+                 tr("Imported the same subscription twice? This tidies up."))
+        more_menu.setToolTipsVisible(True)
         self.btn_more.setMenu(more_menu)
+        set_help(self.btn_more,
+                 tr("Cleanup tools for the server list."),
+                 tr("Tidy up after a big import in two clicks."),
+                 title=tr("More server actions"))
 
         self.btn_import.setAccessibleName(tr("Import"))
         self.btn_test.setAccessibleName(tr("Test"))
@@ -438,18 +477,38 @@ class _ServerTableCore(QWidget):
         if not uids:
             return None
         menu = QMenu(self)
+        menu.setToolTipsVisible(True)
         if len(uids) == 1:
             uid = uids[0]
-            menu.addAction(tr("Set active"), lambda: self.activated.emit(uid))
-            menu.addAction(tr("Edit"), lambda: self.editRequested.emit(uid))
-            menu.addAction(tr("Clone"), lambda: self.duplicateRequested.emit(uid))
-        menu.addAction(tr("Test real delay"), lambda: self.testRealDelayRequested.emit(uids))
-        menu.addAction(tr("TCP ping"), lambda: self.tcpPingRequested.emit(uids))
+            set_help(menu.addAction(tr("Set active"), lambda: self.activated.emit(uid)),
+                     tr("Makes this the server that Connect uses."),
+                     tr("Found a quick one? Set it active, then connect."))
+            set_help(menu.addAction(tr("Edit"), lambda: self.editRequested.emit(uid)),
+                     tr("Opens this server's details so you can change them."),
+                     tr("Fix a typo in the name, or swap in a new port."))
+            set_help(menu.addAction(tr("Clone"), lambda: self.duplicateRequested.emit(uid)),
+                     tr("Makes a copy you can tweak without touching the original."),
+                     tr("Try a different port on a copy, and keep the working one safe."))
+        set_help(menu.addAction(tr("Test real delay"),
+                                lambda: self.testRealDelayRequested.emit(uids)),
+                 tr("Loads a small page through the selected server(s) and times it."),
+                 tr("Select your three favourites and see which one is quickest today."))
+        set_help(menu.addAction(tr("TCP ping"), lambda: self.tcpPingRequested.emit(uids)),
+                 tr("Only checks that the selected server(s) answer, without loading "
+                    "anything."),
+                 tr("A quick \"is it even awake?\" check."))
         if len(uids) == 1:
-            menu.addAction(tr("Copy share link"), lambda: self._copy_link(uids[0]))
-            menu.addAction(tr("Show QR"), lambda: self._show_qr(uids[0]))
+            set_help(menu.addAction(tr("Copy share link"), lambda: self._copy_link(uids[0])),
+                     tr("Puts this server's link on your clipboard. Anyone who has "
+                        "it can use the server, so share it with care."),
+                     tr("Paste it into a chat to give a friend the same server."))
+            set_help(menu.addAction(tr("Show QR"), lambda: self._show_qr(uids[0])),
+                     tr("Shows this server's link as a QR code another phone can scan."),
+                     tr("Set up your phone by pointing its camera at the screen."))
         menu.addSeparator()
-        menu.addAction(tr("Delete"), lambda: self._delete_selected(uids))
+        set_help(menu.addAction(tr("Delete"), lambda: self._delete_selected(uids)),
+                 tr("Removes the selected server(s) from your list."),
+                 tr("Get rid of the ones that never worked."))
         return menu
 
     def _show_menu(self, pos) -> None:
@@ -460,11 +519,15 @@ class _ServerTableCore(QWidget):
 
     def _build_header_menu(self) -> QMenu:
         menu = QMenu(self)
+        menu.setToolTipsVisible(True)
         for col, label in OPTIONAL_COLUMNS:
             action = menu.addAction(tr(label))
             action.setCheckable(True)
             action.setChecked(not self.table.isColumnHidden(col))
             action.toggled.connect(lambda checked, c=col: self.table.setColumnHidden(c, not checked))
+            set_help(action,
+                     tr("Shows or hides the {column} column.", column=tr(label)),
+                     tr("Too cluttered? Hide what you never look at."))
         return menu
 
     def _show_header_menu(self, pos) -> None:

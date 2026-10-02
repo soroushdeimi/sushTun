@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from ...i18n import ltr, tr
+from ..help import help_html, set_help
 from ..mac import InsetGroup
 from ..tools_panel import ToolsPanel
 from ..widgets import LogView
@@ -51,6 +52,10 @@ class _DiagnosticsPanel(QWidget):
 
         run = QPushButton(tr("Diagnostics"))
         run.clicked.connect(self.runRequested)
+        set_help(run,
+                 tr("Collects the network details the tunnel relies on: server ping, "
+                    "DNS, routes and the latest log lines."),
+                 tr("Asking for help? Paste this output along with your question."))
         run_row = QHBoxLayout()
         run_row.addWidget(run)
         run_row.addStretch(1)
@@ -89,6 +94,15 @@ class ActivityPage(QWidget):
         self.tabs.addTab(tr("Tools"))
         self.tabs.addTab(tr("Diagnostics"))
         outer.addWidget(self.tabs, 0, Qt.AlignLeft)
+        self.tabs.setTabToolTip(0, help_html(
+            tr("Everything Xray reports, as it happens."),
+            tr("Watch it while you connect to see exactly where it stops.")))
+        self.tabs.setTabToolTip(1, help_html(
+            tr("Quick checks: ping, delay and speed."),
+            tr("Is the slow part the server or your Wi-Fi? Find out in seconds.")))
+        self.tabs.setTabToolTip(2, help_html(
+            tr("The connection's technical details in one place."),
+            tr("Handy to copy when someone asks \"what does it say?\".")))
 
         self.stack = QStackedWidget()
         self.log = LogView()

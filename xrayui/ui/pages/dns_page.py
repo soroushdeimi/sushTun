@@ -32,6 +32,7 @@ from ...core import render, xraycheck
 from ...core import routing as routing_mod
 from ...core.profiles import Profile
 from ...i18n import ltr, tr
+from ..help import set_help
 from ..rule_editor import CollapsibleSection
 from ..workers import Worker
 from .flow import FlowLayout
@@ -79,6 +80,10 @@ class DnsPage(QWidget):
         for name, servers in dns_mod.PRESETS.items():
             btn = QPushButton(name)
             btn.clicked.connect(lambda _=False, s=servers: self._fill(s))
+            set_help(btn,
+                     tr("Fills the list below with {name}'s servers. You still need "
+                        "to press Apply.", name=name),
+                     tr("No idea which DNS to trust? Start with a well-known one."))
             presets.addWidget(btn)
         layout.addLayout(presets)
 
@@ -94,6 +99,12 @@ class DnsPage(QWidget):
             + tr("Use literal IPs — a hostname needs another resolver to look it up first.")
         )
         self.servers.setLayoutDirection(Qt.LeftToRight)
+        resolver_help = (
+            tr("The DNS servers that turn website names into addresses, tried in "
+               "order. Leave it empty to keep the built-in ones."),
+            tr("Put your favourite first and a backup on the next line."))
+        set_help(self.servers, *resolver_help)
+        set_help(resolver_label, *resolver_help)
         layout.addWidget(self.servers, 2)
 
         strategy = QHBoxLayout()
@@ -104,11 +115,14 @@ class DnsPage(QWidget):
             self.strategy.addItem(name, name)
         current = str(dns.get("query_strategy") or "")
         self.strategy.setCurrentIndex(max(0, self.strategy.findData(current)))
-        self.strategy.setToolTip(
-            tr("UseIPv4 avoids AAAA answers this IPv4-only tunnel cannot route.") + "\n"
-            + tr("UseIP or UseIPv6 can make clients prefer an IPv6 path that leaves\n"
-                 "over your physical adapter instead of the tunnel.")
-        )
+        strategy_label = strategy.itemAt(0).widget()
+        strategy_help = (
+            tr("Which kinds of address to ask for. UseIPv4 is the safe pick here, "
+               "because the tunnel can't carry IPv6 and an IPv6 answer would "
+               "bypass it."),
+            tr("Sites load on some pages and not others? Try UseIPv4."))
+        set_help(self.strategy, *strategy_help)
+        set_help(strategy_label, *strategy_help)
         strategy.addWidget(self.strategy, 1)
         layout.addLayout(strategy)
 
@@ -119,32 +133,51 @@ class DnsPage(QWidget):
         self.hosts.setPlaceholderText(
             "example.com = 93.184.216.34\ncdn.example.com = 1.2.3.4, 5.6.7.8")
         self.hosts.setLayoutDirection(Qt.LeftToRight)
+        hosts_help = (
+            tr("Fixed answers for names you choose, one per line, written as "
+               "name = address. They win over any DNS server."),
+            tr("Point your home server's name straight at its address."))
+        set_help(self.hosts, *hosts_help)
+        set_help(over_label, *hosts_help)
         layout.addWidget(self.hosts, 1)
 
         # -- Domestic DNS ----------------------------------------------
         dom_label = QLabel(tr("Domestic DNS (for sites that go direct):"))
-        dom_label.setToolTip(tr("Used only for domains your active routing sends direct."))
+        domestic_help = (
+            tr("DNS servers used only for sites your routing sends direct, so local "
+               "sites resolve to local addresses."),
+            tr("Your country's sites open faster when a local DNS answers for them."))
+        set_help(dom_label, *domestic_help)
         dom_label.setWordWrap(True)
         layout.addWidget(dom_label)
         self.domestic = QLineEdit(", ".join(dns.get("domestic_servers") or []))
         self.domestic.setPlaceholderText("178.22.122.100, 185.51.200.2")
-        self.domestic.setToolTip(tr("Used only for domains your active routing sends direct."))
+        set_help(self.domestic, *domestic_help)
         self.domestic.setLayoutDirection(Qt.LeftToRight)
         layout.addWidget(self.domestic)
         dom_row = FlowLayout()
         for name, addrs in dns_mod.DOMESTIC_PRESETS.items():
             btn = QPushButton(name)
             btn.clicked.connect(lambda _=False, a=addrs: self._fill_domestic(a))
+            set_help(btn,
+                     tr("Fills the domestic DNS with {name}'s addresses. You still "
+                        "need to press Apply.", name=name),
+                     tr("A well-known DNS service for sites inside Iran."))
             dom_row.addWidget(btn)
         off_btn = QPushButton(tr("Off"))
         off_btn.clicked.connect(lambda: self._fill_domestic([]))
+        set_help(off_btn,
+                 tr("Clears the domestic DNS, so direct sites use the main list above."),
+                 tr("Switch it off if a local DNS gives you wrong answers."))
         dom_row.addWidget(off_btn)
         layout.addLayout(dom_row)
 
         # -- Remote via tunnel -------------------------------------------
         self.remote_via_tunnel = QCheckBox(tr("Resolve other sites through the tunnel"))
-        self.remote_via_tunnel.setToolTip(
-            tr("Recommended if your ISP blocks or tampers with DNS."))
+        set_help(self.remote_via_tunnel,
+                 tr("Sends the DNS questions for sites that use the tunnel through "
+                    "the tunnel too, so your provider can't see or alter them."),
+                 tr("Your ISP redirects blocked sites to a warning page? This stops that."))
         self.remote_via_tunnel.setChecked(bool(dns.get("remote_via_tunnel")))
         self.remote_via_tunnel.toggled.connect(self._update_note)
         layout.addWidget(self.remote_via_tunnel)
@@ -161,9 +194,17 @@ class DnsPage(QWidget):
         adv.setContentsMargins(0, 4, 0, 0)
         self.parallel_query = QCheckBox(tr("Parallel query"))
         self.parallel_query.setChecked(bool(dns.get("parallel_query")))
+        set_help(self.parallel_query,
+                 tr("Asks all the DNS servers at once and takes the first answer, "
+                    "instead of one after another."),
+                 tr("A slow first server stops holding up every page."))
         adv.addWidget(self.parallel_query)
         self.serve_stale = QCheckBox(tr("Serve stale"))
         self.serve_stale.setChecked(bool(dns.get("serve_stale")))
+        set_help(self.serve_stale,
+                 tr("Lets Xray reuse a recently expired answer while it fetches a "
+                    "fresh one in the background."),
+                 tr("Pages start instantly even when the DNS server is slow today."))
         adv.addWidget(self.serve_stale)
         raw_label = QLabel(tr("Raw DNS override (replaces everything above):"))
         raw_label.setWordWrap(True)
@@ -171,8 +212,18 @@ class DnsPage(QWidget):
         self.raw_override = QPlainTextEdit(str(dns.get("raw_override") or ""))
         self.raw_override.setPlaceholderText('{"servers": [...]}')
         self.raw_override.setLayoutDirection(Qt.LeftToRight)
+        raw_help = (
+            tr("Your own Xray DNS configuration in JSON. When filled in, it "
+               "replaces every other DNS setting on this page."),
+            tr("For experts: paste a config someone else tested."))
+        set_help(self.raw_override, *raw_help)
+        set_help(raw_label, *raw_help)
         adv.addWidget(self.raw_override)
-        layout.addWidget(CollapsibleSection(tr("Advanced"), adv_widget))
+        adv_section = CollapsibleSection(tr("Advanced"), adv_widget)
+        set_help(adv_section.toggle,
+                 tr("Shows the rarely needed DNS options."),
+                 tr("Skip it until a guide tells you otherwise."))
+        layout.addWidget(adv_section)
 
         self.status_label = QLabel("")
         self.status_label.setObjectName("Muted")
@@ -183,9 +234,17 @@ class DnsPage(QWidget):
         self.btn_revert = QPushButton(tr("Revert"))
         self.btn_revert.clicked.connect(self.revert)
         self.btn_revert.setEnabled(False)
+        set_help(self.btn_revert,
+                 tr("Throws away your unsaved edits and goes back to the saved DNS "
+                    "settings."),
+                 tr("Typed something odd? Revert and start clean."))
         self.btn_apply = QPushButton(tr("Apply"))
         self.btn_apply.clicked.connect(self.apply)
         self.btn_apply.setEnabled(False)
+        set_help(self.btn_apply,
+                 tr("Checks and saves your DNS settings. If you are connected, "
+                    "reconnect afterwards to use them."),
+                 tr("Nothing changes until you press this."))
         bottom.addWidget(self.btn_revert)
         bottom.addWidget(self.btn_apply)
         layout.addLayout(bottom)

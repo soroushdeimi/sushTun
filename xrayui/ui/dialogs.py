@@ -38,6 +38,7 @@ from ..core.outbounds.hysteria2 import normalize_ports
 from ..core.profiles import Profile, normalize_pcs, valid_pcs, valid_pqv
 from ..core.subscription import DEFAULT_USER_AGENT, Subscription
 from ..i18n import tr
+from .help import help_html, set_help
 from .mac import InsetGroup, Switch
 from .rule_editor import CollapsibleSection
 from .workers import Worker
@@ -94,6 +95,20 @@ class ImportDialog(QDialog):
         self.tabs.addTab(self.link_edit, tr("Link / Subscription"))
         self.tabs.addTab(self.json_edit, "JSON")
         self.tabs.addTab(self._qr_tab(), tr("QR image"))
+        link_help = (
+            tr("Paste share links (vless://, vmess://, trojan:// and so on), a "
+               "WireGuard .conf, or a subscription address."),
+            tr("A friend's message with a link? Paste the whole thing."))
+        set_help(self.link_edit, *link_help)
+        self.tabs.setTabToolTip(0, help_html(*link_help))
+        json_help = (
+            tr("Paste a full Xray config, a WireGuard .conf or a profile in JSON."),
+            tr("Moving a server over from another app that exports JSON."))
+        set_help(self.json_edit, *json_help)
+        self.tabs.setTabToolTip(1, help_html(*json_help))
+        self.tabs.setTabToolTip(2, help_html(
+            tr("Reads a link from a picture of a QR code."),
+            tr("A screenshot of the QR code your provider showed you.")))
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         # Qt's own standard-button text isn't translated by this app's i18n
@@ -129,6 +144,12 @@ class ImportDialog(QDialog):
         self.qr_path.setLayoutDirection(Qt.LeftToRight)
         pick = QPushButton(tr("Choose image…"))
         pick.clicked.connect(self._pick_qr)
+        set_help(pick,
+                 tr("Pick a picture (png, jpg or bmp) that contains a QR code."),
+                 tr("Screenshot the QR code, then choose the screenshot."))
+        set_help(self.qr_path,
+                 tr("The picture that will be read. Use the button to choose another."),
+                 tr("Empty? Press Choose image."))
         row = QHBoxLayout()
         row.addWidget(self.qr_path, 1)
         row.addWidget(pick)
@@ -177,6 +198,7 @@ class ProfileEditDialog(QDialog):
         self.setWindowTitle(tr("Edit profile"))
         self.resize(520, 620)
         self._profile = profile
+        self._field_labels: dict[QWidget, QLabel] = {}
 
         self.tabs = QTabWidget()
         # The form is taller than a small screen once Advanced opens; scroll
@@ -189,6 +211,16 @@ class ProfileEditDialog(QDialog):
         self.raw = QPlainTextEdit(json.dumps(profile.to_dict(), indent=2, ensure_ascii=False))
         self.raw.setLayoutDirection(Qt.LeftToRight)
         self.tabs.addTab(self.raw, tr("Raw JSON"))
+        self.tabs.setTabToolTip(0, help_html(
+            tr("The usual fields, one per setting."),
+            tr("Fix a port or a name without touching anything else.")))
+        self.tabs.setTabToolTip(1, help_html(
+            tr("The whole server as JSON. When this tab is open, Save uses the "
+               "JSON instead of the form."),
+            tr("Paste in a field the form doesn't have.")))
+        set_help(self.raw,
+                 tr("The whole server as JSON, one object inside { }."),
+                 tr("Handy for experts; most people can ignore it."))
 
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         buttons.button(QDialogButtonBox.Save).setText(tr("Save"))
@@ -209,7 +241,166 @@ class ProfileEditDialog(QDialog):
     def _add_row(self, form: QFormLayout, text: str, widget) -> QLabel:
         lab = QLabel(text)
         form.addRow(lab, widget)
+        self._field_labels[widget] = lab
         return lab
+
+    def _apply_field_help(self) -> None:
+        wg_mtu = tr("The largest packet WireGuard sends (MTU). Lower it if big pages "
+                    "stall.")
+        fields = {
+            self.f_name: (
+                tr("How this server appears in your list. Just for you; it doesn't "
+                   "change how it connects."),
+                tr("\"Berlin, fast\" is easier to find next week than \"server-7\".")),
+            self.f_protocol: (
+                tr("The language the server speaks. It must match what the server "
+                   "runs; the form only shows the fields that protocol needs."),
+                tr("Provider says \"VLESS + Reality\"? Pick vless here.")),
+            self.f_address: (
+                tr("The server's address: a domain name or an IP address."),
+                tr("de1.example.com, exactly as your provider wrote it.")),
+            self.f_port: (
+                tr("The port the server listens on. 443 is the usual one."),
+                tr("443 looks like ordinary web traffic.")),
+            self.f_id: (
+                tr("Your login on the server: a UUID for VLESS and VMess, the "
+                   "password for Trojan, Shadowsocks and Hysteria2, or your private "
+                   "key for WireGuard."),
+                tr("Copy it from your provider's page; one wrong character and it "
+                   "won't connect.")),
+            self.f_pbk: (
+                tr("The server's public key. For Reality it comes from your "
+                   "provider; for WireGuard it is the peer's public key, the other "
+                   "end of the tunnel."),
+                tr("Paste it exactly as given.")),
+            self.f_vmess_security: (
+                tr("How VMess scrambles your data. Auto picks a good option for "
+                   "your device."),
+                tr("Leave it on auto unless your provider says otherwise.")),
+            self.f_ss_method: (
+                tr("The encryption method Shadowsocks uses. It must match the "
+                   "server's exactly."),
+                tr("Pick the same one your server uses, or nothing will load.")),
+            self.f_encryption: (
+                tr("VLESS's own encryption setting. It is almost always none."),
+                tr("Leave it as none unless your provider gave you a long string "
+                   "to put here.")),
+            self.f_flow: (
+                tr("An optional speed-up mode for VLESS over TLS or Reality, such as "
+                   "xtls-rprx-vision. It must match the server."),
+                tr("Your link says flow=xtls-rprx-vision? Type it here.")),
+            self.f_network: (
+                tr("How data travels to the server: tcp, ws (WebSocket), grpc, xhttp "
+                   "and so on. It must match the server."),
+                tr("A server behind a CDN usually uses ws.")),
+            self.f_security: (
+                tr("The protection layer: none, tls, or reality (looks like a real "
+                   "website)."),
+                tr("Your provider mentions Reality? Pick reality.")),
+            self.f_sni: (
+                tr("The website name shown while the secure connection starts "
+                   "(SNI). For Reality, it is the site being imitated."),
+                tr("Copy the sni= value from your link.")),
+            self.f_fp: (
+                tr("Which browser's handshake style to imitate, such as chrome or "
+                   "firefox. Empty uses the default from Settings."),
+                tr("chrome blends in with most traffic.")),
+            self.f_alpn: (
+                tr("The web protocols offered during the handshake, such as h2 or "
+                   "http/1.1. The server must accept them."),
+                tr("h2,http/1.1 is a safe pair.")),
+            self.f_sid: (
+                tr("Reality short ID: a short code from your provider that proves "
+                   "you may connect."),
+                tr("Paste the sid= value from your link.")),
+            self.f_spx: (
+                tr("Reality spiderX: an optional path used while imitating a site."),
+                tr("Usually a single / or empty.")),
+            self.f_pqv: (
+                tr("Reality ML-DSA-65 verify key: the server's post-quantum public "
+                   "key, if it has one."),
+                tr("Only fill this in when your provider hands you one.")),
+            self.f_path: (
+                tr("The URL path for WebSocket, HTTP or xhttp connections. It must "
+                   "match the server."),
+                tr("/ws or /api/v1, as in your link.")),
+            self.f_host: (
+                tr("The Host header sent with web-style connections. Often the same "
+                   "as the SNI."),
+                tr("Going through a CDN? Put your domain here.")),
+            self.f_service: (
+                tr("The gRPC service name. It must match the server."),
+                tr("Copy the serviceName from your link.")),
+            self.f_hy2_pcs: (
+                tr("The SHA-256 fingerprint of the server's certificate, 64 hex "
+                   "characters. When set, only that certificate is trusted, even a "
+                   "self-made one."),
+                tr("Pin it when your own server uses a self-signed certificate.")),
+            self.f_hy2_obfs_password: (
+                tr("The password for Hysteria2's salamander obfuscation, which "
+                   "scrambles packets. It must match the server; empty means none."),
+                tr("Your provider's config says obfs: salamander? The password goes "
+                   "here.")),
+            self.f_wg_local: (
+                tr("The address this device gets inside the WireGuard tunnel, such "
+                   "as 10.0.0.2/32. It comes from your provider's config."),
+                tr("Copy the Address line of the WireGuard config.")),
+            self.f_wg_psk: (
+                tr("An optional extra shared secret. Only needed when your WireGuard "
+                   "config has a PresharedKey."),
+                tr("No PresharedKey in the config? Leave it empty.")),
+            self.f_wg_reserved: (
+                tr("Three numbers some WireGuard services, like Cloudflare WARP, "
+                   "need, written as 12,34,56."),
+                tr("Your config lists Reserved = 12,34,56? Copy it.")),
+            self.f_wg_mtu: (wg_mtu, tr("Pages stall? Try 1280.")),
+            self.f_wg_keepalive: (
+                tr("Seconds between small \"still here\" messages that stop routers "
+                   "from forgetting the tunnel. 0 turns them off."),
+                tr("25 is the usual choice behind a home router.")),
+            self.f_header_type: (
+                tr("Dresses plain TCP traffic up as ordinary web requests when set to "
+                   "http. Leave it empty or none for no disguise."),
+                tr("Your provider's link says headerType=http? Type http.")),
+            self.f_xhttp_mode: (
+                tr("The xhttp style, such as auto, packet-up, stream-up or "
+                   "stream-one. Leave empty unless your provider gives one."),
+                tr("Copy the mode= value from your link.")),
+            self.f_xhttp_extra: (
+                tr("Extra xhttp settings written as a JSON object. For advanced setups."),
+                tr("Paste the extra block your provider's link carries.")),
+            self.f_ech: (
+                tr("An Encrypted Client Hello config: hides the website name in the "
+                   "handshake when the server supports it."),
+                tr("Only fill this in when your provider supplied an ECH string.")),
+            self.f_pcs: (
+                tr("The SHA-256 fingerprint of the server's certificate, 64 hex "
+                   "characters. When set, only that certificate is trusted, even a "
+                   "self-made one."),
+                tr("Pin it when your own server uses a self-signed certificate.")),
+            self.f_vcn: (
+                tr("The certificate name to check, when it differs from the address "
+                   "you connect to."),
+                tr("The certificate is for a domain, but you connect by IP.")),
+            self.f_hy2_ports: (
+                tr("Port hopping: a range or list of ports Hysteria2 jumps between "
+                   "to dodge blocking."),
+                tr("20000-30000 lets it use any port in that range.")),
+            self.f_hy2_hop_interval: (
+                tr("0 lets Xray pick its own default. Otherwise 5-3600 seconds."),
+                tr("A shorter interval hops more often, which is harder to block.")),
+            self.f_hy2_up_mbps: (
+                tr("Leave 0 to let the congestion control pick (BBR)."),
+                tr("Your line uploads at 50 Mbit/s? Enter 50.")),
+            self.f_hy2_down_mbps: (
+                tr("Leave 0 to let the congestion control pick (BBR)."),
+                tr("Your line downloads at 200 Mbit/s? Enter 200.")),
+        }
+        for widget, (what, example) in fields.items():
+            set_help(widget, what, example)
+            label = self._field_labels.get(widget)
+            if label is not None:
+                set_help(label, what, example)
 
     def _form_tab(self, p: Profile) -> QWidget:
         w = QWidget()
@@ -267,19 +458,14 @@ class ProfileEditDialog(QDialog):
         self.f_hy2_hop_interval = QSpinBox()
         self.f_hy2_hop_interval.setRange(0, 3600)
         self.f_hy2_hop_interval.setSpecialValueText(tr("Default"))
-        self.f_hy2_hop_interval.setToolTip(
-            tr("0 lets Xray pick its own default. Otherwise 5-3600 seconds."))
         self.f_hy2_hop_interval.setValue(
             int(p.hy2_hop_interval) if p.hy2_hop_interval.isdigit() else 0)
-        _hy2_mbps_tip = tr("Leave 0 to let the congestion control pick (BBR).")
         self.f_hy2_up_mbps = QSpinBox()
         self.f_hy2_up_mbps.setRange(0, 100000)
         self.f_hy2_up_mbps.setValue(int(p.hy2_up_mbps) if p.hy2_up_mbps else 0)
-        self.f_hy2_up_mbps.setToolTip(_hy2_mbps_tip)
         self.f_hy2_down_mbps = QSpinBox()
         self.f_hy2_down_mbps.setRange(0, 100000)
         self.f_hy2_down_mbps.setValue(int(p.hy2_down_mbps) if p.hy2_down_mbps else 0)
-        self.f_hy2_down_mbps.setToolTip(_hy2_mbps_tip)
 
         # Technical values (raw identifiers, keys, hosts) never mirror even
         # in an RTL layout -- only f_name (a freeform display name) doesn't
@@ -368,6 +554,10 @@ class ProfileEditDialog(QDialog):
         adv_form.addRow(self.insecure_note)
 
         self._advanced = CollapsibleSection(tr("Advanced"), adv_widget)
+        set_help(self._advanced.toggle,
+                 tr("Shows the rarely needed fields."),
+                 tr("Skip it unless your provider's instructions mention one."))
+        self._apply_field_help()
         outer.addWidget(self._advanced)
         if p.allow_insecure:
             self._advanced.set_expanded(True)
@@ -1100,16 +1290,38 @@ class SubscriptionEditDialog(QDialog):
         self.group_main.add_row(tr("Name"), self.f_name)
         self.group_main.add_row("URL", self.f_url)
         self.group_main.add_row(tr("Enabled"), self.f_enabled)
+        set_help(self.f_name,
+                 tr("How this subscription is named in your lists."),
+                 tr("Your provider's name, so you know whose servers these are."))
+        set_help(self.f_url,
+                 tr("The web address that hands out the server list."),
+                 tr("Paste the link your provider gave you."))
+        set_help(self.f_enabled,
+                 tr("A subscription that is switched off is kept but skipped by Update all."),
+                 tr("Pause a provider whose plan ran out without losing the link."),
+                 title=tr("Enabled"))
         layout.addWidget(self.group_main)
 
         self.group_fetch = InsetGroup()
         self.group_fetch.add_row(
             tr("Auto-update every (hours)"), self.f_auto_hours,
             footnote=tr("0 uses the app-wide refresh interval."))
+        set_help(self.f_auto_hours,
+                 tr("How often this list refreshes by itself. 0 uses the app-wide "
+                    "interval."),
+                 tr("24 refreshes it once a day."))
         self.group_fetch.add_row(
             tr("Name filter"), self.f_name_filter,
             footnote=tr("Regex. Only servers whose name matches are kept."))
+        set_help(self.f_name_filter,
+                 tr("A pattern (regex) for server names. Only servers whose name "
+                    "matches it are kept; empty keeps them all."),
+                 tr("DE|NL keeps just the German and Dutch servers."))
         self.group_fetch.add_row("User-Agent", self.f_user_agent)
+        set_help(self.f_user_agent,
+                 tr("The app name sent when downloading the list. Some providers "
+                    "send different lists depending on it."),
+                 tr("Leave the default unless your provider tells you to change it."))
         layout.addWidget(self.group_fetch)
 
         self.f_url.textEdited.connect(self._maybe_autofill_name)
