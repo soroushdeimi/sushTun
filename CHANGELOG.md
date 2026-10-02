@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.9.1
+
+### Fixed
+- **Windows hotspot actually shares the tunnel now.** On Windows 11 the Hotspot switch turned itself straight back off ("Windows did not accept 'xray0' as the shared connection"), so the feature never worked. sushTun now runs Windows' Mobile Hotspot on the tunnel itself, and phones on it leave from your server's country.
+- **A hotspot you had already turned on** is moved onto the tunnel while sharing, then handed back to your normal internet when you switch sharing off or disconnect, instead of being left on with no internet.
+- **The Hotspot switch keeps working after the app restarts**, and a crash no longer leaves the hotspot sharing a tunnel that is gone.
+- **Hotspot name and password from Settings** are sent to Windows once, not again on every connect.
+- sushTun no longer clears Internet Connection Sharing that you set up yourself on other adapters.
+
+<!-- fa -->
+
+### چی درست شده
+- **هات‌اسپات ویندوز بالاخره واقعاً تونل رو share می‌کنه.** روی ویندوز ۱۱ تا دکمه‌ی هات‌اسپات رو روشن می‌کردی، فوری خودش خاموش می‌شد و عملاً این قابلیت اصلاً کار نمی‌کرد. حالا sushTun خود هات‌اسپات ویندوز رو مستقیم روی تونل روشن می‌کنه و گوشی‌ای که بهش وصل می‌شه از کشور سرورت می‌زنه بیرون.
+- **اگه هات‌اسپات رو خودت از قبل روشن کرده بودی،** موقع share شدن می‌ره روی تونل، و وقتی دکمه رو خاموش کنی یا قطع کنی، برمی‌گرده روی اینترنت معمولی خودت؛ دیگه روشن و بی‌اینترنت ول نمی‌شه.
+- **بعد از بستن و باز کردن برنامه هم دکمه‌ی هات‌اسپات درست کار می‌کنه،** و اگه برنامه کرش کنه، هات‌اسپات به یه تونلِ ازکارافتاده وصل نمی‌مونه.
+- **اسم و رمز هات‌اسپات از تنظیمات** فقط یه بار به ویندوز داده می‌شه، نه هر بار که وصل می‌شی.
+- sushTun دیگه اشتراک‌گذاری اینترنتی (ICS) که خودت روی کارت‌شبکه‌های دیگه تنظیم کردی رو پاک نمی‌کنه.
+
 ## v0.9.0
 
 ### New
