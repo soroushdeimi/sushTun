@@ -513,10 +513,6 @@ TRANSLATIONS_FA: dict[str, str] = {
     "Download progress": "پیشرفت دانلود",
     "Later": "بعداً",
     "Open the download page": "باز کردن صفحه‌ی دانلود",
-    "You installed sushTun from a .deb package — update it with "
-    "apt so the package stays consistent.":
-        "شما sushTun را از بسته‌ی .deb نصب کرده‌اید — آن را با apt به‌روزرسانی "
-        "کنید تا بسته سالم بماند.",
     "This copy can't update itself. Download {version} and replace "
     "it by hand.":
         "این نسخه نمی‌تواند خودش را به‌روزرسانی کند. {version} را دانلود کنید "

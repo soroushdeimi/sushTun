@@ -13,7 +13,7 @@ else:
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QUrl  # noqa: E402
+from PySide6.QtCore import Qt, QUrl  # noqa: E402
 from PySide6.QtWidgets import QApplication, QDialog  # noqa: E402
 
 from xrayui.core import desktop as desktop_mod  # noqa: E402
@@ -119,11 +119,16 @@ def test_release_note_links_go_through_the_same_opener(qapp, monkeypatch, instal
         dlg.close()
 
 
-def test_the_deb_is_told_to_use_apt(qapp, monkeypatch, not_installable):
+def test_the_deb_gets_the_normal_download_and_install_flow(qapp, monkeypatch):
     monkeypatch.setattr(updates_mod, "installed_deb", lambda: True)
+    monkeypatch.setattr(updates_mod, "installed_windows", lambda: False)
+    monkeypatch.setattr(updates_mod, "asset_for_this_build",
+                        lambda _r: "sushtun_9.9.9_amd64.deb")
     dlg = UpdateDialog(RELEASE)
     try:
-        assert "apt" in dlg.subtitle.text()
+        assert "install" in dlg.btn_primary.text().lower()
+        assert "apt" not in dlg.subtitle.text()
+        assert dlg.relaunches_itself() is False
     finally:
         dlg.close()
 
@@ -201,3 +206,85 @@ def test_progress_survives_a_server_that_sends_no_length(qapp, installable):
 def _heading(dlg) -> str:
     from PySide6.QtWidgets import QLabel
     return " ".join(w.text() for w in dlg.findChildren(QLabel))
+
+
+NOTES = ("- English note\n\n<!-- fa -->\n- یادداشت فارسی\n\n"
+         "**Full Changelog**: https://github.com/x/y/compare/v1...v2\n")
+NOTES_RELEASE = updates_mod.Release(tag="v9.9.9", url="https://x", notes=NOTES)
+
+
+@pytest.fixture
+def language(qapp):
+    from xrayui import i18n
+    yield i18n.set_language
+    i18n.set_language("en")
+
+
+def test_persian_ui_shows_the_persian_notes_right_to_left(qapp, installable, language):
+    language("fa")
+    dlg = UpdateDialog(NOTES_RELEASE)
+    try:
+        text = dlg.notes.toPlainText()
+        assert "یادداشت فارسی" in text and "English note" not in text
+        assert "Full Changelog" not in text
+        assert dlg.notes.layoutDirection() == Qt.RightToLeft
+    finally:
+        dlg.close()
+
+
+def test_english_ui_shows_the_english_notes(qapp, installable, language):
+    language("en")
+    dlg = UpdateDialog(NOTES_RELEASE)
+    try:
+        text = dlg.notes.toPlainText()
+        assert "English note" in text and "یادداشت" not in text
+        assert "Full Changelog" not in text
+        assert dlg.notes.layoutDirection() == Qt.LeftToRight
+    finally:
+        dlg.close()
+
+
+def test_notes_that_are_only_githubs_link_show_the_empty_message(qapp, installable):
+    only_link = updates_mod.Release(
+        tag="v9.9.9", url="https://x",
+        notes="**Full Changelog**: https://github.com/x/y/compare/v1...v2")
+    dlg = UpdateDialog(only_link)
+    try:
+        assert dlg.notes.toPlainText().strip() == "No release notes."
+    finally:
+        dlg.close()
+
+
+def test_every_block_is_right_to_left_in_persian(qapp, installable, language):
+    language("fa")
+    rel = updates_mod.Release(
+        tag="v9.9.9", url="https://x",
+        notes="<!-- fa -->\n- macOS اول\n- دوم\n\nیک پاراگراف")
+    dlg = UpdateDialog(rel)
+    try:
+        block = dlg.notes.document().begin()
+        count = 0
+        while block.isValid():
+            assert block.blockFormat().layoutDirection() == Qt.RightToLeft
+            count += 1
+            block = block.next()
+        assert count >= 3
+    finally:
+        dlg.close()
+
+
+def test_latin_runs_are_isolated_in_persian_only(qapp, installable, language):
+    from xrayui.core.release_notes import isolate_latin
+    out = isolate_latin("- با OpenVPN Connect و 0/1 + 128/1 (`-device`).\n"
+                        "[x](https://a.b/c) و https://a.b/c")
+    assert "\u2066OpenVPN Connect\u2069" in out
+    assert "\u20660/1 + 128/1\u2069" in out
+    assert "\u2066`-device`\u2069" in out
+    assert out.startswith("- ")
+    assert "(https://a.b/c)" in out and "\u2066https" not in out
+    language("en")
+    dlg = UpdateDialog(NOTES_RELEASE)
+    try:
+        assert "\u2066" not in dlg.notes.toPlainText()
+    finally:
+        dlg.close()
