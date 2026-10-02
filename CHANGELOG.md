@@ -1,5 +1,39 @@
 # Changelog
 
+## v0.9.0
+
+### New
+- **Proxy chains.** Put several servers in a row: your traffic goes through the first, then the next, and leaves from the last. The new Chains page draws the path, and Test tells you the round trip and speed of the whole chain, which country you really exit from, and — if it breaks — exactly which link.
+- **Exit-country flags.** After a Test or a connect, each server shows the flag of the country it really exits from, not where its address is.
+- **Ping like v2rayN.** Delays now match what v2rayN shows. Prefer the first-connection time? Switch it in Settings; hovering a delay shows it either way.
+- **Easier updates.** What's new is shown right in the app, in your language — no more GitHub link. On Linux the .deb now downloads, installs and restarts itself, just like on Windows.
+- **Help on everything.** Hover any button or option for a short explanation and an example.
+- **A first-run tour** shows you where everything is.
+
+### Fixed
+- **Switching servers while connected:** picking another server used to change it silently while traffic kept going through the old one. Now sushTun asks you to reconnect and always shows the server actually in use.
+- **Linux:** no more "Connected" when the tunnel's routes failed to go in, and the server's route is refreshed when your Wi-Fi changes.
+- **Windows hotspot:** the switch no longer turns itself off while the hotspot stays on. A hotspot sushTun started is now turned off with it.
+- **macOS:** copy and paste work inside the app.
+- **Lots of small fixes:** links copied from Notepad no longer import as nothing, one bad port in a routing rule no longer stops the tunnel, a damaged profile or settings file no longer crashes the app, and more.
+
+<!-- fa -->
+
+### چی اضافه شده
+- **زنجیره‌ی پراکسی:** حالا می‌تونی چند تا سرور رو پشت هم بچینی؛ ترافیکت اول از اولی رد می‌شه، بعد دومی، بعد سومی، و از آخری می‌زنه بیرون. تو صفحه‌ی Chains مسیر رو تصویری می‌بینی، و با دکمه‌ی تست می‌فهمی پینگ و سرعت کل زنجیره چقدره، آخرش از کدوم کشور بیرون می‌زنی، و اگه جایی قطعه دقیقاً کدوم حلقه‌ست.
+- **پرچم کشور کنار هر سرور:** یه بار Test بزنی یا وصل شی، می‌فهمی سرور واقعاً از کجا خارج می‌شه، نه اینکه آدرسش کجاست. مثلاً سروری که آدرسش تهرانه ولی ترافیکش از برلین درمیاد، پرچم آلمان می‌گیره.
+- **پینگ مثل v2rayN:** عددها دیگه با v2rayN قابل مقایسه‌ن. اگه پینگ «اتصال اول» رو می‌خوای، از تنظیمات عوضش کن؛ موس رو روی عدد هم ببری نشونش می‌ده.
+- **آپدیت راحت‌تر:** تغییرات هر نسخه رو همین‌جا تو خود برنامه، به زبون خودت می‌بینی — دیگه خبری از لینک گیت‌هاب نیست. روی لینوکس هم مثل ویندوز خودش دانلود می‌کنه، نصب می‌کنه و برنامه رو از نو باز می‌کنه.
+- **راهنما روی همه‌چی:** موس رو روی هر دکمه یا گزینه نگه داری، کوتاه می‌گه چی کار می‌کنه و یه مثال هم می‌زنه.
+- **تور بار اول:** دفعه‌ی اولی که برنامه رو باز می‌کنی، یه دور سریع نشونت می‌ده هر چیزی کجاست.
+
+### چی درست شده
+- **عوض کردن سرور وقتی وصلی:** قبلاً روی یه سرور دیگه کلیک می‌کردی، برنامه بی‌سروصدا عوضش می‌کرد ولی ترافیک هنوز از سرور قبلی می‌رفت. حالا بهت می‌گه باید دوباره وصل شی، و همیشه سروری رو نشون می‌ده که واقعاً داره کار می‌کنه.
+- **لینوکس:** اگه مسیرهای تونل نصب نشن، دیگه الکی «وصل شد» نمی‌زنه؛ وقتی هم وای‌فای عوض می‌شه، مسیر سرور درست به‌روز می‌شه.
+- **هات‌اسپات ویندوز:** دکمه دیگه خودبه‌خود خاموش نمی‌شه در حالی که هات‌اسپات روشن مونده. هات‌اسپاتی که sushTun روشن کرده، با خودش هم خاموش می‌شه.
+- **مک:** کپی و پیست تو برنامه درست شد.
+- **کلی باگ ریز:** لینکی که از Notepad کپی شده دیگه خالی وارد نمی‌شه؛ یه پورت اشتباه تو یه قانون روتینگ دیگه کل تونل رو از کار نمی‌اندازه؛ فایل خراب پروفایل یا تنظیمات دیگه برنامه رو نمی‌ترکونه؛ و چند تا مورد دیگه.
+
 ## v0.8.1
 
 - Opening a newly installed sushTun while an older one was still running raised the *old* window
