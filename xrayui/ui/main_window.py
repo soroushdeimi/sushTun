@@ -281,6 +281,9 @@ class MainWindow(QMainWindow):
         self.conn = Connection(on_step=self.stepReceived.emit)
         self._busy = False
         self._sampling = False
+        self._orphan_running = False
+        self._orphan_check_pending = False
+        self._orphan_check_at = float("-inf")
         self._repairing = False
         self._workers: set = set()
         self._test_cancel: threading.Event | None = None
@@ -1405,8 +1408,8 @@ class MainWindow(QMainWindow):
     def _refresh_status(self) -> None:
         visible = self.isVisible() and not self.isMinimized()
         # Hidden in the tray there is nothing on screen to update: skip the
-        # process polling below (a pgrep and a whole `xray api` run every two
-        # seconds), which kept a laptop awake for no one. Showing the window
+        # background process checks and traffic sampling, which kept a
+        # laptop awake for no one. Showing the window
         # refreshes at once.
         self.tailer.interval = LogTailer.INTERVAL if visible else LogTailer.IDLE_INTERVAL
         if not visible:
@@ -1430,10 +1433,21 @@ class MainWindow(QMainWindow):
             self.status_card.set_chain(plan, self.results.load())
         else:
             self.status_card.set_chain(None)
+        running = self.conn.xray.is_running()
+        if running:
+            self._orphan_running = False
+        elif (not self._orphan_check_pending
+              and time.monotonic() - self._orphan_check_at >= 10):
+            self._orphan_check_pending = True
+
+            def done(result=None, error=None):
+                self._orphan_check_pending = False
+                self._orphan_check_at = time.monotonic()
+                self._orphan_running = bool(result) if error is None else False
+
+            self._run_async(is_xray_running, done)
         self.status_card.set(
-            "process",
-            tr("RUNNING") if self.conn.xray.is_running() or is_xray_running()
-            else tr("STOPPED"))
+            "process", tr("RUNNING") if running or self._orphan_running else tr("STOPPED"))
         st = self.conn.state
         self.status_card.set("iface", st.alias or "—")
         self.status_card.set("ip", st.ipv4 or "—")
