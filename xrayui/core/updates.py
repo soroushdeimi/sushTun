@@ -156,6 +156,9 @@ def asset_for_this_build(release: Release) -> str | None:
     install anything itself and the user has to be sent to the release page."""
     if not getattr(sys, "frozen", False):
         return None  # a source checkout updates with git, not with a binary
+    import platform
+    if sys.platform == "linux" and platform.machine().lower() in ("aarch64", "arm64"):
+        return None
     if installed_macos_app():
         return None
     if installed_windows():

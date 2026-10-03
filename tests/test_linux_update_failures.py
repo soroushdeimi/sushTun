@@ -88,3 +88,20 @@ def test_failed_replacement_restores_current_binary(monkeypatch, tmp_path, error
     with pytest.raises(updates.UpdateError):
         updates._replace_executable(new)
     assert current.read_bytes() == b"working"
+
+def test_wrong_arch_linux_cannot_update(monkeypatch, release):
+    import platform
+    monkeypatch.setattr(platform, "machine", lambda: "aarch64")
+    monkeypatch.setattr(updates.sys, "platform", "linux")
+    assert updates.asset_for_this_build(release) is None
+
+
+def test_checksum_mismatch_cleans_file(monkeypatch, release, tmp_path):
+    monkeypatch.setattr(updates, "_expected_digest", lambda *a: "abc")
+    def stream(*args):
+        args[1].write_bytes(b"content")
+    monkeypatch.setattr(updates, "_stream_url", stream)
+    with pytest.raises(updates.UpdateError, match="checksum"):
+        updates.download(release)
+    assert not (tmp_path / "update.tmp").exists()
+
