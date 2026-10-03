@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from ..profiles import Profile
+from ._common import stream_settings
 
 
 def apply(proxy: dict, p: Profile) -> None:
@@ -11,4 +12,4 @@ def apply(proxy: dict, p: Profile) -> None:
         settings["user"] = p.username
         settings["pass"] = p.id
     proxy["settings"] = settings
-    proxy["streamSettings"] = {"network": "tcp"}
+    proxy["streamSettings"] = stream_settings(p)

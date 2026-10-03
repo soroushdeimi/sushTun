@@ -65,7 +65,9 @@ def test_builders_http_socks():
     b = outbounds.build(p, "test")
     assert b["protocol"] == "http"
     assert b["settings"] == {"address": "1.1.1.1", "port": 8080}
-    assert b["streamSettings"] == {"network": "tcp"}
+    assert b["streamSettings"] == {
+        "network": "tcp", "security": "none", "sockopt": {"interface": "__IFACE__"}
+    }
 
     p = Profile(protocol="http", address="1.1.1.1", port=8080, username="user", id="pass")
     b = outbounds.build(p, "test")
@@ -84,11 +86,25 @@ def test_builders_http_socks():
     b = outbounds.build(p, "test")
     assert b["protocol"] == "socks"
     assert b["settings"] == {"address": "1.1.1.1", "port": 1080}
-    assert b["streamSettings"] == {"network": "tcp"}
+    assert b["streamSettings"] == {
+        "network": "tcp", "security": "none", "sockopt": {"interface": "__IFACE__"}
+    }
 
     p = Profile(protocol="socks", address="1.1.1.1", port=1080, username="user", id="pass")
     b = outbounds.build(p, "test")
     assert b["settings"] == {"address": "1.1.1.1", "port": 1080, "user": "user", "pass": "pass"}
+
+@pytest.mark.parametrize("protocol,security", [("http", "none"), ("http", "tls"),
+                                             ("socks", "none")])
+def test_http_socks_interface_binding(protocol, security):
+    p = Profile(protocol=protocol, address="1.1.1.1", port=8080, security=security)
+    proxy = outbounds.build(p, "proxy")
+    assert proxy["streamSettings"]["sockopt"]["interface"] == "__IFACE__"
+
+    cfg = json.loads(render.build_text(p, "eth0"))
+    proxy = next(outbound for outbound in cfg["outbounds"] if outbound["tag"] == "proxy")
+    assert proxy["streamSettings"]["sockopt"]["interface"] == "eth0"
+
 
 def test_render_udp_block():
     p_http = Profile(protocol="http", address="1.1.1.1", port=8080)
