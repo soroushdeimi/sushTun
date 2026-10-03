@@ -69,11 +69,12 @@ def backup_dns(alias: str) -> DnsState:
     return DnsState(mode=mode, servers=lines[1:])
 
 
-def set_dns_loopback(alias: str) -> None:
-    proc.run(
+def set_dns_loopback(alias: str) -> bool:
+    """Send the system's DNS into the tunnel. False if it would not stick."""
+    return proc.run(
         ["netsh", "interface", "ipv4", "set", "dnsservers",
          f"name={alias}", "static", "127.0.0.1", "primary", "validate=no"]
-    )
+    ).returncode == 0
 
 
 def restore_dns(alias: str, state: DnsState, retries: int = 1) -> bool:
