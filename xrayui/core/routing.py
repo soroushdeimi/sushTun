@@ -82,7 +82,10 @@ _PREFIXES = ("domain:", "full:", "geosite:", "regexp:", "keyword:", "ext:")
 DOMAIN_STRATEGIES = ("AsIs", "IPIfNonMatch", "IPOnDemand")
 
 _OUTBOUNDS = ("proxy", "direct", "block")
-_PORT_RE = re.compile(r"^\d+(-\d+)?(,\d+(-\d+)?)*$")
+# re.ASCII: bare \d also matches Persian and Arabic-Indic digits, which int()
+# happily converts, so a port like ۸۰۸۰ reached the config and the core
+# refused the whole file ("invalid port: ۸۰۸۰ > invalid character").
+_PORT_RE = re.compile(r"^\d+(-\d+)?(,\d+(-\d+)?)*$", re.ASCII)
 _NETWORKS = ("tcp", "udp", "tcp,udp")
 
 

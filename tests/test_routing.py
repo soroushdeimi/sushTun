@@ -273,3 +273,20 @@ def test_user_rules_stay_after_the_dns_rules_in_custom_mode():
     got = cfg["routing"]["rules"]
     assert got[:len(template_rules)] == template_rules
     assert got[len(template_rules):] == rules
+
+
+@pytest.mark.parametrize("port", ["۸۰۸۰", "٨٠", "8٠", "80,۸۰"])
+def test_custom_set_drops_a_port_the_core_cannot_parse(port):
+    # Python's \d matches every Unicode decimal digit and int() accepts them, so
+    # a Persian port passed the shape check and reached the config, where the
+    # real core refuses the whole file: 'invalid port: ۸۰۸۰ > invalid character'.
+    rules = routing.build_rules(_with_set([_rule(outbound="proxy", port=port)]))
+    assert all("port" not in rule for rule in rules)
+
+
+def test_custom_set_keeps_ascii_ports_and_ranges():
+    rules = routing.build_rules(_with_set([
+        _rule(outbound="proxy", domain=["a.example"], port="80"),
+        _rule(outbound="direct", domain=["b.example"], port="1000-2000,443"),
+    ]))
+    assert [r["port"] for r in rules] == ["80", "1000-2000,443"]
