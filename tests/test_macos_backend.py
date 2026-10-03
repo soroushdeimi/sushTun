@@ -424,3 +424,36 @@ def test_macos_failed_restore_keeps_backup_for_next_recovery(monkeypatch, tmp_pa
     assert conn.recover_if_stale() is True
     assert not conn.state.is_connected()
     assert uninstalled == [True]
+
+
+def test_macos_partial_split_route_failure_is_reported(monkeypatch):
+    import pytest
+
+    net, _calls = _fake_mac(monkeypatch, {
+        ("route", "-n", "add", "-net", "128.0.0.0/2", "-interface", tun2socks.DEVICE):
+            (1, "")})
+    with pytest.raises(RuntimeError, match="128.0.0.0/2"):
+        net.mac_add_split_routes(native=True)
+
+
+def test_macos_partial_split_route_failure_restores_connection(monkeypatch, tmp_path):
+    import pytest
+
+    connection, conn, _seen = _mac_connection(monkeypatch, tmp_path)
+    monkeypatch.setattr(connection, "IS_MAC", True)
+    stopped = []
+    restored = []
+    monkeypatch.setattr(conn.xray, "stop", lambda: stopped.append("xray"))
+    monkeypatch.setattr(conn.tun2socks, "stop", lambda: stopped.append("bridge"))
+    monkeypatch.setattr(connection.network, "restore_dns",
+                        lambda *a, **k: restored.append(a[1]) or True)
+
+    def fail_routes(native):
+        raise RuntimeError("route 128.0.0.0/2 failed")
+
+    monkeypatch.setattr(connection.network, "mac_add_split_routes", fail_routes)
+    with pytest.raises(connection.ConnectError, match="128.0.0.0/2"):
+        _connect(conn)
+    assert not conn.state.is_connected()
+    assert stopped == ["bridge", "xray"]
+    assert len(restored) == 1

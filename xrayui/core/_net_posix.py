@@ -354,7 +354,9 @@ def _mac_via(native: bool) -> list[str]:
 
 def mac_add_split_routes(native: bool) -> None:
     for dest in MAC_SPLIT:
-        proc.run(["route", "-n", "add", "-net", dest, *_mac_via(native)])
+        result = proc.run(["route", "-n", "add", "-net", dest, *_mac_via(native)])
+        if result.returncode != 0:
+            raise RuntimeError(f"route add {dest} failed: {result.stderr.strip()}")
 
 
 def mac_wait_for_device(timeout: float = 15.0, alive: Callable[[], bool] | None = None) -> bool:

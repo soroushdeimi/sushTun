@@ -428,7 +428,11 @@ class Connection:
         if network.set_dns_loopback(iface.alias) is False:
             self._log("WARNING: DNS could not be routed through the tunnel — "
                       "lookups will leave unencrypted via the local network.")
-        network.mac_add_split_routes(native)
+        try:
+            network.mac_add_split_routes(native)
+        except (OSError, RuntimeError) as exc:
+            self._restore()
+            raise ConnectError(f"Could not install tunnel routes: {exc}") from exc
         # A route that failed to go in (another VPN's routes, a stale device)
         # used to go unnoticed: "Connected", with nothing in the tunnel.
         routed = network.mac_route_device("1.1.1.1")
