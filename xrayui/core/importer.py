@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import ipaddress
 import json
 import re
 from urllib.parse import parse_qs, unquote, urlsplit
@@ -26,6 +27,89 @@ def _maybe_b64(text: str) -> str:
         pass
     return text
 
+
+def _parse_http_socks_userinfo(userinfo: str) -> tuple[str, str]:
+    if not userinfo:
+        return "", ""
+    decoded = unquote(userinfo)
+    if ":" not in decoded:
+        try:
+            b64_decoded = _b64decode(decoded)
+            if ":" in b64_decoded:
+                decoded = b64_decoded
+        except (ValueError, binascii.Error):
+            pass
+    if ":" in decoded:
+        user, _, pw = decoded.partition(":")
+        return user, pw
+    return decoded, ""
+
+def is_proxy_url(line: str) -> bool:
+    line = line.strip()
+    try:
+        s = urlsplit(line)
+    except ValueError:
+        return False
+    if s.scheme in ("socks", "socks5", "socks5h"):
+        return bool(s.hostname and s.port)
+    if s.scheme in ("http", "https"):
+        return bool(s.hostname and s.port is not None and s.path in ("", "/") and not s.query)
+    return False
+
+def parse_http(link: str) -> Profile:
+    s = urlsplit(link.strip())
+    if s.scheme not in ("http", "https"):
+        raise ValueError("not an http(s) link")
+    if not s.hostname or s.port is None:
+        raise ValueError("missing host or port")
+
+    name = unquote(s.fragment) if s.fragment else f"{s.hostname}:{s.port}"
+    security = "tls" if s.scheme == "https" else "none"
+    sni = ""
+    if security == "tls":
+        try:
+            ipaddress.ip_address(s.hostname.strip("[]"))
+        except ValueError:
+            sni = s.hostname
+
+    netloc = s.netloc
+    userinfo = netloc.rpartition("@")[0] if "@" in netloc else ""
+    user, pw = _parse_http_socks_userinfo(userinfo)
+
+    return Profile(
+        name=name,
+        protocol="http",
+        network="tcp",
+        address=s.hostname.strip("[]"),
+        port=s.port,
+        username=user,
+        id=pw,
+        security=security,
+        sni=sni,
+    )
+
+def parse_socks(link: str) -> Profile:
+    s = urlsplit(link.strip())
+    if s.scheme not in ("socks", "socks5", "socks5h"):
+        raise ValueError("not a socks link")
+    if not s.hostname or s.port is None:
+        raise ValueError("missing host or port")
+
+    name = unquote(s.fragment) if s.fragment else f"{s.hostname}:{s.port}"
+    netloc = s.netloc
+    userinfo = netloc.rpartition("@")[0] if "@" in netloc else ""
+    user, pw = _parse_http_socks_userinfo(userinfo)
+
+    return Profile(
+        name=name,
+        protocol="socks",
+        network="tcp",
+        address=s.hostname.strip("[]"),
+        port=s.port,
+        username=user,
+        id=pw,
+        security="none",
+    )
 
 def _std_query_fields(query: str) -> dict:
     """Transport/TLS query keys shared by vless, trojan and the std vmess://
@@ -459,6 +543,10 @@ def parse_share_text(text: str) -> list[Profile]:
                 p = parse_hysteria2(line)
             elif line.startswith("wireguard://") or line.startswith("wg://"):
                 p = parse_wireguard(line)
+            elif line.startswith(("socks://", "socks5://", "socks5h://")):
+                p = parse_socks(line)
+            elif line.startswith(("http://", "https://")) and is_proxy_url(line):
+                p = parse_http(line)
             else:
                 continue
         except ValueError:

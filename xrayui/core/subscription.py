@@ -105,6 +105,8 @@ def subscription_url(text: str) -> str:
     value = text.lstrip("\ufeff").strip()
     if not value or any(c.isspace() for c in value):
         return ""  # several lines, or a link with a comment after it
+    if importer.is_proxy_url(value):
+        return ""
     return value if value.lower().startswith(("http://", "https://")) else ""
 
 
