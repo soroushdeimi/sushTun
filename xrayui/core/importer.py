@@ -46,12 +46,12 @@ def _std_query_fields(query: str) -> dict:
         "sid": q.get("sid", ""),
         "spx": q.get("spx", ""),
         "pqv": q.get("pqv", ""),
-        "path": unquote(q.get("path", "")),
+        "path": q.get("path", ""),
         "host": q.get("host", ""),
         "service_name": q.get("serviceName", ""),
         "header_type": q.get("headerType", ""),
         "xhttp_mode": q.get("mode", ""),
-        "xhttp_extra": unquote(q.get("extra", "")),
+        "xhttp_extra": q.get("extra", ""),
         "allow_insecure": insecure in ("1", "true"),
         "ech": q.get("ech", ""),
         "pcs": normalize_pcs(q.get("pcs", "")),
@@ -258,7 +258,7 @@ def _parse_ss_sip002(url: str) -> Profile:
         port=s.port or 8388, id=password, ss_method=method,
         network="tcp", security="none",
     )
-    _apply_ss_plugin(p, unquote(q.get("plugin", "")))
+    _apply_ss_plugin(p, q.get("plugin", ""))
     return p
 
 
