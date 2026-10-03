@@ -21,6 +21,7 @@ from ._net_common import TUN_ADDRESS, TUN_NAME, TUN_NETMASK, DnsState, Interface
 IS_MAC = sys.platform == "darwin"
 TUN_PREFIX_LEN = 30
 _RESOLV = "/etc/resolv.conf"
+_DHCP_RESOLV = ("/run/NetworkManager/resolv.conf", "/run/resolvconf/resolv.conf")
 
 # The resolver systemd-resolved is pointed at on the tunnel link: the peer of
 # TUN_ADDRESS inside the /30, so queries to it are routed into xray0, where the
@@ -100,18 +101,42 @@ def mac_service_name(dev: str) -> str | None:
     return None
 
 
+def _without_loopback(lines: list[str]) -> list[str]:
+    return [line for line in lines
+            if line.split()[:2] != ["nameserver", "127.0.0.1"]]
+
+
+def dns_target_exists(alias: str, state: DnsState) -> bool | None:
+    if IS_MAC:
+        result = proc.run(["networksetup", "-listnetworkserviceorder"])
+        if result.returncode != 0:
+            return None
+        service = state.servers[0] if state.servers else ""
+        return (f"Device: {alias})" in result.stdout
+                and (not service or any(line.strip().endswith(") " + service)
+                                        for line in result.stdout.splitlines())))
+    result = proc.run(["ip", "-j", "link", "show"])
+    if result.returncode != 0:
+        return None
+    try:
+        return any(link.get("ifname") == alias for link in json.loads(result.stdout))
+    except (ValueError, TypeError):
+        return None
+
+
 def backup_dns(alias: str) -> DnsState:
     if IS_MAC:
         service = mac_service_name(alias) or ""
         current = proc.run(["networksetup", "-getdnsservers", service]).stdout.split()
         servers = [] if (not current or "aren't" in " ".join(current)) else current
+        servers = [s for s in servers if s != "127.0.0.1"]
         return DnsState(mode="MACOS", servers=[service, *servers])
     if _resolved_active():
         # resolvectl revert restores the link wholesale, so nothing to record.
         return DnsState(mode="RESOLVED", servers=[])
     try:
         with open(_RESOLV, encoding="utf-8") as f:
-            return DnsState(mode="FILE", servers=f.read().splitlines())
+            return DnsState(mode="FILE", servers=_without_loopback(f.read().splitlines()))
     except OSError:
         return DnsState(mode="FILE", servers=[])
 
@@ -230,12 +255,15 @@ def restore_dns(alias: str, state: DnsState, retries: int = 1) -> bool:
             proc.run(["resolvectl", "revert", alias])
         proc.run(["resolvectl", "flush-caches"])
         return True
-    try:
-        with open(_RESOLV, "w", encoding="utf-8") as f:
-            f.write("\n".join(state.servers) + "\n")
-        return True
-    except OSError:
-        return False
+    for attempt in range(max(1, retries)):
+        try:
+            with open(_RESOLV, "w", encoding="utf-8") as f:
+                f.write("\n".join(state.servers) + "\n")
+            return True
+        except OSError:
+            if attempt + 1 < retries:
+                time.sleep(1.0)
+    return False
 
 
 def stranded_loopback_adapters(exclude: str | None = None) -> list[str]:
@@ -260,6 +288,46 @@ def stranded_loopback_adapters(exclude: str | None = None) -> list[str]:
 
 
 def release_stranded_dns(exclude: str | None = None) -> list[str]:
+    if IS_MAC:
+        reset = []
+        service = None
+        for line in proc.run(["networksetup", "-listnetworkserviceorder"]).stdout.splitlines():
+            line = line.strip()
+            if line.startswith("(") and ")" in line and "Hardware Port" not in line:
+                service = line.split(")", 1)[1].strip()
+            elif service and "Device: " in line:
+                alias = line.split("Device: ", 1)[1].rstrip(")")
+                if alias == exclude:
+                    continue
+                current = proc.run(["networksetup", "-getdnsservers", service])
+                if current.returncode == 0 and current.stdout.split() == ["127.0.0.1"]:
+                    if proc.run(["networksetup", "-setdnsservers", service,
+                                 "empty"]).returncode == 0:
+                        reset.append(alias)
+        if reset:
+            _mac_flush_dns()
+        return reset
+    if not _resolved_active():
+        # FILE mode has no DHCP API. Reuse the network manager's generated
+        # resolver file if available; never invent public DNS or remove an
+        # immutable flag. A failed write leaves the parked backup for retry.
+        try:
+            current = Path(_RESOLV).read_text(encoding="utf-8").splitlines()
+            servers = [ln.split()[1] for ln in current
+                       if len(ln.split()) >= 2 and ln.split()[0] == "nameserver"]
+            if servers != ["127.0.0.1"]:
+                return []
+            for source in _DHCP_RESOLV:
+                try:
+                    lines = _without_loopback(Path(source).read_text(encoding="utf-8").splitlines())
+                except OSError:
+                    continue
+                if any(ln.split()[:1] == ["nameserver"] for ln in lines):
+                    Path(_RESOLV).write_text("\n".join(lines) + "\n", encoding="utf-8")
+                    return ["/etc/resolv.conf"]
+        except OSError:
+            pass
+        return []
     reset = []
     for alias in stranded_loopback_adapters(exclude):
         if proc.run(["resolvectl", "revert", alias]).returncode == 0:
