@@ -433,3 +433,34 @@ def test_xray_test_accepts_a_bound_xhttp_download(tmp_path, monkeypatch):
     monkeypatch.setattr(xraycheck.paths, "state_dir", lambda: tmp_path)
     text = render.build_text(_xhttp_split(), "lo", TEMPLATE, include_tun=False)
     assert xraycheck.check_config(text) is None
+
+
+@pytest.mark.parametrize("raw", ["۴۴۳-۴۴۴", "۴۴۳,۴۴۴", "443-۴۴۴", "٤٤٣-٤٤٤"])
+def test_hysteria2_ports_rejects_digits_the_core_cannot_parse(raw):
+    # Bare \d matches Persian digits and int() converts them, so udpHop.ports
+    # carried them into the config and the core refused the whole file
+    # ("Invalid integer range") -- a field that should simply be omitted.
+    from xrayui.core.outbounds.hysteria2 import normalize_ports
+    assert normalize_ports(raw) is None
+
+
+@pytest.mark.parametrize("raw", ["۳۰", "۳۰s", "۱۰-۳۰", "١٠-٣٠"])
+def test_hysteria2_hop_interval_rejects_digits_the_core_cannot_parse(raw):
+    from xrayui.core.outbounds.hysteria2 import normalize_hop_interval
+    assert normalize_hop_interval(raw) is None
+
+
+@pytest.mark.parametrize("field,value", [
+    ("hy2_ports", "۴۴۳-۴۴۴"),
+    ("hy2_hop_interval", "۳۰"),   # with ASCII ports, so udpHop is built at all
+])
+def test_hysteria2_persian_digits_omit_the_field_but_still_validate(tmp_path, monkeypatch,
+                                                                    field, value):
+    _skip_if_no_binary()
+    monkeypatch.setattr(xraycheck.paths, "state_dir", lambda: tmp_path)
+    p = _hy2(**{"hy2_ports": "20000-30000", field: value})
+    hop = outbounds.build(p, "proxy")["streamSettings"]["finalmask"]["quicParams"]
+    assert field.removeprefix("hy2_") not in hop.get("udpHop", {})
+    text = render.build_text(p, "lo", TEMPLATE, include_tun=False)
+    assert value not in text
+    assert xraycheck.check_config(text) is None

@@ -12,7 +12,12 @@ from ..profiles import Profile, normalize_pcs, valid_pcs
 
 _PLACEHOLDER = "__IFACE__"
 
-_PORTS_RE = re.compile(r"^\d+(-\d+)?(,\d+(-\d+)?)*$")
+# re.ASCII, and ASCII isdigit() below: both \d and str.isdigit() also accept
+# Persian and Arabic-Indic digits, which int() converts happily, so a
+# port list or interval written with them reached the config and the core
+# refused the whole file ("Invalid integer range"). udpHop is optional, so
+# such a value is dropped instead.
+_PORTS_RE = re.compile(r"^\d+(-\d+)?(,\d+(-\d+)?)*$", re.ASCII)
 
 
 def normalize_ports(raw: str) -> str | None:
@@ -42,11 +47,11 @@ def normalize_hop_interval(raw: str) -> str | None:
     back to its own default instead of refusing to start.
     """
     s = (raw or "").strip()
-    if s.isdigit():
+    if s.isascii() and s.isdigit():
         return s
-    if s.endswith("s") and s[:-1].isdigit():
+    if s.endswith("s") and s[:-1].isascii() and s[:-1].isdigit():
         return s[:-1]
-    if re.fullmatch(r"\d+-\d+", s):
+    if re.fullmatch(r"\d+-\d+", s, re.ASCII):
         return s
     return None
 
