@@ -156,3 +156,32 @@ def test_userfs_refuses_outright_on_a_non_linux_platform(monkeypatch, tmp_path):
         userfs.write_as_user(tmp_path / "x", b"x", uid=os.getuid(), gid=os.getgid())
     with pytest.raises(userfs.UserFsError, match="Linux"):
         userfs.unlink_as_user(tmp_path / "x", uid=os.getuid(), gid=os.getgid())
+
+
+def test_save_for_user_completes_short_writes(monkeypatch, tmp_path):
+    monkeypatch.setattr(userfs, "invoking_user_ids", lambda: None)
+    write = os.write
+    monkeypatch.setattr(userfs.os, "write", lambda fd, data: write(fd, data[:3]))
+    target = tmp_path / "پشتیبان 🚀.json"
+    payload = 'سرور تهران'.encode()
+    userfs.save_for_user(target, payload)
+    assert target.read_bytes() == payload
+
+
+def test_save_for_user_reports_a_zero_length_write(monkeypatch, tmp_path):
+    monkeypatch.setattr(userfs, "invoking_user_ids", lambda: None)
+    monkeypatch.setattr(userfs.os, "write", lambda fd, data: 0)
+    with pytest.raises(OSError):
+        userfs.save_for_user(tmp_path / "backup", b"must not disappear")
+
+
+def test_unicode_paths_and_symlinked_parents_stay_with_the_user(tmp_path):
+    directory = tmp_path / "کاربر 🚀"
+    directory.mkdir()
+    parent = tmp_path / "alias"
+    parent.symlink_to(directory, target_is_directory=True)
+    target = parent / "new" / "پشتیبان"
+    userfs.write_as_user(target, b"content", os.getuid(), os.getgid())
+    assert target.read_bytes() == b"content"
+    assert target.stat().st_uid == os.getuid()
+    assert target.stat().st_gid == os.getgid()
