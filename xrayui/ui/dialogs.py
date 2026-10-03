@@ -258,7 +258,8 @@ class ProfileEditDialog(QDialog):
             self.f_protocol: (
                 tr("The language the server speaks. It must match what the server "
                    "runs; the form only shows the fields that protocol needs."),
-                tr("HTTP (optionally over TLS), SOCKS5, or others. "
+                tr('Provider says "VLESS + Reality"? Pick vless here.') + " "
+                + tr("HTTP (optionally over TLS), SOCKS5, or others. "
                    "A proxy your office gives you, like proxy.example.com:3128? Pick http.")),
             self.f_address: (
                 tr("The server's address: a domain name or an IP address."),
