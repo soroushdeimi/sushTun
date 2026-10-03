@@ -56,9 +56,15 @@ def _parse_target(target: str) -> tuple[str, int] | None:
         host, sep, rest = text.rpartition(":")
         if not sep or not (_HOST_RE.match(host) or _is_ipv4(host)):
             return None
-    if not rest.isdigit() or not 1 <= int(rest) <= 65535:
+    # isdigit() accepts Unicode digits (Persian, superscript two) and int()
+    # raises on them instead of returning a number; a very long run of digits
+    # trips CPython's int-from-string digit limit. Both aborted connecting.
+    if not rest.isascii() or not rest.isdigit() or len(rest) > 5:
         return None
-    return host, int(rest)
+    port = int(rest)
+    if not 1 <= port <= 65535:
+        return None
+    return host, port
 
 
 def _is_ipv4(text: str) -> bool:
