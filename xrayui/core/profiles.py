@@ -56,6 +56,7 @@ class Profile:
     address: str = ""
     port: int = 443
     id: str = ""
+    username: str = ""
     encryption: str = "none"
     flow: str = ""
     network: str = "tcp"
@@ -118,10 +119,20 @@ class Profile:
         """False for a profile a broken/malformed link parsed into but that
         can never actually connect: no address, no credential, or (for the
         protocols that need one) no peer public key / cipher method."""
-        if not self.address or not self.id:
+        if not self.address:
             return False
         if isinstance(self.port, bool) or not isinstance(self.port, int) \
                 or not 1 <= self.port <= 65535:
+            return False
+
+        if self.protocol in ("http", "socks"):
+            if self.protocol == "socks" and self.security not in ("", "none"):
+                return False
+            if self.protocol == "http" and self.security not in ("", "none", "tls"):
+                return False
+            return True
+
+        if not self.id:
             return False
         if self.protocol == "wireguard" and not self.pbk:
             return False
