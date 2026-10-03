@@ -64,9 +64,17 @@ class XrayProcess:
     def __init__(self) -> None:
         self._proc: subprocess.Popen | None = None
         self._log = None
+        self._stopped_clean = False
 
     def start(self, config_path: Path) -> None:
-        self.stop()
+        already_clean = self._stopped_clean
+        # A retry replaces a known child from this session; the first start
+        # already swept crash orphans. Disconnect still performs its sweep.
+        self.stop(sweep_orphans=self._proc is None)
+        # A fresh connect must still find cores left by another crashed app
+        # session, even if our previous disconnect found nothing else to kill.
+        if already_clean:
+            _kill_all()
         log_path = paths.log_file()
         self._log = open(log_path, "w", encoding="utf-8", errors="replace")
         # Point Xray at the bundled geo data explicitly: without it a frozen
@@ -82,11 +90,26 @@ class XrayProcess:
             startupinfo=proc._startupinfo(),
         )
 
+        self._stopped_clean = False
+
     def is_running(self) -> bool:
         return self._proc is not None and self._proc.poll() is None
 
-    def stop(self) -> None:
-        _kill_all()
+    def stop(self, *, sweep_orphans: bool = True) -> None:
+        if self._proc is not None:
+            if self._proc.poll() is None:
+                if IS_WIN:
+                    proc.run(["taskkill", "/f", "/t", "/pid", str(self._proc.pid)], timeout=5)
+                else:
+                    self._proc.kill()
+                try:
+                    self._proc.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    self._proc.kill()
+                    self._proc.wait(timeout=3)
+        if sweep_orphans and not self._stopped_clean:
+            _kill_all()
+            self._stopped_clean = True
         self._proc = None
         if self._log is not None:
             try:
