@@ -188,13 +188,18 @@ def configure_tun(index: int, address: str = TUN_ADDRESS, mask: str = TUN_NETMAS
 
 def add_host_route(server_ip: str, gateway: str) -> None:
     """Pin the server route before anything else can default into the tunnel."""
-    proc.run(["route", "add", server_ip, "mask", "255.255.255.255", gateway, "metric", "1"])
+    result = proc.run(["route", "add", server_ip, "mask", "255.255.255.255",
+                       gateway, "metric", "1"])
+    if result.returncode != 0:
+        raise RuntimeError(f"could not add host route to {server_ip}")
 
 
 def add_default_routes(tun_index: int) -> None:
     for dest, mask in DEFAULT_SPLIT:
-        proc.run(["route", "add", dest, "mask", mask, "0.0.0.0",
-                  "if", str(tun_index), "metric", "1"])
+        result = proc.run(["route", "add", dest, "mask", mask, "0.0.0.0",
+                           "if", str(tun_index), "metric", "1"])
+        if result.returncode != 0:
+            raise RuntimeError(f"could not add tunnel route to {dest}")
 
 
 def replace_host_route(server_ip: str, gateway: str) -> None:

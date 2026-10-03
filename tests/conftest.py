@@ -45,3 +45,28 @@ def flush_widgets():
     """Call before any app-wide setStyleSheet (see _flush_qt_widgets)."""
     return _flush_qt_widgets
 
+
+
+# The Windows backend is a platform-flavoured module: importing it as
+# xrayui.core._windows_test under a faked sys.platform exercises the real
+# netsh/PowerShell orchestration on any CI machine.
+@pytest.fixture
+def win_net(monkeypatch):
+    import importlib.util
+    import sys
+
+    from xrayui.core import network
+
+    spec = importlib.util.spec_from_file_location("xrayui.core._windows_test", network.__file__)
+    module = importlib.util.module_from_spec(spec)
+    with monkeypatch.context() as patch:
+        patch.setattr(sys, "platform", "win32")
+        spec.loader.exec_module(module)
+
+    def unexpected(*args, **kwargs):
+        pytest.fail(f"unmocked Windows command: {args}")
+
+    monkeypatch.setattr(module.proc, "run", unexpected)
+    monkeypatch.setattr(module.proc, "powershell", unexpected)
+    monkeypatch.setattr(module.proc, "ps_lines", unexpected)
+    return module
