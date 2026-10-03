@@ -252,6 +252,13 @@ TRANSLATIONS_FA: dict[str, str] = {
         "این کار را مجاز نمی‌داند — به‌جای آن SHA-256 گواهی را پین کنید.",
     "Private key": "کلید خصوصی",
     "Password": "رمز عبور",
+    "Username": "نام کاربری",
+    "Address is required.": "وارد کردن نشانی الزامی است.",
+    "The username for logging in to the proxy.": "نام کاربری برای ورود به پراکسی.",
+    "Only needed if the proxy requires authentication.":
+        "فقط زمانی لازم است که پراکسی به احراز هویت نیاز داشته باشد.",
+    "HTTP (optionally over TLS), SOCKS5, or others. A proxy your office gives you, like proxy.example.com:3128? Pick http.":
+        "HTTP (در صورت نیاز با TLS)، SOCKS5 یا سایر پروتکل‌ها. برای پراکسی محل کار، مانند proxy.example.com:3128، گزینهٔ http را انتخاب کنید.",
     "Peer public key": "کلید عمومی Peer",
     "Reality public key": "کلید عمومی Reality",
     "Invalid JSON": "JSON نامعتبر",

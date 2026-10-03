@@ -34,8 +34,13 @@ _ROOT = QModelIndex()  # a fresh QModelIndex() per call is a ruff B008 default-a
 
 
 def _transport_text(p: Profile) -> str:
-    if (p.protocol or "").lower() == "wireguard":
+    proto = (p.protocol or "").lower()
+    if proto == "wireguard":
         return "wg"
+    if proto == "socks":
+        return "socks"
+    if proto == "http":
+        return "http/tls" if p.security == "tls" else "http"
     return f"{p.network}/{p.security}"
 
 
