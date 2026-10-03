@@ -687,3 +687,20 @@ def test_windows_settings_are_not_pushed_again_after_the_window_saves(monkeypatc
     assert len(calls) == 1
     conn._configure_windows_hotspot({**stale, "password": "newsecret1"})
     assert len(calls) == 2  # a real new edit still goes through
+
+
+def test_localized_nmcli_does_not_replace_connected_wifi(monkeypatch):
+    ran, vif = _linux(monkeypatch)
+    run = hotspot.proc.run
+    def localized(args, **kwargs):
+        result = run(args, **kwargs)
+        if args[:4] == ["nmcli", "-t", "-f", "DEVICE,TYPE,STATE"]:
+            if (kwargs.get("env") or {}).get("LC_ALL") != "C":
+                result.stdout = result.stdout.replace("connected", "verbunden")
+        return result
+    monkeypatch.setattr(hotspot.proc, "run", localized)
+    assert hotspot.start_linux("تهران 🚀", "secretpass") == hotspot.AP_IFACE
+    assert vif["exists"]
+    profile = _profile(ran)
+    assert profile[profile.index("ifname") + 1] == hotspot.AP_IFACE
+    assert profile[profile.index("ssid") + 1] == "تهران 🚀"
