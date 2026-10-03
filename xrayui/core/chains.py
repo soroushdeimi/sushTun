@@ -12,7 +12,7 @@ from ..i18n import tr
 from . import coreopts, outbounds
 from .profiles import Profile
 
-SUPPORTED_PROTOCOLS = frozenset({"vless", "vmess", "trojan", "shadowsocks"})
+SUPPORTED_PROTOCOLS = frozenset({"vless", "vmess", "trojan", "shadowsocks", "http", "socks"})
 SUPPORTED_TRANSPORTS = frozenset({"tcp", "grpc", "httpupgrade"})
 _UID = re.compile(r"[A-Za-z0-9_-]{1,64}")
 

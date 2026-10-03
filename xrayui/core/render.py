@@ -161,6 +161,10 @@ def build_text(
 
     if routing_rules:
         _apply_routing(cfg, routing_rules, domain_strategy)
+    if profile.protocol == "http":
+        cfg.setdefault("routing", {}).setdefault("rules", []).append(
+            {"type": "field", "network": "udp", "outboundTag": "block"}
+        )
     if stats:
         _apply_stats(cfg)
     if log_level:

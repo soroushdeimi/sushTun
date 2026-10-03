@@ -101,7 +101,7 @@ class Connection:
             except ValueError as exc:
                 raise ConnectError(str(exc)) from exc
             profile = plan.entry
-        if not profile.address or not profile.id:
+        if not profile.address or (not profile.id and profile.protocol not in ("http", "socks")):
             raise ConnectError("profile is missing address or id")
         if profile.protocol == "wireguard" and not profile.pbk:
             raise ConnectError("WireGuard profile is missing the peer public key")

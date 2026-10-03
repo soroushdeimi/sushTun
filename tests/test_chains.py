@@ -72,7 +72,7 @@ def test_supported_protocols(protocol):
     assert chains.validate(chain_for(items), items) == []
 
 
-@pytest.mark.parametrize("protocol", ["hysteria2", "wireguard", "socks", "unknown"])
+@pytest.mark.parametrize("protocol", ["hysteria2", "wireguard", "unknown"])
 def test_unverified_protocols_rejected(protocol):
     items = profiles(2)
     items[1].protocol = protocol
