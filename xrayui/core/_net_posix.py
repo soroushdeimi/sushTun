@@ -210,10 +210,15 @@ def restore_dns(alias: str, state: DnsState, retries: int = 1) -> bool:
     if state.mode == "MACOS":
         service = state.servers[0] if state.servers else mac_service_name(alias)
         rest = state.servers[1:] or ["empty"]
-        if service:
-            proc.run(["networksetup", "-setdnsservers", service, *rest])
-        _mac_flush_dns()
-        return True
+        if not service:
+            return False
+        for attempt in range(max(1, retries)):
+            if proc.run(["networksetup", "-setdnsservers", service, *rest]).returncode == 0:
+                _mac_flush_dns()
+                return True
+            if attempt + 1 < retries:
+                time.sleep(1.0)
+        return False
     if state.mode == "RESOLVED" or _resolved_active():
         # Only the tunnel link was touched, and it is usually gone with xray
         # already, so a failure here is expected. Never revert the physical

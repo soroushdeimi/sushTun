@@ -395,3 +395,32 @@ def test_macos_throughput_reads_the_utun_byte_counters(monkeypatch):
     s = metrics.throughput_sample(0, 2)
     assert (s["rx"], s["tx"]) == (2097152, 262144)
     assert (s["rx_mbps"], s["tx_mbps"]) == (8.0, 1.0)
+
+
+def test_macos_dns_restore_reports_failure_and_retries(monkeypatch):
+    net, calls = _fake_mac(monkeypatch, {
+        ("networksetup", "-setdnsservers", "Wi-Fi", "1.1.1.1"): (1, "")})
+    monkeypatch.setattr(net.time, "sleep", lambda _s: None)
+    assert net.restore_dns("en0", DnsState(mode="MACOS", servers=["Wi-Fi", "1.1.1.1"]),
+                           retries=3) is False
+    assert calls.count(["networksetup", "-setdnsservers", "Wi-Fi", "1.1.1.1"]) == 3
+
+
+def test_macos_failed_restore_keeps_backup_for_next_recovery(monkeypatch, tmp_path):
+    connection, conn, _seen = _mac_connection(monkeypatch, tmp_path)
+    monkeypatch.setattr(connection, "IS_MAC", True)
+    monkeypatch.setattr(connection.xray_mod, "is_xray_running", lambda: False)
+    conn.state.save(Interface("en0", "192.168.1.5", "192.168.1.1"), "203.0.113.10", 0,
+                    DnsState(mode="MACOS", servers=["Wi-Fi", "1.1.1.1"]))
+    outcomes = iter([False, True])
+    monkeypatch.setattr(connection.network, "restore_dns", lambda *a, **k: next(outcomes))
+    uninstalled = []
+    monkeypatch.setattr(connection.bootrestore, "uninstall", lambda: uninstalled.append(True))
+
+    assert conn.recover_if_stale() is False
+    assert conn.state.dns_state().servers == ["Wi-Fi", "1.1.1.1"]
+    assert conn.state.is_connected()
+    assert uninstalled == []
+    assert conn.recover_if_stale() is True
+    assert not conn.state.is_connected()
+    assert uninstalled == [True]
