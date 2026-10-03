@@ -154,7 +154,8 @@ def test_temporary_process_stopped(monkeypatch, plan, ready, raise_inside):
     assert process.waited
 
 
-def test_aborts_early_on_failure_and_returns_partial_results(plan, monkeypatch):
+def test_aborts_early_on_failure_and_returns_partial_results(plan, monkeypatch, tmp_path):
+    monkeypatch.setattr(chain_test.paths, 'base_dir', lambda: tmp_path)
     started = []
     def _temporary(items, **kwargs):
         started.append([p.uid for p in items])
@@ -179,6 +180,8 @@ def test_aborts_early_on_failure_and_returns_partial_results(plan, monkeypatch):
     assert started == [['h0'], ['h0', 'h1']]
     assert len(report.prefixes) == 2
 
+
+def test_download_uses_proxy_and_counts_bytes(monkeypatch):
     connections = []
     class Response:
         status = 200
