@@ -18,7 +18,7 @@ from . import settings as app_settings
 from . import tun2socks as t2s
 from . import xray as xray_mod
 from .profiles import Profile, ProfileStore
-from .state import State
+from .state import MAX_DNS_ATTEMPTS, State
 
 IS_MAC = sys.platform == "darwin"
 IS_WIN = sys.platform == "win32"
@@ -107,6 +107,8 @@ class Connection:
         if self.state.is_connected():
             raise ConnectError("already connected")
 
+        self._drain_pending_dns(retries=1)
+
         if sys.platform == "linux":
             self._log("Experimental platform (Linux) — network backend is unverified.")
         self._log("Detecting active interface...")
@@ -123,7 +125,8 @@ class Connection:
 
         server_ip = _resolve(profile.address)
         self._log("Backing up DNS...")
-        dns = network.backup_dns(iface.alias)
+        parked = self.state.pending().get(iface.alias)
+        dns = parked.dns if parked else network.backup_dns(iface.alias)
 
         if IS_MAC:
             self._connect_macos(plan or profile, iface, server_ip, dns)
@@ -243,6 +246,7 @@ class Connection:
                         profile_uid=profile.exit.uid if isinstance(profile, chains.ResolvedChain)
                         else profile.uid,
                         chain_uid=profile.uid if isinstance(profile, chains.ResolvedChain) else "")
+        self.state.clear_pending(iface.alias)
         try:
             bootrestore.install()
         except Exception as exc:
@@ -420,6 +424,7 @@ class Connection:
                         profile_uid=profile.exit.uid if isinstance(profile, chains.ResolvedChain)
                         else profile.uid,
                         chain_uid=profile.uid if isinstance(profile, chains.ResolvedChain) else "")
+        self.state.clear_pending(iface.alias)
         try:
             bootrestore.install()
         except Exception as exc:
@@ -538,15 +543,57 @@ class Connection:
         Static DNS 127.0.0.1 on the Wi-Fi adapter survives reboot. If xray is
         not running, nothing answers it and Windows shows No Internet.
         """
-        if not self.state.is_connected():
-            return False
         if xray_mod.is_xray_running():
             return False
+        if not self.state.is_connected():
+            return self._drain_pending_dns(retries=dns_retries)
         self._log("Previous session left DNS pointing at 127.0.0.1. Restoring...")
-        self._restore(dns_retries=dns_retries)
-        return True
+        return self._restore(dns_retries=dns_retries)
 
-    def _restore(self, dns_retries: int = 1) -> None:
+    def _uninstall_boot_if_done(self) -> None:
+        if not self.state.pending():
+            try:
+                bootrestore.uninstall()
+            except Exception:
+                pass
+
+    def _drain_pending_dns(self, retries: int) -> bool:
+        entries = self.state.pending()
+        if not entries:
+            return False
+        restored = True
+        for alias, parked in entries.items():
+            try:
+                success = network.restore_dns(alias, parked.dns, retries=retries)
+            except Exception as exc:
+                success = False
+                self._log(f"WARNING: DNS recovery for {alias} failed: {exc}")
+            if success:
+                self.state.clear_pending(alias)
+                continue
+            restored = False
+            attempts = parked.attempts + 1
+            # Check existence after the retries: boot may precede adapter startup.
+            try:
+                exists = network.dns_target_exists(alias, parked.dns)
+            except Exception:
+                exists = None  # A failed inventory is not evidence of removal.
+            if exists is False or attempts >= MAX_DNS_ATTEMPTS:
+                self.state.clear_pending(alias)
+                self._log(f"WARNING: dropping DNS backup for {alias}: adapter/service gone "
+                          f"or {MAX_DNS_ATTEMPTS} failed recovery calls.")
+            else:
+                self.state.save_pending(alias, parked.dns, attempts=attempts)
+                self._log(f"WARNING: saved DNS for {alias} still could not be restored.")
+        if not restored:
+            try:
+                network.release_stranded_dns(exclude=None)
+            except Exception as exc:
+                self._log(f"WARNING: stranded DNS release failed: {exc}")
+        self._uninstall_boot_if_done()
+        return restored
+
+    def _restore(self, dns_retries: int = 1) -> bool:
         self._log("Disconnecting...")
         alias = self.state.alias
         server_ip = self.state.server_ip
@@ -559,25 +606,47 @@ class Connection:
             except Exception:
                 pass
             self._gateway_on = False
+        cleanup_ok = True
+        # The bridge exists only on macOS; its stale-process sweep uses pkill.
+        actions = [self.xray.stop, lambda: network.remove_routes(server_ip)]
         if IS_MAC:
-            self.tun2socks.stop()
-        self.xray.stop()
-        network.remove_routes(server_ip)
-        if alias:
-            network.restore_dns(alias, dns, retries=dns_retries)
-        # State records one alias, so an adapter stranded on 127.0.0.1 by an
-        # earlier session would otherwise stay broken forever. xray is down by
-        # now, so nothing legitimately answers there.
-        for stranded in network.release_stranded_dns(exclude=alias):
-            self._log(f"Released stale DNS on {stranded}.")
+            actions.insert(0, self.tun2socks.stop)
+        for action in actions:
+            try:
+                action()
+            except Exception as exc:
+                cleanup_ok = False
+                self._log(f"WARNING: teardown operation failed: {exc}")
+        restored = True
         try:
-            bootrestore.uninstall()
-        except Exception:
-            pass
-        self.state.clear()
-        self._owned = False
-        paths.runtime_config().unlink(missing_ok=True)
-        self._log("Network restored.")
+            if alias:
+                try:
+                    restored = network.restore_dns(alias, dns, retries=dns_retries) is not False
+                except Exception as exc:
+                    restored = False
+                    self._log(f"WARNING: DNS restore failed: {exc}")
+                if not restored:
+                    self.state.save_pending(alias, dns)
+                    self._log("WARNING: DNS restore failed; backup saved for later recovery.")
+                else:
+                    self.state.clear_pending(alias)
+            # Include the active adapter when its own restore failed.
+            try:
+                for stranded in network.release_stranded_dns(exclude=alias if restored else None):
+                    self._log(f"Released stale DNS on {stranded}.")
+            except Exception as exc:
+                cleanup_ok = False
+                self._log(f"WARNING: stranded DNS release failed: {exc}")
+            self._uninstall_boot_if_done()
+        finally:
+            try:
+                self.state.clear()
+            finally:
+                self._owned = False
+                paths.runtime_config().unlink(missing_ok=True)
+        if restored and cleanup_ok and not self.state.pending():
+            self._log("Network restored.")
+        return restored and cleanup_ok
 
     def _atexit(self) -> None:
         # Only auto-restore a connection this process created.
