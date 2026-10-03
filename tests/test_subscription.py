@@ -149,7 +149,7 @@ def test_fetch_sends_the_subscriptions_own_user_agent(monkeypatch):
     class FakeResp:
         headers = {}
 
-        def read(self):
+        def read(self, size=-1):
             return b""
 
         def __enter__(self):
@@ -173,7 +173,7 @@ def test_fetch_falls_back_to_the_default_user_agent(monkeypatch):
     class FakeResp:
         headers = {}
 
-        def read(self):
+        def read(self, size=-1):
             return b""
 
         def __enter__(self):

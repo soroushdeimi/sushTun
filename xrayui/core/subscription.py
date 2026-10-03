@@ -13,6 +13,7 @@ from . import importer
 from .profiles import SUBSCRIPTIONS_FILENAME, Profile, ProfileStore
 
 DEFAULT_USER_AGENT = "v2rayNG/1.8.5"
+MAX_BODY_BYTES = 16 * 1024 * 1024
 
 
 @dataclass
@@ -111,7 +112,10 @@ def fetch(url: str, timeout: float = 20.0, user_agent: str = ""):
     req = urllib.request.Request(url, headers={"User-Agent": user_agent or DEFAULT_USER_AGENT})
     with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 (user-provided sub URL)
         info = resp.headers.get("Subscription-Userinfo", "")
-        body = resp.read().decode("utf-8", errors="replace")
+        raw = resp.read(MAX_BODY_BYTES + 1)
+        if len(raw) > MAX_BODY_BYTES:
+            raise ValueError("subscription body is too large")
+        body = raw.decode("utf-8", errors="replace")
     return parse_userinfo(info), importer.parse_subscription(body)
 
 
@@ -201,20 +205,21 @@ def refresh(sub: Subscription, profiles: ProfileStore, store: SubscriptionStore)
     # Match new servers back to old ones by identity, not position, so a
     # server that reappears keeps its uid (and stays the active profile,
     # since active.txt just points at a uid).
-    old_by_key: dict[tuple, str] = {}
+    old_by_key: dict[tuple, list[Profile]] = {}
     for uid in sub.profile_uids:
         old = profiles.get(uid)
         if old:
-            old_by_key[_profile_key(old)] = old.uid
+            old_by_key.setdefault(_profile_key(old), []).append(old)
 
     new_uids: list[str] = []
     reused_uids: set[str] = set()
     for p in parsed:
         p.sub_uid = sub.uid
-        old_uid = old_by_key.get(_profile_key(p))
-        if old_uid and old_uid not in reused_uids:
-            p.uid = old_uid
-            reused_uids.add(old_uid)
+        candidates = old_by_key.get(_profile_key(p), [])
+        if candidates:
+            index = next((i for i, old in enumerate(candidates) if old.name == p.name), 0)
+            p.uid = candidates.pop(index).uid
+            reused_uids.add(p.uid)
         profiles.save(p)
         new_uids.append(p.uid)
 
