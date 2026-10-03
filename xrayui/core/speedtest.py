@@ -170,8 +170,8 @@ def _measure_cold(port: int, url: str, timeout: float) -> Measured:
     except urllib.error.HTTPError as e:
         status = e.code
     except Exception as e:
-        # Connection refused (e.g. xray died mid-test -- see the Windows
-        # image-name caveat below), DNS failure, TLS errors, timeouts: all
+        # Connection refused (e.g. xray died mid-test), DNS failure,
+        # TLS errors, timeouts: all
         # of it just means "this server didn't work", not a bug to raise
         # from a worker thread.
         return Measured(None, str(e))
@@ -292,18 +292,9 @@ def _run_batch(
                             mode=mode, on_detail=on_detail)
             return True
         finally:
-            # NEVER xray._kill_all() / XrayProcess.stop() here: both match
-            # by image name (Windows) or our own runtime config path and
-            # would kill the user's live tunnel too. Only ever touch the
-            # Popen this function itself started, and always -- on success,
-            # on a bad config, on cancel, or on an exception from measuring.
-            #
-            # On Windows, is_xray_running()/_kill_all() also match by image
-            # name (xray.exe) with no way to tell our test process from the
-            # live one, so Connect/Disconnect during a test can kill this
-            # Popen out from under us. _wait_ready and _measure_one both
-            # already treat a dead/unreachable process as an ordinary
-            # per-profile failure, so that surfaces as errors, not a crash.
+            # Only stop this batch's child. The live tunnel's cleanup matches
+            # its runtime config path on every platform, so it also leaves
+            # this speedtest.json process alone during a disconnect.
             popen.terminate()
             try:
                 popen.wait(timeout=3)

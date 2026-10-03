@@ -39,24 +39,17 @@ def _own_pids() -> list[int]:
     ship one): disconnecting killed their core, and their xray made a crashed
     session look alive.
     """
-    wanted = str(paths.runtime_config())
-    found = []
-    for line in _win_processes():
-        pid, _, command = line.partition("|")
-        # Ours is the xray reading our runtime config; the path is quoted when
-        # it holds a space, and must be the tail of the command line so a
-        # config.runtime.json.bak next to ours cannot pass for it.
-        if pid.strip().isdigit() and re.search(
-                rf' -c "?(?P<cfg>{re.escape(wanted)})"?\s*$', command, re.IGNORECASE):
-            found.append(int(pid.strip()))
-    return found
-
-
-def _win_processes() -> list[str]:
-    """Every xray.exe as "pid|command line", one per line."""
-    return proc.ps_lines(
+    # Match Unicode command lines inside PowerShell. Only ASCII PIDs cross
+    # the console encoding boundary (OEM and Python's locale may differ).
+    script = (
+        "$pattern = ' -c \"?' + [regex]::Escape($env:SUSHTUN_CONFIG) + '\"?\\s*$'; "
         'Get-CimInstance Win32_Process -Filter "Name=\'xray.exe\'" | '
-        'ForEach-Object { "$($_.ProcessId)|$($_.CommandLine)" }')
+        'Where-Object { $_.CommandLine -match $pattern } | '
+        'ForEach-Object { $_.ProcessId }'
+    )
+    return [int(line) for line in proc.ps_lines(
+        script, env={"SUSHTUN_CONFIG": str(paths.runtime_config())}, timeout=10)
+        if line.isascii() and line.isdigit()]
 
 
 def _kill_all() -> None:
