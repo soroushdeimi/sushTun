@@ -10,6 +10,14 @@ import pytest
 from xrayui.core import updates
 
 
+@pytest.fixture(autouse=True)
+def _x86_64(monkeypatch):
+    # The arm64 guard reads the real CPU; CI's macOS runners are arm64, and
+    # these tests fake a Linux build on an amd64 machine.
+    import platform
+    monkeypatch.setattr(platform, "machine", lambda: "x86_64")
+
+
 @pytest.fixture
 def release(monkeypatch, tmp_path):
     monkeypatch.setattr(updates, "IS_WIN", False)
