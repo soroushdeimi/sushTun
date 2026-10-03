@@ -149,7 +149,9 @@ class ProfileStore:
                 continue
             if not isinstance(data, dict):
                 continue
-            items.append(Profile.from_dict(data))
+            p_obj = Profile.from_dict(data)
+            p_obj.uid = p.stem
+            items.append(p_obj)
         return sorted(items, key=lambda x: x.name.lower())
 
     def get(self, uid: str) -> Profile | None:
@@ -157,7 +159,11 @@ class ProfileStore:
             data = json.loads(self._path(uid).read_text(encoding="utf-8"))
         except (ValueError, OSError):
             return None  # missing, or truncated by a crash or a full disk
-        return Profile.from_dict(data) if isinstance(data, dict) else None
+        if isinstance(data, dict):
+            p = Profile.from_dict(data)
+            p.uid = uid
+            return p
+        return None
 
     def save(self, profile: Profile) -> Profile:
         self.dir.mkdir(parents=True, exist_ok=True)

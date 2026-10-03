@@ -134,27 +134,38 @@ def restore(src_zip: Path) -> None:
 
         payload: dict[str, bytes] = {}
         total_bytes = 0
-        for name in names:
+        for info in zf.infolist():
+            name = info.filename
             if name == "manifest.json":
                 continue
             if not _is_allowed_member(name):
                 raise ValueError(f"unexpected file in backup: {name}")
-            # A forged .zip can declare any size in its central directory;
-            # reject the obviously-a-bomb case before ever calling read(),
-            # which decompresses the full member into memory.
-            info = zf.getinfo(name)
-            if info.file_size > _MAX_MEMBER_BYTES:
-                raise ValueError(f"backup is too large: {name}")
-            total_bytes += info.file_size
-            if total_bytes > _MAX_TOTAL_BYTES:
-                raise ValueError("backup is too large")
-            # Belt and braces alongside the member-name pattern above: even
-            # a name the regex allowed must still land inside base_dir()
-            # once actually joined and resolved.
             dest = (base / name).resolve()
             if resolved_base not in dest.parents:
                 raise ValueError(f"unexpected file in backup: {name}")
-            data = zf.read(name)
+
+            if info.file_size > _MAX_MEMBER_BYTES:
+                raise ValueError(f"backup is too large: {name}")
+            # Ensure total doesn't exceed from info headers either, for quick rejection
+            if total_bytes + info.file_size > _MAX_TOTAL_BYTES:
+                raise ValueError("backup is too large")
+
+            with zf.open(info) as f:
+                data_chunks = []
+                member_bytes = 0
+                while True:
+                    chunk = f.read(65536)
+                    if not chunk:
+                        break
+                    member_bytes += len(chunk)
+                    if member_bytes > _MAX_MEMBER_BYTES:
+                        raise ValueError(f"backup is too large: {name}")
+                    total_bytes += len(chunk)
+                    if total_bytes > _MAX_TOTAL_BYTES:
+                        raise ValueError("backup is too large")
+                    data_chunks.append(chunk)
+                data = b"".join(data_chunks)
+
             if name.endswith(".json"):
                 json.loads(data)  # raises ValueError on corruption
             payload[name] = data

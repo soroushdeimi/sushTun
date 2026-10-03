@@ -1,3 +1,5 @@
+import json
+
 from xrayui.core import profiles as profiles_mod
 from xrayui.core.profiles import Profile, ProfileStore
 
@@ -39,3 +41,15 @@ def test_valid_pqv_accepts_only_an_unpadded_base64url_ml_dsa_65_key():
     assert not profiles_mod.valid_pqv(key[:-1])  # one byte short
     assert not profiles_mod.valid_pqv(key + "=")  # padded
     assert not profiles_mod.valid_pqv(key[:-1] + "+")  # standard, not url alphabet
+
+def test_uid_matches_filename(tmp_path, monkeypatch):
+    store = _store(tmp_path, monkeypatch)
+    store.dir.mkdir(parents=True, exist_ok=True)
+    (store.dir / "fileuid.json").write_text(json.dumps({"uid": "wronguid", "name": "Test"}), encoding="utf-8")
+
+    profiles = store.list()
+    assert len(profiles) == 1
+    assert profiles[0].uid == "fileuid"
+
+    p = store.get("fileuid")
+    assert p.uid == "fileuid"

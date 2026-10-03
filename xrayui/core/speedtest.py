@@ -89,10 +89,22 @@ def build_test_config(
     return json.loads(text)
 
 
+def _free_ports(count: int) -> list[int]:
+    sockets = []
+    ports = []
+    try:
+        for _ in range(count):
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.bind(("127.0.0.1", 0))
+            sockets.append(s)
+            ports.append(s.getsockname()[1])
+        return ports
+    finally:
+        for s in sockets:
+            s.close()
+
 def _free_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
+    return _free_ports(1)[0]
 
 
 def _port_open(port: int) -> bool:
@@ -103,8 +115,10 @@ def _port_open(port: int) -> bool:
         return False
 
 
-def _wait_ready(popen: subprocess.Popen, ports: list[int], deadline: float) -> bool:
+def _wait_ready(popen: subprocess.Popen, ports: list[int], deadline: float, cancel: threading.Event | None = None) -> bool:
     while time.monotonic() < deadline:
+        if cancel and cancel.is_set():
+            return False
         if popen.poll() is not None:
             return False  # exited before opening its ports: a bad config
         if all(_port_open(port) for port in ports):
@@ -234,7 +248,11 @@ def _measure_group(
     mode: str = "warm", on_detail: OnDetail | None = None,
 ) -> None:
     def one(p: Profile, port: int) -> None:
+        if cancel.is_set():
+            return
         m = _measure_one(port, url, timeout, mode)
+        if cancel.is_set():
+            return
         delay, error = m
         on_result(p.uid, delay, error)
         if delay is None or on_detail is None:
@@ -285,7 +303,7 @@ def _run_batch(
             creationflags=proc.CREATE_NO_WINDOW, startupinfo=proc._startupinfo(),
         )
         try:
-            if not _wait_ready(popen, ports, time.monotonic() + timeout):
+            if not _wait_ready(popen, ports, time.monotonic() + timeout, cancel):
                 return False
             _measure_group(profiles, ports, url=url, timeout=timeout,
                             on_result=on_result, cancel=cancel,
@@ -310,7 +328,7 @@ def _test_group(
 ) -> None:
     if cancel.is_set() or not profiles:
         return
-    ports = [_free_port() for _ in profiles]
+    ports = _free_ports(len(profiles))
     ok = run_batch(profiles, ports, url=url, timeout=timeout, iface_alias=iface_alias,
                     on_result=on_result, cancel=cancel, core_cfg=core_cfg)
     if ok:
@@ -374,12 +392,16 @@ def tcping_all(
     profiles: list[Profile], on_result: OnResult, cancel: threading.Event, workers: int = 16,
 ) -> None:
     def one(p: Profile) -> None:
+        if cancel.is_set():
+            return
         if (p.protocol or "").lower() in _TCP_PING_UNAVAILABLE:
             # Both are UDP-only protocols; a TCP connect attempt would only
             # ever time out, which is not the same thing as "unreachable".
             on_result(p.uid, None, SKIP_UDP)
             return
         result = metrics.tcp_connect_delay(p.address, p.port, attempts=1)
+        if cancel.is_set():
+            return
         avg = result["avg"]
         on_result(p.uid, avg, None if avg is not None else "unreachable")
 

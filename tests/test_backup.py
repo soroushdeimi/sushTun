@@ -231,21 +231,23 @@ def test_restore_rejects_a_member_whose_declared_size_is_a_bomb(tmp_path, monkey
         zf.writestr("manifest.json", json.dumps({"app": "sushTun"}))
         zf.writestr("settings.json", "{}")
 
-    real_getinfo = zipfile.ZipFile.getinfo
+    real_infolist = zipfile.ZipFile.infolist
 
-    def fake_getinfo(self, name):
-        info = real_getinfo(self, name)
-        if name == "settings.json":
-            info.file_size = 999 * 1024 * 1024  # a crafted ZipInfo, not a real 999 MB file
-        return info
+    def fake_infolist(self):
+        infos = real_infolist(self)
+        for info in infos:
+            if info.filename == "settings.json":
+                info.file_size = 999 * 1024 * 1024
+        return infos
 
-    monkeypatch.setattr(zipfile.ZipFile, "getinfo", fake_getinfo)
+    monkeypatch.setattr(zipfile.ZipFile, "infolist", fake_infolist)
 
     with pytest.raises(ValueError, match="too large"):
         backup.restore(zip_path)
     assert json.loads((base / "settings.json").read_text()) == {"marker": "original"}
 
 
+# -- Zip bomb: multiple members total size lies ------------------------------
 def test_restore_rejects_many_members_whose_combined_declared_size_is_a_bomb(
     tmp_path, monkeypatch,
 ):
@@ -258,16 +260,45 @@ def test_restore_rejects_many_members_whose_combined_declared_size_is_a_bomb(
         for uid in uids:
             zf.writestr(f"profiles/{uid}.json", "{}")
 
-    real_getinfo = zipfile.ZipFile.getinfo
+    real_infolist = zipfile.ZipFile.infolist
 
-    def fake_getinfo(self, name):
-        info = real_getinfo(self, name)
-        if name.startswith("profiles/"):
-            info.file_size = 30 * 1024 * 1024  # 5 * 30MB > the 100MB total cap
-        return info
+    def fake_infolist(self):
+        infos = real_infolist(self)
+        for info in infos:
+            if info.filename.startswith("profiles/"):
+                info.file_size = 30 * 1024 * 1024
+        return infos
 
-    monkeypatch.setattr(zipfile.ZipFile, "getinfo", fake_getinfo)
+    monkeypatch.setattr(zipfile.ZipFile, "infolist", fake_infolist)
 
     with pytest.raises(ValueError, match="too large"):
         backup.restore(zip_path)
+
+def test_restore_rejects_a_member_whose_decompressed_size_is_a_bomb(tmp_path, monkeypatch):
+    _setup(tmp_path, monkeypatch)
+    monkeypatch.setattr(backup, "_MAX_MEMBER_BYTES", 5 * 1024 * 1024)
+    zip_path = tmp_path / "bomb.zip"
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("manifest.json", json.dumps({"app": "sushTun"}))
+        # 6MB of zeroes
+        zf.writestr("settings.json", b"0" * (6 * 1024 * 1024))
+
+    with pytest.raises(ValueError, match="too large"):
+        backup.restore(zip_path)
+
+def test_restore_rejects_duplicate_names_exceeding_limit(tmp_path, monkeypatch):
+    base = _setup(tmp_path, monkeypatch)
+    (base / "settings.json").write_text(json.dumps({"marker": "original"}), encoding="utf-8")
+    monkeypatch.setattr(backup, "_MAX_TOTAL_BYTES", 10 * 1024 * 1024)
+    zip_path = tmp_path / "bomb.zip"
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("manifest.json", json.dumps({"app": "sushTun"}))
+        for _ in range(4): # 4 * 3MB = 12MB > 10MB limit
+            info = zipfile.ZipInfo("settings.json")
+            zf.writestr(info, b"{}" + b" " * (3 * 1024 * 1024))  # valid JSON
+
+    with pytest.raises(ValueError, match="too large"):
+        backup.restore(zip_path)
+    assert json.loads((base / "settings.json").read_text()) == {"marker": "original"}
+
     assert json.loads((base / "settings.json").read_text()) == {"marker": "original"}

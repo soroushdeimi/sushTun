@@ -188,7 +188,9 @@ def test_chain(plan, *, mode, url, download_url=DEFAULT_DOWNLOAD_URL, timeout=10
         if result.warm_ms is not None and previous is not None:
             result.latency_ms = max(0, result.warm_ms - previous)
         report.prefixes.append(result)
-    if not cancel.is_set():
+        if result.delay_ms is None:
+            break
+    if not cancel.is_set() and report.prefixes[-1].delay_ms is not None:
         on_progress(len(profiles) + 1, len(profiles) + 1)
         report.last_hop = probe(profiles[-1:])
     if cancel.is_set():
@@ -202,7 +204,7 @@ def test_chain(plan, *, mode, url, download_url=DEFAULT_DOWNLOAD_URL, timeout=10
         report.verdict = 'BROKEN_AT'
         report.broken_at = next(i for i, result in enumerate(report.prefixes, 1)
                                 if result.delay_ms is None)
-    elif full.exit_ip and report.last_hop.exit_ip:
+    elif full.exit_ip and report.last_hop and report.last_hop.exit_ip:
         if full.exit_ip == report.last_hop.exit_ip:
             report.verdict = 'OK'
         elif any(p.exit_ip == full.exit_ip for p in report.prefixes[:-1]):

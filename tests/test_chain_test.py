@@ -48,8 +48,18 @@ def test_reports(monkeypatch, tmp_path, plan, delays, ips, verdict, broken):
                                    cancel=threading.Event(), on_progress=lambda *a: None)
     assert report.verdict == verdict
     assert report.broken_at == broken
-    assert started == [['h0'], ['h0', 'h1'], ['h0', 'h1', 'h2'], ['h2']]
-    assert stopped == [0, 1, 2, 3]
+
+    if verdict == 'BROKEN_AT':
+        # Should only start up to the broken hop
+        expected_started = []
+        for i in range(1, broken + 1):
+            expected_started.append([f'h{j}' for j in range(i)])
+        assert started == expected_started
+        assert stopped == list(range(broken))
+    else:
+        assert started == [['h0'], ['h0', 'h1'], ['h0', 'h1', 'h2'], ['h2']]
+        assert stopped == [0, 1, 2, 3]
+
     assert downloads == ([2] if delays[2] is not None else [])
     if verdict == 'OK':
         assert [p.latency_ms for p in report.prefixes] == [40, 60, 0]
@@ -144,7 +154,31 @@ def test_temporary_process_stopped(monkeypatch, plan, ready, raise_inside):
     assert process.waited
 
 
-def test_download_uses_proxy_and_counts_bytes(monkeypatch):
+def test_aborts_early_on_failure_and_returns_partial_results(plan, monkeypatch):
+    started = []
+    def _temporary(items, **kwargs):
+        started.append([p.uid for p in items])
+        # Return a context manager that fails for hop 2
+        import contextlib
+        @contextlib.contextmanager
+        def ctx():
+            yield len(items) - 1
+        return ctx()
+    monkeypatch.setattr(chain_test, '_temporary', _temporary)
+    def measure(port, url, timeout, mode):
+        # Port 0 -> OK, Port 1 -> None, Port 2 -> None
+        if port == 0:
+            return speedtest.Measured(50, None)
+        return speedtest.Measured(None, "timeout")
+    monkeypatch.setattr(speedtest, '_measure_one', measure)
+    report = chain_test.test_chain(plan, mode='warm', url='', download_url='', timeout=1,
+                                   cancel=threading.Event(), on_progress=lambda *a: None)
+    assert report.verdict == 'BROKEN_AT'
+    assert report.broken_at == 2
+    # Should only start hop 1 and hop 2, not hop 3, and NOT last_hop
+    assert started == [['h0'], ['h0', 'h1']]
+    assert len(report.prefixes) == 2
+
     connections = []
     class Response:
         status = 200
