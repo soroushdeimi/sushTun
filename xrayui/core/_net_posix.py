@@ -36,7 +36,17 @@ def _link_types() -> dict[str, str]:
 
 def _linux_detect() -> Interface | None:
     routes = json.loads(proc.run(["ip", "-j", "route", "show", "default"]).stdout or "[]")
-    routes = [r for r in routes if r.get("dev") != TUN_NAME and r.get("gateway")]
+    candidates = []
+    for route in routes:
+        if {"dead", "linkdown"}.intersection(route.get("flags", [])):
+            continue
+        # Multipath routes keep the device and gateway on each nexthop.
+        for hop in route.get("nexthops", [route]):
+            if {"dead", "linkdown"}.intersection(hop.get("flags", [])):
+                continue
+            if hop.get("dev") and hop["dev"] != TUN_NAME and hop.get("gateway"):
+                candidates.append({**route, **hop})
+    routes = candidates
     if not routes:
         return None
     # The uplink is the physical link, not simply the lowest-metric default:
