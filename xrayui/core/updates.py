@@ -156,6 +156,9 @@ def asset_for_this_build(release: Release) -> str | None:
     install anything itself and the user has to be sent to the release page."""
     if not getattr(sys, "frozen", False):
         return None  # a source checkout updates with git, not with a binary
+    import platform
+    if sys.platform == "linux" and platform.machine().lower() in ("aarch64", "arm64"):
+        return None
     if installed_macos_app():
         return None
     if installed_windows():
@@ -261,7 +264,10 @@ def download(release: Release, on_progress: Progress | None = None,
         raise UpdateError("this build cannot update itself")
     digest = _expected_digest(release, name)
 
-    staging = _staging_dir()
+    try:
+        staging = _staging_dir()
+    except OSError as exc:
+        raise UpdateError(str(exc)) from exc
     dest = staging / name
     try:
         _stream_url(release.assets[name], dest, on_progress, cancelled)
@@ -387,16 +393,10 @@ def _copy_attributes(current: Path, new: Path) -> None:
     sushTun runs elevated, so a file it writes is root-owned; without this a
     portable copy living in a user's home would come back owned by root and
     could no longer be started, or deleted, without a password."""
-    try:
-        info = current.stat()
-    except OSError:
-        return
-    try:
-        new.chmod(stat.S_IMODE(info.st_mode))
-        if not IS_WIN:
-            os.chown(new, info.st_uid, info.st_gid)
-    except (OSError, AttributeError):
-        pass
+    info = current.stat()
+    new.chmod(stat.S_IMODE(info.st_mode))
+    if not IS_WIN:
+        os.chown(new, info.st_uid, info.st_gid)
 
 
 def clean_previous() -> None:

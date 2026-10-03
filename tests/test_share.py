@@ -127,14 +127,14 @@ def test_shadowsocks_link_round_trips_plain_tcp():
     assert _same(parse_shadowsocks(share.share_link(p)), p)
 
 
-def test_shadowsocks_link_is_none_for_a_transport_sip002_cannot_express():
+def test_shadowsocks_supported_plugins_round_trip():
     p_ws = Profile(protocol="shadowsocks", address="h.example.com", port=8388,
                    id="ss-pass", ss_method="aes-256-gcm", network="ws")
-    assert share.share_link(p_ws) is None
+    assert _same(parse_shadowsocks(share.share_link(p_ws)), p_ws)
     p_obfs = Profile(protocol="shadowsocks", address="i.example.com", port=8388,
                      id="ss-pass", ss_method="aes-256-gcm", network="tcp",
                      header_type="http", host="cdn.i.example.com")
-    assert share.share_link(p_obfs) is None
+    assert _same(parse_shadowsocks(share.share_link(p_obfs)), p_obfs)
 
 
 def test_hysteria2_link_round_trips_plain():

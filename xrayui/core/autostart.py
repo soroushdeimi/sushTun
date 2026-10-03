@@ -72,11 +72,16 @@ def polkit_rule_text(user: str) -> str:
 
 
 def _desktop_file_text() -> str:
+    # Desktop Entry specification: executable path and arguments must be quoted
+    # and escaped if they contain spaces or reserved characters.
+    exe = _EXE.replace("\\", "\\\\").replace('"', '\\"').replace("`", "\\`").replace("$", "\\$")
+    exe = f'"{exe}"' if " " in _EXE or "\t" in _EXE or "'" in _EXE or '"' in _EXE else _EXE
+    exe = exe.replace("%", "%%")
     return (
         "[Desktop Entry]\n"
         "Type=Application\n"
         "Name=sushTun\n"
-        f"Exec={_EXE} --autostart\n"
+        f"Exec={exe} --autostart\n"
         "Terminal=false\n"
         "X-GNOME-Autostart-enabled=true\n"
     )

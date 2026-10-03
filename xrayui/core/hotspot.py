@@ -217,7 +217,8 @@ def _set_forwarding(iface: str, on: bool) -> None:
 
 def _wifi_devices() -> list[tuple[str, str]]:
     """(device, state) of each Wi-Fi adapter NetworkManager knows."""
-    out = proc.run(["nmcli", "-t", "-f", "DEVICE,TYPE,STATE", "device", "status"]).stdout
+    out = proc.run(["nmcli", "-t", "-f", "DEVICE,TYPE,STATE", "device", "status"],
+                   env={"LC_ALL": "C"}).stdout
     found = []
     for line in out.splitlines():
         dev, _, rest = line.partition(":")

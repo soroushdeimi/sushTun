@@ -121,11 +121,17 @@ def _relaunch_linux() -> bool:
     if pkexec:
         # Wait, so a refused prompt falls back to an unelevated window that
         # says why connecting will fail, instead of silently exiting.
-        return subprocess.call([pkexec, *cmd]) not in _PKEXEC_REFUSED
+        try:
+            return subprocess.call([pkexec, *cmd]) not in _PKEXEC_REFUSED
+        except OSError:
+            return False
     sudo = shutil.which("sudo")
     if sudo and sys.stdin is not None and sys.stdin.isatty():
         # sudo needs a terminal to ask for the password.
-        return subprocess.call([sudo, *cmd]) == 0
+        try:
+            return subprocess.call([sudo, *cmd]) == 0
+        except OSError:
+            return False
     return False
 
 

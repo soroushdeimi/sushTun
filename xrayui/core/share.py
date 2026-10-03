@@ -110,6 +110,11 @@ def _vmess_dict(p: Profile) -> dict:
 
 
 def share_vmess(p: Profile) -> str:
+    # The legacy JSON form has no extra field and repurposes the gRPC path.
+    if p.xhttp_extra or (p.network == "grpc" and p.path):
+        query = urlencode(_transport_query(p), quote_via=quote)
+        userinfo = quote(p.id, safe="")
+        return f"vmess://{userinfo}@{_authority(p.address, p.port)}?{query}#{quote(p.name)}"
     encoded = base64.b64encode(
         json.dumps(_vmess_dict(p), ensure_ascii=False).encode()
     ).decode()
@@ -117,15 +122,34 @@ def share_vmess(p: Profile) -> str:
 
 
 def share_shadowsocks(p: Profile) -> str | None:
-    """SIP002, base64url userinfo, plain tcp only. Anything SIP002 cannot
-    express -- a transport, or an obfuscating header -- has no share link:
-    a link that silently dropped the transport would point at a server
-    that isn't actually listening the way the link implies.
-    """
-    if not p.ss_method or (p.network not in ("", "tcp")) or p.header_type:
+    """SIP002 with plugin mappings supported by the importer."""
+    if not p.ss_method:
+        return None
+    plugin = ""
+    if p.network == "ws" and not p.header_type:
+        # SIP002 uses semicolons as separators; these values cannot be
+        # represented by the plugin parser without losing information.
+        if any(";" in value for value in (p.host, p.path)):
+            return None
+        plugin = "v2ray-plugin;mode=websocket"
+        if p.host:
+            plugin += f";host={p.host}"
+        if p.path:
+            path = p.path.replace("\\", "\\\\").replace("=", "\\=").replace(",", "\\,")
+            plugin += f";path={path}"
+        if p.security == "tls":
+            plugin += ";tls"
+        elif p.security not in ("", "none"):
+            return None
+    elif p.network in ("", "tcp") and p.header_type == "http" and p.host:
+        if ";" in p.host or p.security not in ("", "none"):
+            return None
+        plugin = f"obfs-local;obfs=http;obfs-host={p.host}"
+    elif p.network not in ("", "tcp") or p.header_type:
         return None
     userinfo = base64.urlsafe_b64encode(f"{p.ss_method}:{p.id}".encode()).decode().rstrip("=")
-    return f"ss://{userinfo}@{_authority(p.address, p.port)}#{quote(p.name)}"
+    query = "?" + urlencode({"plugin": plugin}, quote_via=quote) if plugin else ""
+    return f"ss://{userinfo}@{_authority(p.address, p.port)}{query}#{quote(p.name)}"
 
 
 def _hysteria2_query(p: Profile) -> dict[str, str]:

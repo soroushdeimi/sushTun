@@ -166,6 +166,11 @@ def save_for_user(path: Path, data: bytes) -> None:
     flags |= getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
     fd = os.open(str(path), flags, 0o644)
     try:
-        os.write(fd, data)
+        remaining = memoryview(data)
+        while remaining:
+            written = os.write(fd, remaining)
+            if written == 0:
+                raise OSError("file write made no progress")
+            remaining = remaining[written:]
     finally:
         os.close(fd)
