@@ -45,7 +45,7 @@ from .workers import Worker
 
 _NETWORKS = ["tcp", "ws", "grpc", "h2", "kcp", "quic", "xhttp", "httpupgrade"]
 _SECURITIES = ["none", "tls", "reality"]
-_PROTOCOLS = ["vless", "vmess", "trojan", "shadowsocks", "hysteria2", "wireguard"]
+_PROTOCOLS = ["vless", "vmess", "trojan", "shadowsocks", "hysteria2", "wireguard", "http", "socks"]
 _VMESS_SECURITIES = ["auto", "aes-128-gcm", "chacha20-poly1305", "none", "zero"]
 _SS_METHODS = [
     "aes-128-gcm", "aes-256-gcm", "chacha20-ietf-poly1305", "xchacha20-ietf-poly1305",
@@ -252,10 +252,14 @@ class ProfileEditDialog(QDialog):
                 tr("How this server appears in your list. Just for you; it doesn't "
                    "change how it connects."),
                 tr("\"Berlin, fast\" is easier to find next week than \"server-7\".")),
+            self.f_username: (
+                tr("The username for logging in to the proxy."),
+                tr("Only needed if the proxy requires authentication.")),
             self.f_protocol: (
                 tr("The language the server speaks. It must match what the server "
                    "runs; the form only shows the fields that protocol needs."),
-                tr("Provider says \"VLESS + Reality\"? Pick vless here.")),
+                tr("HTTP (optionally over TLS), SOCKS5, or others. "
+                   "A proxy your office gives you, like proxy.example.com:3128? Pick http.")),
             self.f_address: (
                 tr("The server's address: a domain name or an IP address."),
                 tr("de1.example.com, exactly as your provider wrote it.")),
@@ -415,6 +419,7 @@ class ProfileEditDialog(QDialog):
         self.f_port = QSpinBox()
         self.f_port.setRange(1, 65535)
         self.f_port.setValue(p.port)
+        self.f_username = QLineEdit(p.username)
         self.f_id = QLineEdit(p.id)
         self.f_encryption = QLineEdit(p.encryption)
         self.f_flow = QLineEdit(p.flow)
@@ -470,7 +475,7 @@ class ProfileEditDialog(QDialog):
         # Technical values (raw identifiers, keys, hosts) never mirror even
         # in an RTL layout -- only f_name (a freeform display name) doesn't
         # get this.
-        for f in (self.f_address, self.f_id, self.f_encryption, self.f_flow, self.f_sni,
+        for f in (self.f_address, self.f_id, self.f_username, self.f_encryption, self.f_flow, self.f_sni,
                  self.f_fp, self.f_alpn, self.f_pbk, self.f_sid, self.f_spx, self.f_pqv,
                  self.f_path, self.f_host, self.f_service, self.f_wg_local, self.f_wg_psk,
                  self.f_wg_reserved, self.f_hy2_pcs, self.f_hy2_obfs_password,
@@ -481,6 +486,7 @@ class ProfileEditDialog(QDialog):
         self._add_row(form, tr("Protocol"), self.f_protocol)
         self._add_row(form, tr("Address"), self.f_address)
         self._add_row(form, tr("Port"), self.f_port)
+        self._lab_username = self._add_row(form, tr("Username"), self.f_username)
         self._lab_id = self._add_row(form, tr("UUID / private key"), self.f_id)
         self._lab_pbk = self._add_row(form, tr("Peer / Reality public key"), self.f_pbk)
         lab_vmess_sec = self._add_row(form, tr("VMess security"), self.f_vmess_security)
@@ -551,7 +557,10 @@ class ProfileEditDialog(QDialog):
         self.insecure_note.setObjectName("Muted")
         self.insecure_note.setWordWrap(True)
         self.insecure_note.setVisible(bool(p.allow_insecure))
-        adv_form.addRow(self.insecure_note)
+        if p.protocol == "http":
+            form.addRow(self.insecure_note)
+        else:
+            adv_form.addRow(self.insecure_note)
 
         self._advanced = CollapsibleSection(tr("Advanced"), adv_widget)
         set_help(self._advanced.toggle,
@@ -577,20 +586,29 @@ class ProfileEditDialog(QDialog):
         def hysteria2() -> bool:
             return self.f_protocol.currentText() == "hysteria2"
 
+        def is_http() -> bool:
+            return self.f_protocol.currentText() == "http"
+
+        def is_socks() -> bool:
+            return self.f_protocol.currentText() == "socks"
+
         def stream() -> bool:
-            return not wg() and not hysteria2()
+            return not wg() and not hysteria2() and not is_http() and not is_socks()
 
         def is_reality() -> bool:
             return stream() and self.f_security.currentText() == "reality"
 
         def is_tls_or_reality() -> bool:
-            return stream() and self.f_security.currentText() in ("tls", "reality")
+            return (stream() or is_http()) and self.f_security.currentText() in ("tls", "reality")
 
         def sni_visible() -> bool:
             return is_tls_or_reality() or hysteria2()
 
         def is_tls() -> bool:
-            return stream() and self.f_security.currentText() == "tls"
+            return (stream() or is_http()) and self.f_security.currentText() == "tls"
+
+        def security_visible() -> bool:
+            return stream() or is_http()
 
         def is_grpc() -> bool:
             return stream() and self.f_network.currentText() == "grpc"
@@ -616,7 +634,7 @@ class ProfileEditDialog(QDialog):
             (lab_encryption, self.f_encryption, vless),
             (lab_flow, self.f_flow, vless),
             (lab_network, self.f_network, stream),
-            (lab_security, self.f_security, stream),
+            (lab_security, self.f_security, security_visible),
             (lab_sni, self.f_sni, sni_visible),
             (lab_fp, self.f_fp, is_tls_or_reality),
             (lab_alpn, self.f_alpn, is_tls),
@@ -649,8 +667,23 @@ class ProfileEditDialog(QDialog):
     def _sync_field_visibility(self, *_args) -> None:
         protocol = self.f_protocol.currentText()
         wg = protocol == "wireguard"
+        is_http_socks = protocol in ("http", "socks")
+
         self._lab_id.setText(tr("Private key") if wg else tr("Password") if protocol in
-                             ("trojan", "shadowsocks", "hysteria2") else "UUID")
+                             ("trojan", "shadowsocks", "hysteria2", "http", "socks") else "UUID")
+        self._lab_username.setVisible(is_http_socks)
+        self.f_username.setVisible(is_http_socks)
+
+        securities = (["none", "tls"] if protocol == "http" else
+                      ["none"] if protocol == "socks" else _SECURITIES)
+        if [self.f_security.itemText(i) for i in range(self.f_security.count())] != securities:
+            current_sec = self.f_security.currentText()
+            self.f_security.blockSignals(True)
+            self.f_security.clear()
+            self.f_security.addItems(securities)
+            if current_sec in securities:
+                self.f_security.setCurrentText(current_sec)
+            self.f_security.blockSignals(False)
         self._lab_pbk.setText(tr("Peer public key") if wg else tr("Reality public key"))
         pbk_visible = self._pbk_visible()
         self._lab_pbk.setVisible(pbk_visible)
@@ -662,7 +695,7 @@ class ProfileEditDialog(QDialog):
         for lab, field in zip(self._wg_labs, self._wg_fields, strict=True):
             lab.setVisible(wg)
             field.setVisible(wg)
-        self._advanced.setVisible(not wg)
+        self._advanced.setVisible(not wg and not is_http_socks)
 
     def result_profile(self) -> Profile:
         return self._profile
@@ -682,7 +715,8 @@ class ProfileEditDialog(QDialog):
             data["uid"] = self._profile.uid
             self._profile = Profile.from_dict(data)
         else:
-            xhttp_extra = self.f_xhttp_extra.text().strip()
+            proxy = self.f_protocol.currentText() in ("http", "socks")
+            xhttp_extra = "" if proxy else self.f_xhttp_extra.text().strip()
             if xhttp_extra:
                 try:
                     parsed = json.loads(xhttp_extra)
@@ -693,7 +727,7 @@ class ProfileEditDialog(QDialog):
                                         tr("xhttp extra must be a JSON object, e.g. "
                                           '{"headers": {"X-Extra": "1"}}.'))
                     return
-            hy2_ports = self.f_hy2_ports.text().strip()
+            hy2_ports = "" if proxy else self.f_hy2_ports.text().strip()
             if hy2_ports and normalize_ports(hy2_ports) is None:
                 QMessageBox.warning(self, tr("Invalid port range"),
                                     tr("Port-hopping range must look like 20000-30000 "
@@ -722,13 +756,14 @@ class ProfileEditDialog(QDialog):
             p.protocol = self.f_protocol.currentText()
             p.address = self.f_address.text().strip()
             p.port = self.f_port.value()
+            p.username = self.f_username.text().strip()
             p.id = self.f_id.text().strip()
             p.encryption = self.f_encryption.text().strip() or "none"
             p.flow = self.f_flow.text().strip()
             p.vmess_security = self.f_vmess_security.currentText()
             p.ss_method = self.f_ss_method.currentText()
-            p.network = self.f_network.currentText()
-            p.security = self.f_security.currentText()
+            p.network = "tcp" if p.protocol in ("http", "socks") else self.f_network.currentText()
+            p.security = "none" if p.protocol == "socks" else self.f_security.currentText()
             p.sni = self.f_sni.text().strip()
             p.fp = self.f_fp.text().strip()
             p.alpn = self.f_alpn.text().strip()
@@ -765,7 +800,11 @@ class ProfileEditDialog(QDialog):
             p.wg_reserved = self.f_wg_reserved.text().strip()
             p.wg_mtu = self.f_wg_mtu.value()
             p.wg_keepalive = self.f_wg_keepalive.value()
-        if not self._profile.address or not self._profile.id:
+        if self._profile.protocol in ("http", "socks") and not self._profile.address:
+            QMessageBox.warning(self, tr("Missing fields"), tr("Address is required."))
+            return
+        if (self._profile.protocol not in ("http", "socks")
+                and (not self._profile.address or not self._profile.id)):
             QMessageBox.warning(self, tr("Missing fields"),
                                 tr("Address and UUID / private key are required."))
             return
