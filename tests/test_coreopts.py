@@ -427,3 +427,27 @@ def test_udp_noise_xray_test_accepts_it(tmp_path, monkeypatch):
                              core_cfg=_core(udp_noise=_NOISE_ON))
     assert '"noise"' in text
     assert xraycheck.check_config(text) is None
+
+
+@pytest.mark.parametrize("field,bad", [
+    ("packets", "۱۰"),
+    ("length", "۱۰۰-۲۰۰"),
+    ("interval", "۱۰-۲۰"),
+])
+def test_fragment_drops_digits_the_core_cannot_parse(field, bad):
+    # Bare \d matches Persian digits and int() converts them, so the value
+    # reached the config and the core refused the whole file:
+    # 'Invalid integer range, expected either string of form "1-2" or plain
+    # integer.'  A typo must fall back to the default, not stop the connect.
+    key = {"packets": "packets", "length": "length", "interval": "delay"}[field]
+    assert coreopts.build_fragment_mask({field: bad})["settings"][key].isascii()
+
+
+@pytest.mark.parametrize("field,bad", [
+    ("length", "۱۰-۲۰"),
+    ("delay", "۱۰-۱۶"),
+    ("delay", "۱۶"),
+])
+def test_udp_noise_drops_digits_the_core_cannot_parse(field, bad):
+    item = coreopts.build_udp_noise_mask({field: bad})["settings"]["noise"][0]
+    assert item["rand" if field == "length" else "delay"].isascii()

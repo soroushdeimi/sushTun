@@ -15,8 +15,12 @@ import sys
 from .metrics import STATS_API_PORT
 from .profiles import Profile
 
-_PACKETS_RE = re.compile(r"^(tlshello|\d+(-\d+)?)$")
-_RANGE_RE = re.compile(r"^\d+(-\d+)?$")
+# re.ASCII: bare \d also matches Persian and Arabic-Indic digits, which the
+# int() checks below then convert happily, so the value reached the config and
+# the core refused the whole file ("Invalid integer range"). One typo in an
+# optional mask must fall back to its default, not stop the connect.
+_PACKETS_RE = re.compile(r"^(tlshello|\d+(-\d+)?)$", re.ASCII)
+_RANGE_RE = re.compile(r"^\d+(-\d+)?$", re.ASCII)
 _MUX_ELIGIBLE_PROTOCOLS = frozenset({"vmess", "trojan", "shadowsocks"})
 XUDP_UDP443_CHOICES = ("reject", "allow", "skip")
 _XUDP_UDP443_VALUES = XUDP_UDP443_CHOICES
