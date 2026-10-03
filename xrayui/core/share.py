@@ -204,8 +204,34 @@ def share_wireguard(p: Profile) -> str:
     return f"wireguard://{userinfo}@{_authority(p.address, p.port)}?{query}#{quote(p.name)}"
 
 
+def share_http(p: Profile) -> str:
+    scheme = "https" if p.security == "tls" else "http"
+    userinfo = ""
+    if p.username:
+        userinfo = quote(p.username, safe="")
+        if p.id:
+            userinfo += ":" + quote(p.id, safe="")
+        userinfo += "@"
+    return f"{scheme}://{userinfo}{_authority(p.address, p.port)}#{quote(p.name)}"
+
+
+def share_socks(p: Profile) -> str:
+    userinfo = ""
+    if p.username:
+        raw = p.username
+        if p.id:
+            raw += ":" + p.id
+        b64 = base64.b64encode(raw.encode("utf-8")).decode()
+        userinfo = f"{b64}@"
+    return f"socks://{userinfo}{_authority(p.address, p.port)}#{quote(p.name)}"
+
+
 def share_link(p: Profile) -> str | None:
     protocol = (p.protocol or "").lower()
+    if protocol == "http":
+        return share_http(p)
+    if protocol == "socks":
+        return share_socks(p)
     if protocol == "wireguard":
         return share_wireguard(p)
     if protocol == "vmess":
