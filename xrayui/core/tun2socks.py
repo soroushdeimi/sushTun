@@ -48,19 +48,23 @@ class Tun2socks:
         # yet its only peer is Xray's SOCKS inbound on loopback, which a
         # NIC-pinned socket cannot reach. Loopback never routes into the utun,
         # so there is no loop for the flag to prevent.
-        self._proc = subprocess.Popen(
-            [
-                str(paths.tun2socks_bin()),
-                "--device", DEVICE,
-                "--proxy", f"socks5://{socks_host}:{socks_port}",
-                "--mtu", str(MTU),
-                "--loglevel", "warn",  # "info" wrote a line per connection
-            ],
-            stdout=self._log,
-            stderr=subprocess.STDOUT,
-            cwd=str(paths.base_dir()),
-            env=proc.child_env(),
-        )
+        try:
+            self._proc = subprocess.Popen(
+                [
+                    str(paths.tun2socks_bin()),
+                    "--device", DEVICE,
+                    "--proxy", f"socks5://{socks_host}:{socks_port}",
+                    "--mtu", str(MTU),
+                    "--loglevel", "warn",  # "info" wrote a line per connection
+                ],
+                stdout=self._log,
+                stderr=subprocess.STDOUT,
+                cwd=str(paths.base_dir()),
+                env=proc.child_env(),
+            )
+        except Exception:
+            self.stop()
+            raise
 
     def is_running(self) -> bool:
         return self._proc is not None and self._proc.poll() is None
@@ -87,7 +91,11 @@ def log_path():
 
 def last_log_line() -> str:
     try:
-        lines = log_path().read_text(encoding="utf-8", errors="replace").splitlines()
+        with open(log_path(), "rb") as f:
+            f.seek(0, 2)
+            size = f.tell()
+            f.seek(max(0, size - 4096))
+            lines = f.read().decode("utf-8", "replace").splitlines()
     except OSError:
         return "no log output"
     lines = [ln.strip() for ln in lines if ln.strip()]

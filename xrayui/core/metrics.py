@@ -77,9 +77,11 @@ def _mac_counters(device: str) -> tuple[int, int] | None:
 def _mac_throughput(seconds: int) -> dict | None:
     from .tun2socks import DEVICE
     first = _mac_counters(DEVICE)
+    if first is None:
+        return None
     time.sleep(seconds)
     second = _mac_counters(DEVICE)
-    if first is None or second is None:
+    if second is None:
         return None
     rx, tx = max(0, second[0] - first[0]), max(0, second[1] - first[1])
     return {"name": DEVICE, "rx": rx, "tx": tx,
@@ -244,5 +246,12 @@ def _tail_log(n: int) -> str:
     p = paths.log_file()
     if not p.exists():
         return "(no log yet)"
-    lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
+    try:
+        with open(p, "rb") as f:
+            f.seek(0, 2)
+            size = f.tell()
+            f.seek(max(0, size - 16384))
+            lines = f.read().decode("utf-8", "replace").splitlines()
+    except OSError:
+        return "(no log yet)"
     return "\n".join(lines[-n:])
