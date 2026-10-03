@@ -1774,7 +1774,12 @@ def test_a_hidden_window_polls_no_processes(window, monkeypatch):
     assert polled == []
     assert window.tailer.interval == LogTailer.IDLE_INTERVAL
     window.show()
+    # The process check runs off the UI thread at most every 10 s; clear the
+    # throttle left by the window's own first refresh and wait for the pool.
+    window._orphan_check_pending = False
+    window._orphan_check_at = float("-inf")
     window._refresh_status()
+    window.pool.waitForDone(5000)
     assert "pgrep" in polled
     assert window.tailer.interval == LogTailer.INTERVAL
 
