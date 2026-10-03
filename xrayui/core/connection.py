@@ -9,6 +9,7 @@ import socket
 import sys
 import time
 from collections.abc import Callable
+from pathlib import Path
 
 from .. import paths
 from . import bootrestore, chains, coreopts, hotspot, network, render, routing
@@ -138,6 +139,13 @@ class Connection:
         paths.runtime_config().unlink(missing_ok=True)
         raise ConnectError(reason)
 
+    def _start_xray(self, cfg_path: Path, server_ip: str) -> None:
+        """Turn a failed binary launch into a connect error after cleanup."""
+        try:
+            self.xray.start(cfg_path)
+        except OSError as exc:
+            self._fail_connect(server_ip, f"Could not start Xray: {exc}")
+
     def _exits(self, cfgs: dict) -> list[exits_mod.Exit]:
         # A bad or busy multi-exit setting is dropped here with a warning;
         # it must never keep the main connection from starting.
@@ -147,7 +155,7 @@ class Connection:
             self._log(f"WARNING: {warning}")
         return exits
 
-    def _retry_without_extras(self, build, exits, forwards) -> None:
+    def _retry_without_extras(self, build, exits, forwards, server_ip: str) -> None:
         """Start again without the multi-exit port and the port forwards when
         one of their ports turned out to be taken.
 
@@ -164,7 +172,7 @@ class Connection:
                     return  # a different startup failure: leave it to the caller
                 self._log("WARNING: a port of the multi-exit port or of a port forward is "
                           "in use; starting without them.")
-                self.xray.start(build([], []))
+                self._start_xray(build([], []), server_ip)
                 return
             time.sleep(0.1)
 
@@ -211,8 +219,8 @@ class Connection:
             network.add_host_route(server_ip, iface.gateway)
         except (OSError, RuntimeError) as exc:
             self._fail_connect(server_ip, f"Could not pin the server route: {exc}")
-        self.xray.start(cfg)
-        self._retry_without_extras(build, exits, forwards)
+        self._start_xray(cfg, server_ip)
+        self._retry_without_extras(build, exits, forwards, server_ip)
 
         self._log("Waiting for TUN adapter...")
         tun = network.wait_for_tun(alive=self.xray.is_running)
@@ -406,8 +414,8 @@ class Connection:
         network.add_host_route(server_ip, iface.gateway)
         if network.mac_ensure_scoped_default(iface.alias, iface.gateway):
             self._log(f"Restored the missing default route scoped to {iface.alias}.")
-        self.xray.start(cfg)
-        self._retry_without_extras(build, exits, forwards)
+        self._start_xray(cfg, server_ip)
+        self._retry_without_extras(build, exits, forwards, server_ip)
         if not network.mac_wait_for_device(alive=self.xray.is_running):
             why = (_last_log_line() if not self.xray.is_running()
                    else f"{t2s.DEVICE} did not appear")
@@ -450,8 +458,8 @@ class Connection:
         # Same validation render already applied to socks-in, so the port this
         # waits on and bridges from is the one Xray actually opened.
         socks_port = coreopts.valid_socks_port(core_cfg.get("socks_port"))
-        self.xray.start(build(exits, forwards))
-        self._retry_without_extras(build, exits, forwards)
+        self._start_xray(build(exits, forwards), server_ip)
+        self._retry_without_extras(build, exits, forwards, server_ip)
         if not _wait_port(SOCKS_HOST, socks_port, alive=self.xray.is_running):
             if not self.xray.is_running():
                 self._fail_connect(server_ip, f"Xray exited during startup: {_last_log_line()}")

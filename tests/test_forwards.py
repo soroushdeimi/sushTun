@@ -189,7 +189,7 @@ def test_a_port_taken_after_the_check_starts_without_the_extras(monkeypatch, tmp
         return f"cfg-{len(built)}"
 
     kept, _ = forwards.prepare([SSH], _core(), None)
-    conn._retry_without_extras(build, [], kept)
+    conn._retry_without_extras(build, [], kept, "203.0.113.10")
     assert built == [([], [])]          # rebuilt without the optional inbounds
     assert xray.starts == ["cfg-1"]     # and started again
 
@@ -198,7 +198,7 @@ def test_another_startup_failure_is_left_to_the_caller(monkeypatch, tmp_path):
     xray = _FakeXray()
     conn = _conn_with(monkeypatch, tmp_path, xray, "failed to parse config: bad json")
     kept, _ = forwards.prepare([SSH], _core(), None)
-    conn._retry_without_extras(lambda e, f: "cfg", [], kept)
+    conn._retry_without_extras(lambda e, f: "cfg", [], kept, "203.0.113.10")
     assert xray.starts == []            # no second try: this is a real failure
 
 
@@ -207,7 +207,7 @@ def test_a_healthy_start_is_not_touched(monkeypatch, tmp_path):
     xray.start("cfg-0")
     conn = _conn_with(monkeypatch, tmp_path, xray, "")
     kept, _ = forwards.prepare([SSH], _core(), None)
-    conn._retry_without_extras(lambda e, f: "cfg", [], kept)
+    conn._retry_without_extras(lambda e, f: "cfg", [], kept, "203.0.113.10")
     assert xray.starts == ["cfg-0"]
 
 
