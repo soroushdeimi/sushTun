@@ -2,6 +2,7 @@
 import errno
 import hashlib
 import io
+import os
 from pathlib import Path
 
 import pytest
@@ -105,3 +106,44 @@ def test_checksum_mismatch_cleans_file(monkeypatch, release, tmp_path):
         updates.download(release)
     assert not (tmp_path / "update.tmp").exists()
 
+
+
+def test_attribute_errors_are_ignored_when_the_result_already_matches(monkeypatch, tmp_path):
+    # A portable copy on FAT/exFAT: chmod and chown are refused, but the
+    # download already carries the right owner, so the update must go on.
+    current, new = tmp_path / "sushTun", tmp_path / "sushTun.new"
+    current.write_bytes(b"old")
+    new.write_bytes(b"new")
+    current.chmod(0o755)
+    new.chmod(0o755)
+
+    def refuse(*args, **kwargs):
+        raise PermissionError(errno.EPERM, "not supported")
+
+    monkeypatch.setattr(updates.Path, "chmod", refuse)
+    monkeypatch.setattr(updates.os, "chown", refuse)
+    updates._copy_attributes(current, new)
+
+
+def test_attribute_errors_still_fail_when_the_owner_would_differ(monkeypatch, tmp_path):
+    current, new = tmp_path / "sushTun", tmp_path / "sushTun.new"
+    current.write_bytes(b"old")
+    new.write_bytes(b"new")
+    real_stat = updates.Path.stat
+
+    def stat(self, *args, **kwargs):
+        st = real_stat(self, *args, **kwargs)
+        if self == new:
+            return os.stat_result((st.st_mode, st.st_ino, st.st_dev, st.st_nlink,
+                                   st.st_uid + 1, st.st_gid, st.st_size,
+                                   st.st_atime, st.st_mtime, st.st_ctime))
+        return st
+
+    def refuse(*args, **kwargs):
+        raise PermissionError(errno.EPERM, "not permitted")
+
+    monkeypatch.setattr(updates.Path, "stat", stat)
+    monkeypatch.setattr(updates.os, "chown", refuse)
+    monkeypatch.setattr(updates, "IS_WIN", False)
+    with pytest.raises(OSError):
+        updates._copy_attributes(current, new)

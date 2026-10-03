@@ -392,11 +392,25 @@ def _copy_attributes(current: Path, new: Path) -> None:
 
     sushTun runs elevated, so a file it writes is root-owned; without this a
     portable copy living in a user's home would come back owned by root and
-    could no longer be started, or deleted, without a password."""
+    could no longer be started, or deleted, without a password.
+
+    A filesystem without permissions (a portable copy on FAT/exFAT) refuses
+    both calls; that only matters if the download did not already end up
+    with the right mode and owner."""
     info = current.stat()
-    new.chmod(stat.S_IMODE(info.st_mode))
+    mode = stat.S_IMODE(info.st_mode)
+    try:
+        new.chmod(mode)
+    except OSError:
+        if stat.S_IMODE(new.stat().st_mode) != mode:
+            raise
     if not IS_WIN:
-        os.chown(new, info.st_uid, info.st_gid)
+        try:
+            os.chown(new, info.st_uid, info.st_gid)
+        except OSError:
+            st = new.stat()
+            if (st.st_uid, st.st_gid) != (info.st_uid, info.st_gid):
+                raise
 
 
 def clean_previous() -> None:
