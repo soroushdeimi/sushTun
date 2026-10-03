@@ -156,4 +156,4 @@ def _relaunch_macos() -> bool:
 
 
 def _join(args: list[str]) -> str:
-    return " ".join(f'"{a}"' if " " in a else a for a in args)
+    return subprocess.list2cmdline(args)
