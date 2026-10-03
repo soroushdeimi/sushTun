@@ -31,29 +31,29 @@ def _maybe_b64(text: str) -> str:
 def _parse_http_socks_userinfo(userinfo: str) -> tuple[str, str]:
     if not userinfo:
         return "", ""
-    decoded = unquote(userinfo)
-    if ":" not in decoded:
-        try:
-            b64_decoded = _b64decode(decoded)
-            if ":" in b64_decoded:
-                decoded = b64_decoded
-        except (ValueError, binascii.Error):
-            pass
-    if ":" in decoded:
-        user, _, pw = decoded.partition(":")
-        return user, pw
-    return decoded, ""
+    if ":" in userinfo:
+        user, _, pw = userinfo.partition(":")
+        return unquote(user), unquote(pw)
+    try:
+        decoded = _b64decode(userinfo)
+        if ":" in decoded:
+            user, _, pw = decoded.partition(":")
+            return user, pw
+    except (ValueError, binascii.Error):
+        pass
+    return unquote(userinfo), ""
 
 def is_proxy_url(line: str) -> bool:
     line = line.strip()
     try:
         s = urlsplit(line)
+        port = s.port
     except ValueError:
         return False
     if s.scheme in ("socks", "socks5", "socks5h"):
-        return bool(s.hostname and s.port)
+        return bool(s.hostname and port)
     if s.scheme in ("http", "https"):
-        return bool(s.hostname and s.port is not None and s.path in ("", "/") and not s.query)
+        return bool(s.hostname and port is not None and s.path in ("", "/") and not s.query)
     return False
 
 def parse_http(link: str) -> Profile:

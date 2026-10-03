@@ -1,9 +1,47 @@
+import base64
+
 import pytest
 
 from xrayui.core.importer import is_proxy_url, parse_http, parse_share_text, parse_socks
 from xrayui.core.profiles import Profile
 from xrayui.core.share import share_http, share_link, share_socks
 from xrayui.core.subscription import subscription_url
+
+
+@pytest.mark.parametrize("scheme", ["http", "https", "socks", "socks5", "socks5h"])
+@pytest.mark.parametrize("port", ["99999", "-1", "invalid"])
+def test_is_proxy_url_rejects_bad_ports(scheme, port):
+    assert is_proxy_url(f"{scheme}://h.example:{port}") is False
+
+
+def test_subscription_url_preserves_out_of_range_port():
+    url = "https://h.example:99999/sub"
+    assert subscription_url(url) == url
+
+
+@pytest.mark.parametrize("parse, link, expected", [
+    (parse_socks, "socks://u%3Ax:p@1.2.3.4:1080", ("u:x", "p")),
+    (parse_http, "http://u%3Ax:p%40w@1.2.3.4:8080", ("u:x", "p@w")),
+])
+def test_userinfo_splits_before_percent_decoding(parse, link, expected):
+    profile = parse(link)
+    assert (profile.username, profile.id) == expected
+
+
+@pytest.mark.parametrize("parse, scheme", [(parse_http, "http"), (parse_socks, "socks")])
+def test_base64_userinfo_preserves_percent_escapes_and_password_colons(parse, scheme):
+    userinfo = base64.b64encode(b"u%3Ax:p%40w:tail").decode()
+    profile = parse(f"{scheme}://{userinfo}@1.2.3.4:8080")
+    assert (profile.username, profile.id) == ("u%3Ax", "p%40w:tail")
+
+
+@pytest.mark.parametrize("password", ["p@w", ""])
+def test_share_http_round_trips_username_with_colon_and_at(password):
+    original = Profile(
+        protocol="http", address="1.2.3.4", port=8080, username="u:x@y", id=password,
+    )
+    restored = parse_http(share_http(original))
+    assert (restored.username, restored.id) == (original.username, original.id)
 
 
 def test_is_proxy_url():
