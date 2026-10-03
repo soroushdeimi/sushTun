@@ -11,7 +11,7 @@ from .profiles import Profile, normalize_pcs
 
 
 def _b64decode(text: str) -> str:
-    s = text.strip().replace("\n", "").replace("\r", "")
+    s = "".join(text.split())
     s = s.replace("-", "+").replace("_", "/")
     s += "=" * (-len(s) % 4)
     return base64.b64decode(s).decode("utf-8", errors="replace")
@@ -472,7 +472,28 @@ def parse_share_text(text: str) -> list[Profile]:
 
 
 def parse_subscription(text: str) -> list[Profile]:
-    return parse_share_text(text)
+    body = text.lstrip("﻿").strip()
+    if not body.startswith(("{", "[")):
+        try:
+            decoded = _b64decode(body).lstrip("﻿").strip()
+        except ValueError:
+            pass
+        else:
+            if decoded.startswith(("{", "[")):
+                body = decoded
+    if not body.startswith(("{", "[")) or _looks_like_wg_conf(body):
+        return parse_share_text(body)
+    try:
+        data = json.loads(body)
+    except ValueError:
+        return []
+    profiles = []
+    for item in data if isinstance(data, list) else [data]:
+        try:
+            profiles.append(parse_json(json.dumps(item, ensure_ascii=False)))
+        except (ValueError, TypeError, AttributeError, IndexError, OverflowError):
+            continue
+    return profiles
 
 
 def _profile_from_wg_outbound(proxy: dict) -> Profile:
