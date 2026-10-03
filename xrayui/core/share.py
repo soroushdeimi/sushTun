@@ -218,9 +218,7 @@ def share_http(p: Profile) -> str:
 def share_socks(p: Profile) -> str:
     userinfo = ""
     if p.username:
-        raw = p.username
-        if p.id:
-            raw += ":" + p.id
+        raw = f"{p.username}:{p.id}"
         b64 = base64.b64encode(raw.encode("utf-8")).decode()
         userinfo = f"{b64}@"
     return f"socks://{userinfo}{_authority(p.address, p.port)}#{quote(p.name)}"

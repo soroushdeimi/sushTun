@@ -104,6 +104,8 @@ def validate(chain: Chain, profiles: Iterable[Profile] | Mapping[str, Profile]) 
         if not profile.is_valid():
             problems.append(tr("Hop {hop} is missing an address or credential settings.", hop=hop))
         network = str(profile.network or "")
+        if protocol in {"http", "socks"} and network != "tcp":
+            problems.append(tr("Hop {hop}: HTTP and SOCKS servers only work over TCP.", hop=hop))
         # v26.3.27 transport/internet/splithttp/dialer.go:403-438 builds a
         # separate download stream with independent socket settings. Until
         # both paths are verified, accepting XHTTP could bypass earlier hops.

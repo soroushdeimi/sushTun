@@ -1752,6 +1752,8 @@ TRANSLATIONS_FA: dict[str, str] = {
     "The chain has an invalid ID.": "شناسهٔ زنجیره نامعتبر است.",
     "Chain hops must be a list of profile IDs.": "گام‌های زنجیره باید فهرستی از شناسه‌های پروفایل باشند.",
     "A chain must contain between 2 and 8 hops.": "زنجیره باید بین 2 تا 8 گام داشته باشد.",
+    "Hop {hop}: HTTP and SOCKS servers only work over TCP.":
+        "گام {hop}: سرورهای HTTP و SOCKS فقط از طریق TCP کار می‌کنند.",
     "Hop {hop} has an invalid profile ID.": "شناسهٔ پروفایل گام {hop} نامعتبر است.",
     "Profile {name} is used twice in the chain.": "پروفایل {name} دو بار در زنجیره استفاده شده است.",
     "The server for hop {hop} no longer exists.": "سرور گام {hop} دیگر وجود ندارد.",

@@ -106,6 +106,26 @@ def test_http_socks_interface_binding(protocol, security):
     assert proxy["streamSettings"]["sockopt"]["interface"] == "eth0"
 
 
+@pytest.mark.parametrize("protocol,security", [
+    ("http", "none"), ("http", "tls"), ("socks", "none"),
+])
+@pytest.mark.parametrize("network", ["tcp", "ws", "grpc", "httpupgrade", "xhttp", ""])
+def test_http_socks_builders_force_tcp(protocol, security, network):
+    p = Profile(protocol=protocol, address="example.com", port=8080,
+                security=security, network=network, sni="example.com",
+                path="/proxy", service_name="proxy")
+    original = p.to_dict()
+    stream = outbounds.build(p, "proxy")["streamSettings"]
+    expected = {
+        "network": "tcp", "security": security,
+        "sockopt": {"interface": "__IFACE__"},
+    }
+    if security == "tls":
+        expected["tlsSettings"] = {"serverName": "example.com"}
+    assert stream == expected
+    assert p.to_dict() == original
+
+
 def test_render_udp_block():
     p_http = Profile(protocol="http", address="1.1.1.1", port=8080)
     cfg = json.loads(render.build_text(p_http, "eth0"))
