@@ -406,7 +406,7 @@ def test_macos_dns_restore_reports_failure_and_retries(monkeypatch):
     assert calls.count(["networksetup", "-setdnsservers", "Wi-Fi", "1.1.1.1"]) == 3
 
 
-def test_macos_failed_restore_keeps_backup_for_next_recovery(monkeypatch, tmp_path):
+def test_macos_failed_restore_parks_backup_for_next_recovery(monkeypatch, tmp_path):
     connection, conn, _seen = _mac_connection(monkeypatch, tmp_path)
     monkeypatch.setattr(connection, "IS_MAC", True)
     monkeypatch.setattr(connection.xray_mod, "is_xray_running", lambda: False)
@@ -418,8 +418,8 @@ def test_macos_failed_restore_keeps_backup_for_next_recovery(monkeypatch, tmp_pa
     monkeypatch.setattr(connection.bootrestore, "uninstall", lambda: uninstalled.append(True))
 
     assert conn.recover_if_stale() is False
-    assert conn.state.dns_state().servers == ["Wi-Fi", "1.1.1.1"]
-    assert conn.state.is_connected()
+    assert conn.state.pending()["en0"].dns.servers == ["Wi-Fi", "1.1.1.1"]
+    assert not conn.state.is_connected()
     assert uninstalled == []
     assert conn.recover_if_stale() is True
     assert not conn.state.is_connected()
@@ -457,3 +457,31 @@ def test_macos_partial_split_route_failure_restores_connection(monkeypatch, tmp_
     assert not conn.state.is_connected()
     assert stopped == ["bridge", "xray"]
     assert len(restored) == 1
+
+
+def test_parked_backup_transfers_only_after_state_save(monkeypatch, tmp_path):
+    import pytest
+
+    for backend in ("_connect_macos", "_connect_generic"):
+        connection, conn, _ = _mac_connection(monkeypatch, tmp_path)
+        dns = DnsState("MACOS", ["Wi-Fi", "1.1.1.1"])
+        conn.state.save_pending("en0", dns)
+        monkeypatch.setattr(connection.render, "build", lambda *a, **k: tmp_path / "cfg.json")
+        monkeypatch.setattr(connection.network, "wait_for_tun", lambda **k: 42)
+        monkeypatch.setattr(connection.network, "configure_tun", lambda *a: True)
+        monkeypatch.setattr(conn, "_setup_gateway", lambda: None)
+        monkeypatch.setattr(conn, "_retry_without_extras", lambda *a: None)
+        save = conn.state.save
+        def denied(*a, **k):
+            raise OSError("disk full")
+        monkeypatch.setattr(conn.state, "save", denied)
+        args = (parse_vless(SAMPLE), Interface("en0", "192.0.2.2", "192.0.2.1"),
+                "203.0.113.1", dns)
+        with pytest.raises(OSError, match="disk full"):
+            getattr(conn, backend)(*args)
+        assert conn.state.pending()["en0"].dns == dns
+        monkeypatch.setattr(conn.state, "save", save)
+        getattr(conn, backend)(*args)
+        assert conn.state.dns_state() == dns
+        assert not conn.state.pending()
+        conn.state.clear()

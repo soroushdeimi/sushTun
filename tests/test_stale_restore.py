@@ -13,6 +13,7 @@ from xrayui.core.state import State
 
 
 def _patch_state(monkeypatch, tmp_path):
+    monkeypatch.setattr(connection.network, "release_stranded_dns", lambda **k: [])
     monkeypatch.setattr(paths, "state_dir", lambda: tmp_path)
     monkeypatch.setattr(paths, "runtime_config", lambda: tmp_path / "config.runtime.json")
 

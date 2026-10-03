@@ -66,7 +66,20 @@ def backup_dns(alias: str) -> DnsState:
     if not lines:
         return DnsState()
     mode = lines[0].upper() if lines[0].upper() in ("DHCP", "STATIC") else "DHCP"
-    return DnsState(mode=mode, servers=lines[1:])
+    servers = [s for s in lines[1:] if s != "127.0.0.1"]
+    if mode == "STATIC" and not servers:
+        mode = "DHCP"
+    return DnsState(mode=mode, servers=servers)
+
+
+def dns_target_exists(alias: str, state: DnsState) -> bool | None:
+    result = proc.powershell(
+        "try { $a = @(Get-NetAdapter -IncludeHidden -ErrorAction Stop); "
+        "if ($a.Name -contains $env:ALIAS) { 'present' } else { 'absent' } "
+        "} catch { exit 1 }", env={"ALIAS": alias})
+    if result.returncode != 0:
+        return None
+    return {"present": True, "absent": False}.get(result.stdout.strip())
 
 
 def set_dns_loopback(alias: str) -> bool:

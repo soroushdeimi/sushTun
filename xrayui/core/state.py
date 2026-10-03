@@ -1,6 +1,9 @@
 """Persisted connection state under state/."""
 from __future__ import annotations
 
+import json
+from dataclasses import asdict, dataclass
+
 from .. import paths
 from .network import DnsState, Interface
 
@@ -9,6 +12,16 @@ _FILES = (
     "tunidx.txt", "connected.flag", "dns-mode.txt", "dns-servers.txt",
     "gateway.flag", "tethering.txt", "profile.txt", "chain.txt",
 )
+
+
+# Pending backups outlive clear(). Limit failed recovery calls, not OS retries.
+MAX_DNS_ATTEMPTS = 20
+
+
+@dataclass
+class PendingDns:
+    dns: DnsState
+    attempts: int = 0
 
 
 class State:
@@ -125,6 +138,51 @@ class State:
     def set_hotspot_pushed(self, digest: str) -> None:
         self.dir.mkdir(parents=True, exist_ok=True)
         self._write("hotspot_pushed.txt", digest)
+
+    def pending(self) -> dict[str, PendingDns]:
+        try:
+            data = json.loads(self._p("dns-pending.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+        if not isinstance(data, dict):
+            return {}
+        result = {}
+        for alias, entry in data.items():
+            try:
+                dns = entry["dns"]
+                attempts = entry["attempts"]
+                if (not alias or not isinstance(dns["mode"], str)
+                        or not isinstance(dns["servers"], list)
+                        or not all(isinstance(s, str) for s in dns["servers"])
+                        or not isinstance(attempts, int) or attempts < 0):
+                    continue
+                result[alias] = PendingDns(DnsState(**dns), attempts)
+            except (KeyError, TypeError):
+                continue
+        return result
+
+    def _write_pending(self, entries: dict[str, PendingDns]) -> None:
+        target = self._p("dns-pending.json")
+        if not entries:
+            target.unlink(missing_ok=True)
+            return
+        self.dir.mkdir(parents=True, exist_ok=True)
+        temporary = target.with_suffix(".tmp")
+        temporary.write_text(json.dumps({a: asdict(p) for a, p in entries.items()}),
+                             encoding="utf-8")
+        temporary.replace(target)
+
+    def save_pending(self, alias: str, dns: DnsState, attempts: int | None = None) -> None:
+        entries = self.pending()
+        old = entries.get(alias)
+        entries[alias] = PendingDns(dns, (old.attempts if old else 0)
+                                    if attempts is None else attempts)
+        self._write_pending(entries)
+
+    def clear_pending(self, alias: str) -> None:
+        entries = self.pending()
+        entries.pop(alias, None)
+        self._write_pending(entries)
 
     def clear(self) -> None:
         for name in _FILES:
