@@ -157,7 +157,13 @@ def set_dns_loopback(alias: str) -> bool:
 
 def _tun_dns_applied() -> bool:
     # "Link 10 (xray0): 172.19.0.1"
-    return TUN_DNS in proc.run(["resolvectl", "dns", TUN_NAME]).stdout.split()
+    dns = proc.run(["resolvectl", "dns", TUN_NAME])
+    if dns.returncode != 0 or TUN_DNS not in dns.stdout.split():
+        return False
+    # A server alone does not claim queries: NetworkManager may have cleared
+    # the routing domain while leaving the address intact.
+    domain = proc.run(["resolvectl", "domain", TUN_NAME])
+    return domain.returncode == 0 and "~." in domain.stdout.split()
 
 
 def _claim_tun_dns(attempts: int = 5) -> bool:

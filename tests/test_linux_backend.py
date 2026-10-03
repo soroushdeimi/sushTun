@@ -149,6 +149,8 @@ def _resolved(monkeypatch, *, sticks_after: int = 1):
     def stdout(args):
         if args[:2] == ["resolvectl", "dns"] and len(args) == 4:
             sets.append(args)
+        if args == ["resolvectl", "domain", posix.TUN_NAME]:
+            return f"Link 10 ({posix.TUN_NAME}): ~.\n"
         if args == ["resolvectl", "dns", posix.TUN_NAME]:
             ok = len(sets) >= sticks_after
             return f"Link 10 ({posix.TUN_NAME}): {posix.TUN_DNS if ok else ''}\n"
