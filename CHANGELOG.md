@@ -1,5 +1,47 @@
 # Changelog
 
+## v0.9.2
+
+### New
+- **Subscriptions in JSON format** (a list of Xray configs, plain or base64) now import, not just link lists.
+- **Share links keep more settings:** VMess servers using gRPC or XHTTP, and Shadowsocks servers with a WebSocket or HTTP-obfs plugin, now get a share link that brings everything across.
+
+### Fixed
+- **Stuck on "Connected" with no way out:** if Windows or macOS refused to put your DNS back on disconnect, sushTun could get stuck. Now it always disconnects, gives the adapter normal (DHCP) DNS so you have internet, and tries your original DNS again on the next launch or connect.
+- **Windows:** sushTun no longer closes v2rayN's or another app's Xray when you disconnect, and finds its own Xray even when your Windows user name or folder is in Persian.
+- **Windows:** the window no longer stutters every two seconds while disconnected.
+- **Windows:** if a route cannot be added, connecting now stops with a clear message instead of saying "Connected" with nothing in the tunnel. The same now applies on macOS.
+- **A missing or blocked Xray file** (for example removed by antivirus) now gives a clear error and leaves your network untouched.
+- **Persian digits** (like ۸۰۸۰) in a routing port, a forward or a Hysteria2 port range no longer stop the tunnel from starting.
+- **An adapter name with a quote or backslash** no longer breaks the config.
+- **Imports:** links from panels made for v2rayN (with doubly-encoded paths) import correctly again, and subscriptions with odd base64 line breaks or spacing work.
+- **Linux:** picks the right internet connection when there are several (multipath or a disconnected cable), and checks that DNS really goes through the tunnel.
+- **Updates:** a portable copy on a USB stick (FAT/exFAT) can update itself again, and Linux on ARM is no longer offered the wrong file.
+- **Backups:** restoring a damaged or malicious backup file can no longer fill up memory.
+- **Chain test** stops at the first broken link instead of testing the rest for nothing.
+- **Speed test:** two servers in one test no longer try to use the same port.
+
+<!-- fa -->
+
+### چی اضافه شده
+- **سابسکریپشن‌های JSON** (لیستی از کانفیگ‌های Xray، چه ساده چه base64) هم حالا import می‌شن، نه فقط لیست لینک.
+- **لینک share تنظیمات بیشتری رو با خودش می‌بره:** سرورهای VMess با gRPC یا XHTTP، و Shadowsocks با پلاگین WebSocket یا HTTP-obfs، حالا یه لینک share می‌گیرن که همه‌چی رو کامل منتقل می‌کنه.
+
+### چی درست شده
+- **گیر کردن روی «وصل» بدون راه خروج:** اگه ویندوز یا مک موقع قطع کردن قبول نمی‌کرد DNS رو برگردونه، sushTun ممکن بود گیر کنه. حالا همیشه قطع می‌شه، DNS کارت‌شبکه رو می‌ذاره روی حالت عادی (DHCP) که اینترنتت قطع نمونه، و دفعه‌ی بعد که برنامه رو باز کنی یا وصل شی، DNS اصلی‌ات رو دوباره برمی‌گردونه.
+- **ویندوز:** دیگه موقع قطع کردن، Xrayِ v2rayN یا برنامه‌های دیگه رو نمی‌بنده، و حتی اگه اسم کاربری یا پوشه‌ات فارسی باشه Xray خودش رو پیدا می‌کنه.
+- **ویندوز:** وقتی وصل نیستی، پنجره دیگه هر دو ثانیه یه بار گیر نمی‌کنه.
+- **ویندوز:** اگه route اضافه نشه، اتصال با یه پیام واضح متوقف می‌شه، نه اینکه بگه «وصل» و هیچی از تونل رد نشه. همین حالا روی مک هم هست.
+- **اگه فایل Xray گم شده باشه یا بلاک شده باشه** (مثلاً آنتی‌ویروس پاکش کرده باشه)، یه خطای واضح می‌گیری و شبکه‌ات دست‌نخورده می‌مونه.
+- **عدد فارسی** (مثل ۸۰۸۰) توی پورت قانون routing، فوروارد یا رنج پورت Hysteria2 دیگه جلوی بالا اومدن تونل رو نمی‌گیره.
+- **اسم کارت‌شبکه‌ای که کوتیشن یا بک‌اسلش داره** دیگه کانفیگ رو خراب نمی‌کنه.
+- **import:** لینک پنل‌هایی که برای v2rayN ساخته شدن (با path دوبار encode‌شده) دوباره درست import می‌شن، و سابسکریپشن‌هایی که base64شون فاصله یا خط‌شکستگی عجیب داره هم کار می‌کنن.
+- **لینوکس:** وقتی چند تا اتصال اینترنت هست (multipath یا کابلِ قطع)، اتصال درست رو انتخاب می‌کنه، و چک می‌کنه DNS واقعاً از تونل رد بشه.
+- **آپدیت:** نسخه‌ی پرتابل روی فلش (FAT/exFAT) دوباره می‌تونه خودش رو آپدیت کنه، و به لینوکس ARM دیگه فایل اشتباه پیشنهاد نمی‌شه.
+- **بکاپ:** بازگردوندن یه فایل بکاپ خراب یا دستکاری‌شده دیگه نمی‌تونه رم رو پر کنه.
+- **تست زنجیره** روی اولین لینک خراب متوقف می‌شه، نه اینکه الکی بقیه رو هم تست کنه.
+- **تست سرعت:** دو تا سرور توی یه تست دیگه سعی نمی‌کنن از یه پورت استفاده کنن.
+
 ## v0.9.1
 
 ### Fixed
