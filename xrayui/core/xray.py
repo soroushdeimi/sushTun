@@ -25,14 +25,44 @@ def _own_pattern() -> str:
 
 def is_xray_running() -> bool:
     if IS_WIN:
-        out = proc.run(["tasklist", "/fi", "imagename eq xray.exe"]).stdout.lower()
-        return "xray.exe" in out
+        return bool(_own_pids())
     return proc.run(["pgrep", "-f", _own_pattern()]).returncode == 0
+
+
+def _own_pids() -> list[int]:
+    """PIDs of the xray processes reading our runtime config, and no others.
+
+    Win32_Process is the only tasklist-class source that also reports what a
+    process was started with, and its property names are never localised, so
+    this works on a Persian or German Windows too. Matching the bare image name
+    hits every other client on the machine (v2rayN, Nekoray and friends all
+    ship one): disconnecting killed their core, and their xray made a crashed
+    session look alive.
+    """
+    wanted = str(paths.runtime_config())
+    found = []
+    for line in _win_processes():
+        pid, _, command = line.partition("|")
+        # Ours is the xray reading our runtime config; the path is quoted when
+        # it holds a space, and must be the tail of the command line so a
+        # config.runtime.json.bak next to ours cannot pass for it.
+        if pid.strip().isdigit() and re.search(
+                rf' -c "?(?P<cfg>{re.escape(wanted)})"?\s*$', command, re.IGNORECASE):
+            found.append(int(pid.strip()))
+    return found
+
+
+def _win_processes() -> list[str]:
+    """Every xray.exe as "pid|command line", one per line."""
+    return proc.ps_lines(
+        'Get-CimInstance Win32_Process -Filter "Name=\'xray.exe\'" | '
+        'ForEach-Object { "$($_.ProcessId)|$($_.CommandLine)" }')
 
 
 def _kill_all() -> None:
     if IS_WIN:
-        proc.run(["taskkill", "/f", "/im", "xray.exe", "/t"])
+        for pid in _own_pids():
+            proc.run(["taskkill", "/f", "/pid", str(pid), "/t"])
     else:
         proc.run(["pkill", "-f", _own_pattern()])
 
