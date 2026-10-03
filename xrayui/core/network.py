@@ -111,10 +111,12 @@ def _restore_dns_once(alias: str, state: DnsState) -> bool:
         if rc != 0:
             return False
         for i, server in enumerate(state.servers[1:], start=2):
-            proc.run([
+            result = proc.run([
                 "netsh", "interface", "ipv4", "add", "dnsservers",
                 f"name={alias}", f"address={server}", f"index={i}", "validate=no",
             ])
+            if result.returncode != 0:
+                return False
         return True
     return proc.run([
         "netsh", "interface", "ipv4", "set", "dnsservers",
