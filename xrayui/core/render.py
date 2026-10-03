@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import re
 from pathlib import Path
 
 from .. import paths
@@ -184,7 +185,8 @@ def build_text(
     if tun_mtu:
         _apply_mtu(cfg, tun_mtu)
     text = json.dumps(cfg, indent=2, ensure_ascii=False)
-    return text.replace("__INTERFACE__", iface_alias).replace("__IFACE__", iface_alias)
+    escaped_alias = json.dumps(iface_alias, ensure_ascii=False)[1:-1]
+    return re.sub(r"__INTERFACE__|__IFACE__", lambda _match: escaped_alias, text)
 
 
 def build(
