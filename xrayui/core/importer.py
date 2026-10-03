@@ -35,6 +35,19 @@ def _std_query_fields(query: str) -> dict:
     network = q.get("type", "tcp") or "tcp"
     if network == "raw":  # v2rayN's wire alias for plain tcp
         network = "tcp"
+    path = q.get("path", "")
+    if not path.startswith("/") and unquote(path).startswith("/"):
+        path = unquote(path)
+    extra = q.get("extra", "")
+    try:
+        json.loads(extra)
+    except ValueError:
+        try:
+            json.loads(unquote(extra))
+        except ValueError:
+            pass
+        else:
+            extra = unquote(extra)
     insecure = (q.get("allowInsecure") or q.get("insecure") or "").strip().lower()
     return {
         "network": network,
@@ -46,12 +59,12 @@ def _std_query_fields(query: str) -> dict:
         "sid": q.get("sid", ""),
         "spx": q.get("spx", ""),
         "pqv": q.get("pqv", ""),
-        "path": q.get("path", ""),
+        "path": path,
         "host": q.get("host", ""),
         "service_name": q.get("serviceName", ""),
         "header_type": q.get("headerType", ""),
         "xhttp_mode": q.get("mode", ""),
-        "xhttp_extra": q.get("extra", ""),
+        "xhttp_extra": extra,
         "allow_insecure": insecure in ("1", "true"),
         "ech": q.get("ech", ""),
         "pcs": normalize_pcs(q.get("pcs", "")),
@@ -258,7 +271,15 @@ def _parse_ss_sip002(url: str) -> Profile:
         port=s.port or 8388, id=password, ss_method=method,
         network="tcp", security="none",
     )
-    _apply_ss_plugin(p, q.get("plugin", ""))
+    plugin = q.get("plugin", "")
+    try:
+        _apply_ss_plugin(p, plugin)
+    except ValueError:
+        # Retry only unsupported specs with encoded separators. Valid specs
+        # may contain literal escapes in option values and must stay intact.
+        if not re.search(r"%3[bd]", plugin, re.IGNORECASE):
+            raise
+        _apply_ss_plugin(p, unquote(plugin))
     return p
 
 
