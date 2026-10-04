@@ -74,6 +74,12 @@ def test_latest_release_returns_none_on_fetch_failure():
     assert updates.latest_release(fetch=fetch) is None
 
 
+def test_latest_release_returns_none_when_real_update_checks_are_disabled():
+    with pytest.raises(OSError, match="real update checks are disabled in tests"):
+        updates._default_fetch()
+    assert updates.latest_release() is None
+
+
 def test_latest_release_returns_none_on_malformed_response():
     assert updates.latest_release(fetch=lambda: "not a dict") is None
     assert updates.latest_release(fetch=lambda: {}) is None
@@ -96,6 +102,7 @@ def test_latest_release_skips_malformed_asset_entries():
     assert release.assets == {"good": "https://y"}
 
 
+@pytest.mark.real_update_fetch
 def test_default_fetch_sends_the_app_user_agent(monkeypatch):
     captured = {}
 

@@ -16,6 +16,22 @@ def _no_real_network_teardown_at_exit(monkeypatch):
     monkeypatch.setattr(connection.atexit, "register", lambda *a, **k: None)
 
 
+@pytest.fixture(autouse=True)
+def _no_real_update_checks(monkeypatch, request):
+    # MainWindow starts a background GitHub update check during UI tests.
+    # On Linux CI, late replies reached already-destroyed windows and caused
+    # segfaults inside processEvents. Disable real fetches unless explicitly marked.
+    from xrayui.core import updates
+
+    if request.node.get_closest_marker("real_update_fetch") is not None:
+        return
+
+    def disabled_fetch():
+        raise OSError("real update checks are disabled in tests")
+
+    monkeypatch.setattr(updates, "_default_fetch", disabled_fetch)
+
+
 def _flush_qt_widgets() -> None:
     """Destroy every leftover top-level widget now.
 
