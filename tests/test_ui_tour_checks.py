@@ -28,8 +28,9 @@ def qapp():
 
 
 @pytest.fixture()
-def tour(tmp_path) -> Tour:
+def tour(tmp_path, flush_widgets) -> Tour:
     app = QApplication.instance() or QApplication([])
+    flush_widgets()
     return Tour(app, tmp_path, "fa", "820x560")
 
 
@@ -51,7 +52,7 @@ def _rtl_label(text: str) -> QWidget:
     return host
 
 
-def test_bidi_check_bare_run_in_rtl_widget_is_found(qapp, tour):
+def test_bidi_check_bare_run_in_rtl_widget_is_found(qapp, tour, flush_widgets):
     host = _rtl_label("650 ms")
     host.show()
     qapp.processEvents()
@@ -60,10 +61,12 @@ def test_bidi_check_bare_run_in_rtl_widget_is_found(qapp, tour):
         tour._check_bidi(host, "rtl_widget")
     finally:
         host.close()
+        host.deleteLater()
+        flush_widgets()
     assert any(f[1] == "bidi" for f in tour.findings), tour.findings
 
 
-def test_bidi_check_isolated_label_in_rtl_widget_is_clean(qapp, tour):
+def test_bidi_check_isolated_label_in_rtl_widget_is_clean(qapp, tour, flush_widgets):
     host = _rtl_label("\u2066650 ms\u2069")
     host.show()
     qapp.processEvents()
@@ -72,4 +75,6 @@ def test_bidi_check_isolated_label_in_rtl_widget_is_clean(qapp, tour):
         tour._check_bidi(host, "rtl_widget")
     finally:
         host.close()
+        host.deleteLater()
+        flush_widgets()
     assert tour.findings == [], tour.findings

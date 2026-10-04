@@ -16,12 +16,13 @@ from xrayui.ui.server_table import _transport_text  # noqa: E402
 
 
 @pytest.fixture
-def qapp(monkeypatch):
+def qapp(monkeypatch, flush_widgets):
     app = QApplication.instance() or QApplication([])
     set_language("en")
     monkeypatch.setattr(QMessageBox, "warning", lambda *a: pytest.fail(str(a[2])))
     yield app
     set_language("en")
+    flush_widgets()
 
 
 @pytest.mark.parametrize("protocol,security", [("http", "none"), ("http", "tls"),
