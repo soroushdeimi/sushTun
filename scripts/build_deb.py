@@ -101,8 +101,8 @@ Maintainer: soroush <soroushdeimi@gmail.com>
 Section: net
 Priority: optional
 Installed-Size: {size_kb}
-Depends: libc6 (>= {glibc}), libegl1, libgl1, libxkbcommon0, libfontconfig1, libdbus-1-3, iproute2, pkexec | policykit-1
-Recommends: libxcb-cursor0, libxcb-icccm4, libxcb-image0, libxcb-keysyms1, libxcb-render-util0
+Depends: libc6 (>= {glibc}), libegl1, libgl1, libxkbcommon0, libfontconfig1, libdbus-1-3, iproute2, pkexec | policykit-1, libxcb-cursor0
+Recommends: libxcb-icccm4, libxcb-image0, libxcb-keysyms1, libxcb-render-util0
 Homepage: https://github.com/soroushdeimi/sushTun
 Description: Xray TUN client with a desktop UI
  Routes all system traffic through an Xray tunnel. Import vless:// links,

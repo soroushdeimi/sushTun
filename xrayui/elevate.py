@@ -16,6 +16,17 @@ IS_MAC = sys.platform == "darwin"
 mac_privacy_blocked = False
 
 
+def prefer_wayland(environ=None) -> None:
+    """Prefer Wayland: elevated X11 windows can fail the user's display auth."""
+    if environ is None:
+        environ = os.environ
+    if (sys.platform.startswith("linux")
+            and not environ.get("QT_QPA_PLATFORM")
+            and environ.get("XDG_SESSION_TYPE", "").lower() == "wayland"
+            and environ.get("WAYLAND_DISPLAY")):
+        environ["QT_QPA_PLATFORM"] = "wayland;xcb"
+
+
 def is_admin() -> bool:
     if IS_WIN:
         import ctypes

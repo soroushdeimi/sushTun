@@ -12,6 +12,7 @@ def main() -> int:
     # Before anything touches Qt: an elevated relaunch carries the user's
     # display in these arguments, and a relaunch of our own must not repeat them.
     sys.argv = elevate.apply_session_env(sys.argv)
+    elevate.prefer_wayland()
     argv = sys.argv
     if is_restore_argv(argv):
         return _restore_stale_main()
