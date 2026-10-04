@@ -42,8 +42,8 @@ dependencies.
 
 ## Features
 
-- **Servers** — VLESS, VMess, Trojan, Shadowsocks, Hysteria2, and WireGuard, with
-  certificate pinning and ECH. Import from links, base64 subscriptions, a
+- **Servers** — VLESS, VMess, Trojan, Shadowsocks, Hysteria2, WireGuard, HTTP, and SOCKS,
+  with certificate pinning and ECH. Import from links, base64 subscriptions, a
   WireGuard `.conf`, raw JSON, or a QR code; test real delay or TCP ping (one
   server or a whole selection), switch to the fastest, and copy a share
   link/QR straight from the table.

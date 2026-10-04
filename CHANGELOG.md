@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.10.0
+
+### New
+- **HTTP and SOCKS proxies as servers.** Add an HTTP proxy (optionally over TLS) or a SOCKS5 proxy, with or without a username and password, like any other server: import it from a `http://`, `https://`, `socks://` or `socks5://` link (v2rayN's format too), edit it, test it, connect through it, share it, or use it as a hop in a chain.
+
+### Fixed
+- **Linux on Wayland:** sushTun no longer fails to open its window with "could not connect to display" or a missing `xcb` plugin. On a Wayland session it now uses Wayland directly and falls back to X11 only when needed, so `QT_QPA_PLATFORM=wayland` is no longer necessary. The `.deb` now installs `libxcb-cursor0`, which Qt needs on X11.
+
+<!-- fa -->
+
+### چی اضافه شده
+- **پراکسی HTTP و SOCKS به‌عنوان سرور:** حالا می‌تونی یه پراکسی HTTP (با TLS یا بدونش) یا SOCKS5 رو، با یوزر و پسورد یا بدونش، مثل هر سرور دیگه اضافه کنی: از لینک `http://`، `https://`، `socks://` یا `socks5://` (فرمت v2rayN هم) import کنی، ویرایشش کنی، تستش کنی، باهاش وصل شی، share کنی، یا تو زنجیره ازش استفاده کنی.
+
+### چی درست شده
+- **لینوکس با Wayland:** دیگه پنجره‌ی sushTun با خطای «could not connect to display» یا نبودن پلاگین `xcb` باز نشدن نمی‌مونه. روی Wayland حالا مستقیم از خود Wayland استفاده می‌کنه و فقط اگه لازم باشه سراغ X11 می‌ره، پس دیگه لازم نیست `QT_QPA_PLATFORM=wayland` رو دستی بذاری. پکیج `.deb` هم حالا `libxcb-cursor0` رو که Qt روی X11 لازم داره خودش نصب می‌کنه.
+
 ## v0.9.2
 
 ### New
