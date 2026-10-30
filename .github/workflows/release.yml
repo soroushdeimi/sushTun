@@ -210,9 +210,20 @@ jobs:
           path: source
       - name: Write release notes
         run: python3 source/scripts/release_notes.py "${GITHUB_REF_NAME#v}" > release_notes.md
+      # Anything but a plain vX.Y.Z tag (v0.12.0b1) is a pre-release: GitHub
+      # then never marks it latest, so the in-app updater does not offer it.
+      - name: Release kind
+        id: kind
+        run: |
+          if [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          fi
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           files: artifacts/*
           body_path: release_notes.md
           fail_on_unmatched_files: true
+          prerelease: ${{ steps.kind.outputs.prerelease }}
