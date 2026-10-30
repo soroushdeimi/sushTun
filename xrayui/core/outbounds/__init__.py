@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from ..profiles import Profile
 from . import http, hysteria2, shadowsocks, socks, trojan, vless, vmess, wireguard
+from ._common import has_download_settings as has_download_settings
 
 _BUILDERS = {
     "wireguard": wireguard.apply,

@@ -262,3 +262,55 @@ def test_subscription_refresh_and_removal_keep_chain_references(monkeypatch, tmp
     subscription.refresh(sub, store, subscription.SubscriptionStore())
     assert saved.hops == chain.hops
     assert "no longer exists" in " ".join(chains.validate(saved, store.list()))
+
+
+def test_xhttp_hop_without_download_settings_validates_and_builds():
+    items = profiles(3)
+    items[0].network = "xhttp"
+    items[0].path = "/entry"
+    items[1].network = "xhttp"
+    items[1].path = "/middle"
+    items[1].xhttp_mode = "stream-up"
+    items[2].network = "xhttp"
+    items[2].path = "/exit"
+    items[2].xhttp_mode = "packet-up"
+    assert chains.validate(chain_for(items), items) == []
+    built = chains.build(chains.resolve(chain_for(items), items))
+    assert len(built) == 3
+    assert built[0]["tag"] == "chain-1"
+    assert "dialerProxy" not in built[0]["streamSettings"]["sockopt"]
+    assert built[0]["streamSettings"]["xhttpSettings"]["path"] == "/entry"
+    assert built[1]["tag"] == "chain-2"
+    assert built[1]["streamSettings"]["sockopt"] == {"dialerProxy": "chain-1"}
+    assert built[1]["streamSettings"]["xhttpSettings"]["path"] == "/middle"
+    assert built[1]["streamSettings"]["xhttpSettings"]["mode"] == "stream-up"
+    assert built[2]["tag"] == "proxy"
+    assert built[2]["streamSettings"]["sockopt"] == {"dialerProxy": "chain-2"}
+    assert built[2]["streamSettings"]["xhttpSettings"]["path"] == "/exit"
+    assert built[2]["streamSettings"]["xhttpSettings"]["mode"] == "packet-up"
+
+
+@pytest.mark.parametrize("extra,should_reject", [
+    ('{"downloadSettings": {"address": "127.0.0.1"}}', True),
+    ('{"downloadSettings": {}}', True),
+    ('{"downloadSettings": "not-an-object"}', False),
+    ('{"downloadSettings": 123}', False),
+    ('{"downloadSettings": [1, 2]}', False),
+    ('{"downloadSettings": null}', False),
+    ('not valid json', False),
+    ('["a", "b"]', False),
+    ('123', False),
+    ('""', False),
+    ('', False),
+    ('{"otherSettings": {"x": 1}}', False),
+])
+def test_xhttp_download_settings_rejected_and_malformed_tolerated(extra, should_reject):
+    items = profiles(2)
+    items[1].network = "xhttp"
+    items[1].xhttp_extra = extra
+    problems = chains.validate(chain_for(items), items)
+    if should_reject:
+        expected = f"Hop 2 ({items[1].name}): XHTTP separate download settings bypass earlier hops and cannot be chained."
+        assert expected in problems
+    else:
+        assert problems == []

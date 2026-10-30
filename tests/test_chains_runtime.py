@@ -184,7 +184,7 @@ def lab(tmp_path):
 
 @pytest.mark.parametrize("protocol,network", [
     ("shadowsocks", "tcp"), ("vless", "tcp"), ("vmess", "tcp"), ("trojan", "tcp"),
-    ("vless", "grpc"), ("vless", "httpupgrade"),
+    ("vless", "grpc"), ("vless", "httpupgrade"), ("vless", "xhttp"),
 ])
 def test_three_hops_reach_target_in_order(lab, protocol, network):
     create, target, requests, _launch = lab
