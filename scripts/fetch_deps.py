@@ -28,10 +28,9 @@ XRAY_ASSETS = {
     ("linux", "64"): "Xray-linux-64.zip",
     ("linux", "arm64"): "Xray-linux-arm64-v8a.zip",
 }
-# Pinned: the chain tests and the dialerProxy behaviour were verified on this
-# release, and newer cores (26.5.9 onwards, bisected) break them. Raise it
-# deliberately; SUSHTUN_XRAY_VERSION tries another one without editing code.
-XRAY_VERSION = "v26.3.27"
+# Pinned to tested Xray-core release; SUSHTUN_XRAY_VERSION tries another one
+# without editing code.
+XRAY_VERSION = "v26.10.29"
 XRAY_URL = "https://github.com/XTLS/Xray-core/releases/download/{version}/{asset}"
 GEO_URL = "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/{}"
 WINTUN_URL = "https://www.wintun.net/builds/wintun-0.14.1.zip"
@@ -49,7 +48,7 @@ TUN2SOCKS_URL = (
 def xray_url(asset: str) -> str:
     version = os.environ.get("SUSHTUN_XRAY_VERSION") or XRAY_VERSION
     if not re.fullmatch(r"v\d+\.\d+\.\d+", version):
-        raise SystemExit(f"SUSHTUN_XRAY_VERSION must look like v26.3.27, got {version!r}")
+        raise SystemExit(f"SUSHTUN_XRAY_VERSION must look like v26.10.29, got {version!r}")
     return XRAY_URL.format(version=version, asset=asset)
 
 
