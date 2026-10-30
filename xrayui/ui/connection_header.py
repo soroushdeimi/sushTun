@@ -15,6 +15,7 @@ Layout (LTR shown; RTL mirrors the whole thing):
 from __future__ import annotations
 
 from PySide6.QtCore import QSignalBlocker, Qt, Signal
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -33,7 +34,7 @@ from .flags import flag_pixmap
 from .help import set_help
 from .icons import icon
 from .mac import IconButton
-from .theme import MUTED, OK
+from .theme import MUTED, OK, TEXT
 
 _NARROW_THRESHOLD = 640
 _META_ORDER = ("country", "relay", "protocol", "delay", "iface")
@@ -264,8 +265,16 @@ class ConnectionHeader(QFrame):
         if narrow != self._narrow:
             self._narrow = narrow
             self._place_stats(narrow)
+            self._compact_serverless(narrow)
         self._elide_meta()
         self._elide_notice()
+
+    def _compact_serverless(self, narrow: bool) -> None:
+        # The label does not fit next to Disconnect in a narrow window with
+        # wider (Linux) fonts; the icon keeps the button, the help keeps the name.
+        self.btn_serverless.setAccessibleName(tr("Serverless"))
+        self.btn_serverless.setText("" if narrow else tr("Serverless"))
+        self.btn_serverless.setIcon(icon("anti-filter", TEXT, 16) if narrow else QIcon())
 
     def _place_stats(self, narrow: bool) -> None:
         if narrow:

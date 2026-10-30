@@ -131,3 +131,20 @@ def test_settings_default_and_round_trip(datadir):
     assert app_settings.load()["serverless"] == {"enabled": False, "skip_only_warning": False}
     app_settings.save({**app_settings.load(), "serverless": {"enabled": True}})
     assert app_settings.load()["serverless"]["enabled"] is True
+
+
+def test_narrow_header_shows_the_serverless_icon_only(qapp):
+    header = ConnectionHeader()
+    header.resize(560, 180)
+    header.show()
+    qapp.processEvents()
+    button = header.btn_serverless
+    assert button.text() == ""
+    assert not button.icon().isNull()
+    assert button.accessibleName() == tr("Serverless")
+    assert is_help(button.toolTip())
+    header.resize(800, 180)
+    qapp.processEvents()
+    assert button.text() == tr("Serverless")
+    assert button.icon().isNull()
+    header.hide()
