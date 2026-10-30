@@ -10,7 +10,9 @@ Cross-platform and stdlib-only so it runs in every CI runner.
 from __future__ import annotations
 
 import io
+import os
 import platform
+import re
 import stat
 import sys
 import urllib.request
@@ -26,7 +28,11 @@ XRAY_ASSETS = {
     ("linux", "64"): "Xray-linux-64.zip",
     ("linux", "arm64"): "Xray-linux-arm64-v8a.zip",
 }
-XRAY_URL = "https://github.com/XTLS/Xray-core/releases/latest/download/{}"
+# Pinned: the chain tests and the dialerProxy behaviour were verified on this
+# release, and newer cores (26.5.9 onwards, bisected) break them. Raise it
+# deliberately; SUSHTUN_XRAY_VERSION tries another one without editing code.
+XRAY_VERSION = "v26.3.27"
+XRAY_URL = "https://github.com/XTLS/Xray-core/releases/download/{version}/{asset}"
 GEO_URL = "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/{}"
 WINTUN_URL = "https://www.wintun.net/builds/wintun-0.14.1.zip"
 
@@ -38,6 +44,13 @@ TUN2SOCKS_ASSETS = {
 TUN2SOCKS_URL = (
     f"https://github.com/xjasonlyu/tun2socks/releases/download/{TUN2SOCKS_VERSION}/{{}}"
 )
+
+
+def xray_url(asset: str) -> str:
+    version = os.environ.get("SUSHTUN_XRAY_VERSION") or XRAY_VERSION
+    if not re.fullmatch(r"v\d+\.\d+\.\d+", version):
+        raise SystemExit(f"SUSHTUN_XRAY_VERSION must look like v26.3.27, got {version!r}")
+    return XRAY_URL.format(version=version, asset=asset)
 
 
 def _os() -> str:
@@ -60,7 +73,7 @@ def _download(url: str, dest: Path) -> None:
 
 def _fetch_xray(os_name: str) -> None:
     asset = XRAY_ASSETS[(os_name, _arch())]
-    data = _get(XRAY_URL.format(asset))
+    data = _get(xray_url(asset))
     binary = "xray.exe" if os_name == "windows" else "xray"
     with zipfile.ZipFile(io.BytesIO(data)) as zf:
         for name in ("xray.exe", "xray"):
