@@ -1822,7 +1822,7 @@ TRANSLATIONS_FA: dict[str, str] = {
     "Port forwarding: {why}": "انتقال پورت: {why}",
     "Through the tunnel": "از داخل تونل",
     # -- core/chains: validation ---------------------------------------------
-    "Hop {hop}: WebSocket (ws) chains can lose responses when a connection closes and are not supported yet.": "گام {hop}: زنجیره‌های WebSocket (ws) ممکن است هنگام بسته شدن اتصال پاسخ را از دست بدهند و هنوز پشتیبانی نمی‌شوند.",
+    "Hop {hop}: two WebSocket (ws) hops in a row can lose responses when a connection closes. Put another transport between them.": "گام {hop}: دو گام WebSocket (ws) پشت‌سرهم ممکن است هنگام بسته شدن اتصال پاسخ را از دست بدهند. بین آن‌ها یک ترنسپورت دیگر بگذارید.",
     "The chain has an invalid ID.": "شناسهٔ زنجیره نامعتبر است.",
     "Chain hops must be a list of profile IDs.": "گام‌های زنجیره باید فهرستی از شناسه‌های پروفایل باشند.",
     "A chain must contain between 2 and 8 hops.": "زنجیره باید بین 2 تا 8 گام داشته باشد.",

@@ -13,7 +13,7 @@ from . import coreopts, outbounds
 from .profiles import Profile
 
 SUPPORTED_PROTOCOLS = frozenset({"vless", "vmess", "trojan", "shadowsocks", "http", "socks"})
-SUPPORTED_TRANSPORTS = frozenset({"tcp", "grpc", "httpupgrade", "xhttp"})
+SUPPORTED_TRANSPORTS = frozenset({"tcp", "grpc", "httpupgrade", "xhttp", "ws"})
 _UID = re.compile(r"[A-Za-z0-9_-]{1,64}")
 
 
@@ -84,6 +84,7 @@ def validate(chain: Chain, profiles: Iterable[Profile] | Mapping[str, Profile]) 
         problems.append(tr("A chain must contain between 2 and 8 hops."))
     known = _profile_map(profiles)
     seen = set()
+    previous_network = ""
     for index, uid in enumerate(chain.hops, 1):
         if not _valid_uid(uid):
             problems.append(tr("Hop {hop} has an invalid profile ID.", hop=index))
@@ -108,9 +109,11 @@ def validate(chain: Chain, profiles: Iterable[Profile] | Mapping[str, Profile]) 
             problems.append(tr("Hop {hop}: HTTP and SOCKS servers only work over TCP.", hop=hop))
         # v26.3.27 transport/internet/splithttp/dialer.go:403-438 dials separate
         # downloadSettings direct on the host NIC, bypassing dialerProxy.
-        if network == "ws":
-            problems.append(tr("Hop {hop}: WebSocket (ws) chains can lose responses when "
-                               "a connection closes and are not supported yet.", hop=hop))
+        # Measured on v26.3.27: back-to-back ws hops drop responses on close.
+        if network == "ws" and previous_network == "ws":
+            problems.append(tr("Hop {hop}: two WebSocket (ws) hops in a row can lose responses "
+                               "when a connection closes. Put another transport between them.",
+                               hop=hop))
         elif network not in SUPPORTED_TRANSPORTS:
             problems.append(tr("Hop {hop}: transport {transport} is not verified for chains.",
                                hop=hop, transport=network))
@@ -122,6 +125,7 @@ def validate(chain: Chain, profiles: Iterable[Profile] | Mapping[str, Profile]) 
         if profile.flow:
             problems.append(tr("Hop {hop}: flow {flow} is not verified for chains.",
                                hop=hop, flow=profile.flow))
+        previous_network = network
     return problems
 
 
