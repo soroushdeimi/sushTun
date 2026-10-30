@@ -78,6 +78,10 @@ def test_user_dns_cannot_replace_our_servers_but_its_hosts_stay():
     (None, "1.1.1.1"),
     ([], "1.1.1.1"),
     (["localhost"], "1.1.1.1"),
+    (["fe80::1%en0", "192.168.1.1"], "192.168.1.1"),
+    (["fe80::1%en0", "2001:db8::53"], "2001:db8::53"),
+    (["169.254.1.1", "fe80::1"], "1.1.1.1"),
+    (["0.0.0.0", "10.0.0.1"], "10.0.0.1"),
 ])
 def test_bootstrap_resolver_choice(given, expected):
     dns = _render(serverless_bootstrap=given)["dns"]

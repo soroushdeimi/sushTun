@@ -111,6 +111,7 @@ def only_profile() -> Profile:
 def is_only(profile) -> bool:
     return isinstance(profile, Profile) and profile.protocol == ONLY_PROTOCOL
 
+
 # DoH is blocked by name and by address, but the filter leaves the addresses
 # of DOH_FRONT open. Pointing the DoH name there, with the handshake going out
 # through the fragmenting "proxy", makes the resolver reachable.
@@ -142,12 +143,20 @@ def apply_only_outbound(cfg: dict) -> None:
 
 
 def _bootstrap_ip(bootstrap: list[str] | None) -> str:
+    # IPv4 first: routers often list a scoped link-local IPv6 resolver first,
+    # and queries are UseIPv4 anyway.
+    found = []
     for item in bootstrap or []:
         try:
-            ip = ipaddress.ip_address(item)
+            found.append((item, ipaddress.ip_address(item)))
         except ValueError:
             continue
-        if not ip.is_loopback:
+    for item, ip in found:
+        if ip.version == 4 and not (ip.is_loopback or ip.is_link_local or ip.is_unspecified):
+            return item
+    for item, ip in found:
+        if ip.version == 6 and "%" not in item and not (
+                ip.is_loopback or ip.is_link_local or ip.is_unspecified):
             return item
     return FALLBACK_BOOTSTRAP
 
