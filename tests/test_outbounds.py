@@ -133,7 +133,9 @@ def test_render_snapshot_untouched_by_new_fields():
 
 # -- xray -test on rendered configs ------------------------------------------
 def _profile(protocol: str, network: str, tls: bool) -> Profile:
-    base: dict = dict(name="t", protocol=protocol, address="example.com", port=443, network=network)
+    # Newer Xray cores prohibit unencrypted Trojan unless on a private IP/domain.
+    addr = "127.0.0.1" if (protocol == "trojan" and not tls) else "example.com"
+    base: dict = dict(name="t", protocol=protocol, address=addr, port=443, network=network)
     if protocol == "shadowsocks":
         base.update(id="pass123", ss_method="aes-256-gcm")
     else:
@@ -169,7 +171,8 @@ def test_xray_test_accepts_tcp_http_header(tmp_path, monkeypatch, protocol):
     monkeypatch.setattr(xraycheck.paths, "state_dir", lambda: tmp_path)
     id_ = "11111111-1111-1111-1111-111111111111" if protocol == "vmess" else "pass123"
     kwargs = {"ss_method": "aes-256-gcm"} if protocol == "shadowsocks" else {}
-    p = Profile(name="t", protocol=protocol, address="example.com", port=443, id=id_,
+    addr = "127.0.0.1" if protocol == "trojan" else "example.com"
+    p = Profile(name="t", protocol=protocol, address=addr, port=443, id=id_,
                network="tcp", header_type="http", path="/", host="example.com", **kwargs)
     text = render.build_text(p, "lo", TEMPLATE, include_tun=False)
     assert xraycheck.check_config(text) is None

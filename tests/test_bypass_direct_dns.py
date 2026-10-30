@@ -16,7 +16,8 @@ from xrayui.core.profiles import Profile
 from xrayui.core.settings import DEFAULTS
 
 TEMPLATE = Path(__file__).resolve().parent.parent / "config.template.json"
-SAMPLE = "vless://11111111-1111-1111-1111-111111111111@203.0.113.10:443?type=tcp&security=none#x"
+# Newer Xray cores require TLS or private address for unencrypted VLESS.
+SAMPLE = "vless://11111111-1111-1111-1111-111111111111@127.0.0.1:443?type=tcp&security=none#x"
 
 
 def _routing(**over):
@@ -56,10 +57,7 @@ def _find_asset_dir() -> Path | None:
 
 
 def _skip_if_no_xray(monkeypatch):
-    brew_xray = Path("/opt/homebrew/bin/xray")
-    if brew_xray.exists():
-        monkeypatch.setattr(xraycheck.paths, "xray_exe", lambda: brew_xray)
-    elif not xraycheck.paths.xray_exe().exists():
+    if not xraycheck.paths.xray_exe().exists():
         pytest.skip("xray binary not present")
     assets = _find_asset_dir()
     if assets:

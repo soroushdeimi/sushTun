@@ -33,8 +33,9 @@ def test_check_config_validates_a_complete_rendered_config(tmp_path, monkeypatch
     monkeypatch.setattr(xraycheck.paths, "state_dir", lambda: tmp_path)
     from xrayui.core import render
     from xrayui.core.importer import parse_vless
+    # Newer Xray cores require TLS or private address for unencrypted VLESS.
     text = render.build_text(
-        parse_vless("vless://u@1.2.3.4:443?type=tcp&security=none#x"),
+        parse_vless("vless://u@127.0.0.1:443?type=tcp&security=none#x"),
         "lo", include_tun=False,
     )
     assert xraycheck.check_config(text) is None

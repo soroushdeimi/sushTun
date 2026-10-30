@@ -20,7 +20,8 @@ from xrayui.core import settings as app_settings
 from xrayui.core.importer import parse_vless
 
 TEMPLATE = Path(__file__).resolve().parent.parent / "config.template.json"
-SAMPLE = "vless://u@1.2.3.4:443?type=tcp&security=none#x"
+# Newer Xray cores require TLS or private address for unencrypted VLESS.
+SAMPLE = "vless://u@127.0.0.1:443?type=tcp&security=none#x"
 
 
 def _dns(**over):
