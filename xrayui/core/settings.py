@@ -136,6 +136,8 @@ DEFAULTS: dict = {
     # Port forwards (core/forwards.py): a list of {"port", "target": "host:port",
     # "via": "proxy"|"direct", "network"}. Empty: nothing is rendered for it.
     "forwards": [],
+    # Serverless entry (core/serverless.py). Off: nothing is rendered for it.
+    "serverless": {"enabled": False},
     "startup": {
         "start_on_login": False,
         "start_minimized": False,
