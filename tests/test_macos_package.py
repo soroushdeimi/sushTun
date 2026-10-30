@@ -51,7 +51,7 @@ def test_the_app_is_marked_installed_so_it_never_writes_inside_itself():
 
 
 def test_publishing_waits_for_the_dmg():
-    assert "needs: [build, windows-installer, macos-app, deb]" in WORKFLOW
+    assert "needs: [build, windows-installer, macos-app, deb, rpm]" in WORKFLOW
 
 
 def test_the_raw_macos_binary_is_still_published():
