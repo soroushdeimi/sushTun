@@ -123,7 +123,7 @@ def _ask_serverless_only(parent) -> tuple[bool, bool]:
     never = QCheckBox(tr("Don't show this again"))
     box.setCheckBox(never)
     connect = box.addButton(tr("Connect"), QMessageBox.AcceptRole)
-    box.addButton(QMessageBox.Cancel)
+    box.addButton(QMessageBox.Cancel).setText(tr("Cancel"))
     box.setDefaultButton(connect)
     box.exec()
     return box.clickedButton() is connect, never.isChecked()
