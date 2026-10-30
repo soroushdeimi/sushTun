@@ -172,6 +172,14 @@ class DnsPage(QWidget):
         dom_row.addWidget(off_btn)
         layout.addLayout(dom_row)
 
+        self.bypass_use_system_dns = QCheckBox(
+            tr("Resolve bypassed sites with this computer's own DNS"))
+        self.bypass_use_system_dns.setChecked(
+            bool(dns.get("bypass_use_system_dns")))
+        layout.addWidget(self.bypass_use_system_dns)
+        self.domestic.textChanged.connect(lambda *_: self._update_bypass_dns_state())
+        self._update_bypass_dns_state()
+
         # -- Remote via tunnel -------------------------------------------
         self.remote_via_tunnel = QCheckBox(tr("Resolve other sites through the tunnel"))
         set_help(self.remote_via_tunnel,
@@ -263,6 +271,7 @@ class DnsPage(QWidget):
         self.strategy.currentIndexChanged.connect(lambda _i: self._maybe_notify_dirty())
         self.hosts.textChanged.connect(lambda *_: self._maybe_notify_dirty())
         self.domestic.textChanged.connect(lambda *_: self._maybe_notify_dirty())
+        self.bypass_use_system_dns.toggled.connect(lambda _c: self._maybe_notify_dirty())
         self.remote_via_tunnel.toggled.connect(lambda _c: self._maybe_notify_dirty())
         self.parallel_query.toggled.connect(lambda _c: self._maybe_notify_dirty())
         self.serve_stale.toggled.connect(lambda _c: self._maybe_notify_dirty())
@@ -283,6 +292,22 @@ class DnsPage(QWidget):
             self.note.setText(
                 tr("DNS queries leave over your normal connection, not the tunnel."))
 
+    def _update_bypass_dns_state(self) -> None:
+        # Same cleaning the core applies, so junk text doesn't disable the box.
+        has_domestic = bool(dns_mod.clean_domestic(self._domestic_entries()))
+        self.bypass_use_system_dns.setEnabled(not has_domestic)
+        if has_domestic:
+            set_help(
+                self.bypass_use_system_dns,
+                tr("Disabled because Domestic DNS is set, which takes precedence. "
+                   "Clear Domestic DNS to use this computer's own DNS for bypassed sites."))
+        else:
+            set_help(
+                self.bypass_use_system_dns,
+                tr("Resolves sites in Routing bypass using this computer's own DNS. "
+                   "Only applies when Domestic DNS is empty. "
+                   "Takes effect on the next connection."))
+
     @staticmethod
     def _lines(widget: QPlainTextEdit) -> list[str]:
         return [ln.strip() for ln in widget.toPlainText().splitlines() if ln.strip()]
@@ -298,6 +323,7 @@ class DnsPage(QWidget):
             query_strategy=self.strategy.currentData(),
             hosts=self._lines(self.hosts),
             domestic_servers=dns_mod.clean_domestic(self._domestic_entries()),
+            bypass_use_system_dns=self.bypass_use_system_dns.isChecked(),
             remote_via_tunnel=self.remote_via_tunnel.isChecked(),
             parallel_query=self.parallel_query.isChecked(),
             serve_stale=self.serve_stale.isChecked(),
@@ -338,11 +364,14 @@ class DnsPage(QWidget):
         self.strategy.setCurrentIndex(max(0, self.strategy.findData(current)))
         self.hosts.setPlainText("\n".join(self._dns.get("hosts") or []))
         self.domestic.setText(", ".join(self._dns.get("domestic_servers") or []))
+        self.bypass_use_system_dns.setChecked(
+            bool(self._dns.get("bypass_use_system_dns")))
         self.remote_via_tunnel.setChecked(bool(self._dns.get("remote_via_tunnel")))
         self.parallel_query.setChecked(bool(self._dns.get("parallel_query")))
         self.serve_stale.setChecked(bool(self._dns.get("serve_stale")))
         self.raw_override.setPlainText(str(self._dns.get("raw_override") or ""))
         self._update_note()
+        self._update_bypass_dns_state()
         self._loading = False
         self._loaded = self._collect()
         self._loaded_routing = dict(routing_cfg)

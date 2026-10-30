@@ -184,7 +184,10 @@ def test_bypass_ui_hint_and_translation(monkeypatch):
     from xrayui.ui.pages.routing_page import RoutingPage
     page = RoutingPage(DEFAULTS["routing"])
     labels = [w.text() for w in page.findChildren(QLabel)]
-    hint = "Bypassed sites resolve via the tunnel unless Domestic DNS is set in DNS settings."
+    hint = (
+        'Bypassed sites resolve via the tunnel unless Domestic DNS or '
+        '"Resolve bypassed sites with this computer\'s own DNS" is set in DNS settings.'
+    )
     assert any(hint in txt for txt in labels)
 
     # Translation exists in i18n_fa
