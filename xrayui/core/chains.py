@@ -13,7 +13,7 @@ from . import coreopts, outbounds
 from .profiles import Profile
 
 SUPPORTED_PROTOCOLS = frozenset({"vless", "vmess", "trojan", "shadowsocks", "http", "socks"})
-SUPPORTED_TRANSPORTS = frozenset({"tcp", "grpc", "httpupgrade"})
+SUPPORTED_TRANSPORTS = frozenset({"tcp", "grpc", "httpupgrade", "xhttp"})
 _UID = re.compile(r"[A-Za-z0-9_-]{1,64}")
 
 
@@ -106,15 +106,17 @@ def validate(chain: Chain, profiles: Iterable[Profile] | Mapping[str, Profile]) 
         network = str(profile.network or "")
         if protocol in {"http", "socks"} and network != "tcp":
             problems.append(tr("Hop {hop}: HTTP and SOCKS servers only work over TCP.", hop=hop))
-        # v26.3.27 transport/internet/splithttp/dialer.go:403-438 builds a
-        # separate download stream with independent socket settings. Until
-        # both paths are verified, accepting XHTTP could bypass earlier hops.
+        # v26.3.27 transport/internet/splithttp/dialer.go:403-438 dials separate
+        # downloadSettings direct on the host NIC, bypassing dialerProxy.
         if network == "ws":
             problems.append(tr("Hop {hop}: WebSocket (ws) chains can lose responses when "
                                "a connection closes and are not supported yet.", hop=hop))
         elif network not in SUPPORTED_TRANSPORTS:
-            problems.append(tr("Hop {hop}: transport {transport} is not verified for chains "
-                               "(including separate XHTTP downloads).", hop=hop, transport=network))
+            problems.append(tr("Hop {hop}: transport {transport} is not verified for chains.",
+                               hop=hop, transport=network))
+        elif network == "xhttp" and outbounds.has_download_settings(profile):
+            problems.append(tr("Hop {hop}: XHTTP separate download settings bypass earlier hops "
+                               "and cannot be chained.", hop=hop))
         # v26.3.27 proxy/vless/outbound/outbound.go:249-295 inspects the
         # underlying connection for Vision; redirected pipes need separate proof.
         if profile.flow:
