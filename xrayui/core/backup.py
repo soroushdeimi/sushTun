@@ -91,7 +91,10 @@ def backup(dest_zip: Path) -> None:
     if ids is not None:
         userfs.write_as_user(dest_zip, data, *ids)
     else:
-        fd = os.open(str(dest_zip), os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o644)
+        # O_NOFOLLOW is POSIX-only and O_BINARY Windows-only (see userfs.save_for_user).
+        flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+        flags |= getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
+        fd = os.open(str(dest_zip), flags, 0o644)
         try:
             os.write(fd, data)
         finally:
