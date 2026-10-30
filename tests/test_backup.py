@@ -315,3 +315,13 @@ def test_restore_rejects_deeply_nested_json_as_corrupt(tmp_path, monkeypatch):
     with pytest.raises(ValueError):
         backup.restore(nested)
     assert json.loads((base / "settings.json").read_text()) == {"marker": "original"}
+
+
+def test_backup_export_works_without_o_nofollow(tmp_path, monkeypatch):
+    """Windows has no os.O_NOFOLLOW; export used to die with an AttributeError."""
+    _setup(tmp_path, monkeypatch)
+    monkeypatch.setattr(backup, "_real_user_ids", lambda: None)
+    monkeypatch.delattr(os, "O_NOFOLLOW", raising=False)
+    dest = tmp_path / "out.zip"
+    backup.backup(dest)
+    assert zipfile.is_zipfile(dest)
