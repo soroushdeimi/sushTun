@@ -136,9 +136,13 @@ def _last_log_line() -> str:
 def _short_config_error() -> str:
     # Xray's own error is one long " > "-joined chain of wrapped context
     # ("failed to load config files: [...] > infra/conf: ... > empty
-    # \"password\""); only the last segment is the actual reason. The full
-    # line is still in speedtest.log for anyone who needs the whole chain.
-    return _last_log_line().rsplit(" > ", 1)[-1].strip()
+    # \"password\""); only the last segment is the actual reason. Newer cores
+    # wrap geodata errors with a trailing EOF token; unwrap to the informative
+    # segment before it.
+    segments = [s.strip() for s in _last_log_line().split(" > ") if s.strip()]
+    if not segments:
+        return ""
+    return segments[-2] if segments[-1] in ("EOF", "unexpected EOF") and len(segments) > 1 else segments[-1]
 
 
 class Measured(tuple):
