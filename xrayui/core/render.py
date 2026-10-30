@@ -204,7 +204,7 @@ def build_text(
             hosts = dict(dns.get("hosts") or {})
             hosts[plan.entry.address] = server_ip
             dns["hosts"] = hosts
-            # v26.10.29 transport/internet/dialer.go:248-268 consults Xray's
+            # v26.3.27 transport/internet/dialer.go:252-279 consults Xray's
             # hosts map only with a domain strategy. Later hops must keep
             # AsIs so their hostnames are resolved by the preceding server.
             entry = next(o for o in cfg["outbounds"] if o.get("tag") == "chain-1")

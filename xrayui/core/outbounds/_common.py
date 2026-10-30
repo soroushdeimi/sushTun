@@ -26,7 +26,7 @@ def _parse_extra(text: str) -> dict:
 def has_download_settings(p: Profile) -> bool:
     """True when the profile's xhttp_extra declares a separate download path.
 
-    v26.10.29 splithttp/dialer.go:353-396 dials downloadSettings directly on
+    v26.3.27 splithttp/dialer.go:403-438 dials downloadSettings directly on
     the host NIC, bypassing any outer dialerProxy.
     """
     return isinstance(_parse_extra(getattr(p, "xhttp_extra", "")).get("downloadSettings"), dict)
