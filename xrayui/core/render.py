@@ -137,6 +137,7 @@ def build_text(
     tun_name: str | None = None,
     system_dns: list[str] | None = None,
     serverless_cfg: dict | None = None,
+    serverless_bootstrap: list[str] | None = None,
 ) -> str:
     tmpl_path = template_path or paths.config_template()
     cfg = json.loads(tmpl_path.read_text(encoding="utf-8"))
@@ -145,6 +146,8 @@ def build_text(
     if plan:
         chains.apply(cfg, plan, core_cfg)
         profile = plan.exit
+    elif serverless_mod.is_only(profile):
+        serverless_mod.apply_only_outbound(cfg)
     else:
         outbounds.apply_profile(cfg, profile)
     if not include_tun:
@@ -212,7 +215,9 @@ def build_text(
             # AsIs so their hostnames are resolved by the preceding server.
             entry = next(o for o in cfg["outbounds"] if o.get("tag") == "chain-1")
             entry["streamSettings"]["sockopt"]["domainStrategy"] = "ForceIPv4"
-    if serverless_mod.enabled(serverless_cfg):
+    if serverless_mod.is_only(profile_entry):
+        serverless_mod.apply_only_network(cfg, serverless_bootstrap)
+    elif serverless_mod.enabled(serverless_cfg):
         entry = plan.entry if plan else profile_entry
         if serverless_mod.problem(entry) is None:
             serverless_mod.apply(cfg, entry.address, server_ip)
@@ -241,6 +246,7 @@ def build(
     tun_name: str | None = None,
     system_dns: list[str] | None = None,
     serverless_cfg: dict | None = None,
+    serverless_bootstrap: list[str] | None = None,
 ) -> Path:
     out = paths.runtime_config()
     # Forward by keyword: a positional forward silently mis-binds the next time
@@ -265,6 +271,7 @@ def build(
             tun_name=tun_name,
             system_dns=system_dns,
             serverless_cfg=serverless_cfg,
+            serverless_bootstrap=serverless_bootstrap,
         ),
         encoding="utf-8",
     )
