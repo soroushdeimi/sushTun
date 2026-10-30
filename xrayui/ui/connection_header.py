@@ -14,7 +14,7 @@ Layout (LTR shown; RTL mirrors the whole thing):
 """
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSignalBlocker, Qt, Signal
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -44,6 +44,7 @@ class ConnectionHeader(QFrame):
     disconnectRequested = Signal()
     restoreNetworkRequested = Signal()
     reconnectRequested = Signal()
+    serverlessToggled = Signal(bool)
 
     def __init__(self) -> None:
         super().__init__()
@@ -84,7 +85,7 @@ class ConnectionHeader(QFrame):
         row1.addLayout(mid, 1)
 
         actions = QHBoxLayout()
-        actions.setSpacing(8)
+        actions.setSpacing(6)
         self.btn_connect = QPushButton(tr("Connect"))
         self.btn_connect.setObjectName("Primary")
         self.btn_connect.clicked.connect(self.connectRequested)
@@ -100,8 +101,20 @@ class ConnectionHeader(QFrame):
                  tr("Turns the tunnel off and puts your network back the way it was."),
                  tr("A site that dislikes VPNs? One click and you're on your normal "
                     "connection again."))
+        self.btn_serverless = QPushButton(tr("Serverless"))
+        self.btn_serverless.setObjectName("HeaderAction")
+        self.btn_serverless.setCheckable(True)
+        self.btn_serverless.toggled.connect(self.serverlessToggled)
+        set_help(self.btn_serverless,
+                 tr("Sends the first server's connection out through Serverless: the TLS "
+                    "handshake leaves your device in small pieces, so filtering that reads "
+                    "the server name misses it. Works with TLS and REALITY servers, alone "
+                    "or as the first link of a chain."),
+                 tr("Your CDN server keeps getting reset by the filter? Turn this on and "
+                    "connect again."))
         actions.addWidget(self.btn_connect)
         actions.addWidget(self.btn_disconnect)
+        actions.addWidget(self.btn_serverless)
         self.btn_more = self._build_more_button()
         # Square and as tall as Connect, so the pair lines up in every font.
         side = max(self.btn_connect.sizeHint().height(), self.btn_more.sizeHint().height())
@@ -208,6 +221,12 @@ class ConnectionHeader(QFrame):
         set_help(lbl, what, example)
         set_help(val, what, example)
         return lbl, val
+
+    def set_serverless(self, on: bool) -> None:
+        # Restoring the saved state is not a user toggle: no signal.
+        blocker = QSignalBlocker(self.btn_serverless)
+        self.btn_serverless.setChecked(on)
+        del blocker
 
     def _build_more_button(self) -> QToolButton:
         more = IconButton("ellipsis", tr("More connection actions"))

@@ -1945,4 +1945,11 @@ TRANSLATIONS_FA: dict[str, str] = {
     "Keep Windows setting": "حفظ تنظیم ویندوز",
     "Couldn't read Windows' hotspot settings. Empty fields keep what Windows already uses.":
         "تنظیمات هات‌اسپات ویندوز خوانده نشد. فیلدهای خالی همان مقدار ویندوز را نگه می‌دارند.",
+    "Serverless": "سرورلس",
+    "Sends the first server's connection out through Serverless: the TLS handshake leaves your device in small pieces, so filtering that reads the server name misses it. Works with TLS and REALITY servers, alone or as the first link of a chain.":
+        "اتصال اولین سرور را از مسیر سرورلس می‌فرستد: دست‌دادن TLS تکه‌تکه از دستگاهت بیرون می‌رود، برای همین فیلترینگی که اسم سرور را از آن می‌خواند نمی‌بیندش. با سرورهای TLS و REALITY کار می‌کند، چه تنها و چه به‌عنوان اولین حلقهٔ زنجیره.",
+    "Your CDN server keeps getting reset by the filter? Turn this on and connect again.":
+        "سرور CDNت مدام توسط فیلتر ریست می‌شود؟ این را روشن کن و دوباره وصل شو.",
+    "Serverless turned on": "سرورلس روشن شد",
+    "Serverless turned off": "سرورلس خاموش شد",
 }
