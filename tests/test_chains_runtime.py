@@ -126,9 +126,11 @@ def lab(tmp_path):
         def chain_client(count, protocol="shadowsocks", network="tcp", udp_target=None,
                          hostnames=False):
             items, servers, logs = [], [], []
+            nets = network if isinstance(network, list) else [network] * count
             for n in range(count):
+                hop_network = nets[n]
                 port = free_port()
-                profile = Profile(uid=f"hop-{n}", protocol=protocol, network=network,
+                profile = Profile(uid=f"hop-{n}", protocol=protocol, network=hop_network,
                                   address="127.0.0.1", port=port,
                                   id="11111111-1111-1111-1111-111111111111",
                                   ss_method="aes-128-gcm", service_name="chain")
@@ -142,8 +144,8 @@ def lab(tmp_path):
                     settings = {"clients": [{"password": profile.id}]}
                 else:
                     settings = {"clients": [{"id": profile.id}], "decryption": "none"}
-                stream = {"network": network}
-                if network == "grpc":
+                stream = {"network": hop_network}
+                if hop_network == "grpc":
                     stream["grpcSettings"] = {"serviceName": "chain"}
                 config = {"log": {"access": str(log), "loglevel": "warning"},
                           "inbounds": [{"listen": "127.0.0.1", "port": port,
@@ -278,3 +280,16 @@ def test_chain_report_identifies_failed_middle(lab, monkeypatch, tmp_path):
         iface_alias="")
     assert report.verdict == "BROKEN_AT"
     assert report.broken_at == 2
+
+
+@pytest.mark.parametrize("networks", [
+    ["ws", "tcp", "tcp"], ["tcp", "ws", "tcp"], ["tcp", "tcp", "ws"], ["ws", "tcp", "ws"],
+    ["ws", "grpc", "ws"], ["ws", "httpupgrade", "tcp"],
+], ids="-".join)
+def test_separated_ws_hops_deliver_responses_closed_at_once(lab, networks):
+    """Measured: ws hops lose responses only when two of them are adjacent."""
+    create, target, requests, _launch = lab
+    port, _servers, _logs, _items = create(len(networks), "vless", networks)
+    for _ in range(15):
+        assert b"ordered-chain-target" in socks_request(port, target, close=True)
+    assert len(requests) == 15

@@ -83,7 +83,6 @@ def test_unverified_protocols_rejected(protocol):
     ({"flow": "xtls-rprx-vision"}, "flow"),
     ({"network": "xhttp", "xhttp_extra": '{"downloadSettings":{"address":"elsewhere"}}'}, "xhttp"),
     ({"network": "kcp"}, "kcp"),
-    ({"network": "ws"}, "ws"),
     ({"network": "h2"}, "h2"),
     ({"address": ""}, "address"),
     ({"id": ""}, "credential"),
@@ -314,3 +313,26 @@ def test_xhttp_download_settings_rejected_and_malformed_tolerated(extra, should_
         assert expected in problems
     else:
         assert problems == []
+
+
+@pytest.mark.parametrize("networks", [
+    ["ws", "tcp"], ["tcp", "ws"], ["ws", "tcp", "ws"], ["ws", "grpc", "ws"], ["tcp", "ws", "tcp"],
+], ids="-".join)
+def test_ws_hops_that_are_not_adjacent_validate(networks):
+    items = profiles(len(networks))
+    for item, network in zip(items, networks, strict=True):
+        item.network = network
+    assert chains.validate(chain_for(items), items) == []
+
+
+@pytest.mark.parametrize("networks,hop", [
+    (["ws", "ws"], 2), (["tcp", "ws", "ws"], 3), (["ws", "ws", "tcp"], 2), (["ws", "ws", "ws"], 2),
+], ids=lambda v: "-".join(v) if isinstance(v, list) else str(v))
+def test_adjacent_ws_hops_are_rejected_at_the_second_one(networks, hop):
+    items = profiles(len(networks))
+    for item, network in zip(items, networks, strict=True):
+        item.network = network
+    problems = chains.validate(chain_for(items), items)
+    expected = f"Hop {hop} ({items[hop - 1].name}): two WebSocket (ws) hops in a row"
+    assert any(p.startswith(expected) for p in problems)
+    assert not any(p.startswith("Hop 1 ") for p in problems)
