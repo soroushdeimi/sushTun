@@ -114,6 +114,9 @@ class ConnectionHeader(QFrame):
                     "or as the first link of a chain."),
                  tr("Your CDN server keeps getting reset by the filter? Turn this on and "
                     "connect again."))
+        # Start compact: a first resize to a narrow width is measured against
+        # this, and the label only comes back once there is room (resizeEvent).
+        self._compact_serverless(True)
         actions.addWidget(self.btn_connect)
         actions.addWidget(self.btn_disconnect)
         actions.addWidget(self.btn_serverless)
