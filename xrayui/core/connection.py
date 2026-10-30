@@ -78,24 +78,15 @@ def _last_log_line() -> str:
     return lines[-1].strip() if lines else "no log output"
 
 
-def _extract_system_dns(dns) -> list[str] | None:
-    if dns is None:
+def _system_dns(dns_cfg: dict, alias: str, state) -> list[str] | None:
+    """Resolvers to use for bypassed sites; probed only when the user opted in."""
+    if not dns_cfg.get("bypass_use_system_dns"):
         return None
-    raw = dns.servers if hasattr(dns, "servers") else dns
-    if not isinstance(raw, list):
+    try:
+        found = network.system_dns_servers(alias, state)
+    except Exception:  # an optional feature must never break connect
         return None
-    out = []
-    for s in raw:
-        if not isinstance(s, str):
-            continue
-        line = s.strip()
-        if line.startswith("nameserver "):
-            parts = line.split()
-            if len(parts) >= 2:
-                out.append(parts[1])
-                continue
-        out.append(line)
-    return out
+    return found or None
 
 
 class Connection:
@@ -250,7 +241,7 @@ class Connection:
         exits = self._exits(cfgs)
         forwards = self._forwards(cfgs)
         dns_cfg = cfgs.get("dns") or {}
-        system_dns = _extract_system_dns(dns) if dns_cfg.get("bypass_use_system_dns") else None
+        system_dns = _system_dns(dns_cfg, iface.alias, dns)
 
         def build(exits, forwards):
             return render.build(profile, iface.alias, routing_rules=rules,
@@ -456,7 +447,7 @@ class Connection:
         exits = self._exits(cfgs)
         forwards = self._forwards(cfgs)
         dns_cfg = cfgs.get("dns") or {}
-        system_dns = _extract_system_dns(dns) if dns_cfg.get("bypass_use_system_dns") else None
+        system_dns = _system_dns(dns_cfg, iface.alias, dns)
         native = True
 
         def build(exits, forwards):

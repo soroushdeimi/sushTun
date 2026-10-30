@@ -12,11 +12,11 @@ import json
 import logging
 import re
 
-from ._net_common import TUN_ADDRESS
+from ._net_common import TUN_ADDRESS, TUN_NETMASK
 
 logger = logging.getLogger(__name__)
 
-_TUN_NETWORK = ipaddress.ip_network("172.19.0.0/30")
+_TUN_NETWORK = ipaddress.ip_network(f"{TUN_ADDRESS}/{TUN_NETMASK}", strict=False)
 
 QUERY_STRATEGIES = ("UseIP", "UseIPv4", "UseIPv6", "UseSystem")
 
@@ -430,8 +430,6 @@ def clean_system_dns(servers: list[str] | None) -> list[str]:
             continue
         if ip.version == 4 and ip in _TUN_NETWORK:
             continue
-        if str(ip) in (TUN_ADDRESS, "172.19.0.1"):
-            continue
         ip_str = str(ip)
         if ip_str not in seen:
             seen.add(ip_str)
@@ -585,7 +583,7 @@ def build_dns_and_rules(
         entries = [_domestic_server_object(addr, direct_domains) for addr in domestic]
         block["servers"] = entries + (block.get("servers") or [])
         needs_direct_dns_rule = True
-    elif d.get("bypass_use_system_dns") and not d.get("domestic_servers") and direct_domains:
+    elif d.get("bypass_use_system_dns") and not domestic and direct_domains:
         usable = clean_system_dns(system_dns)
         if usable:
             entries = [_domestic_server_object(addr, direct_domains) for addr in usable]

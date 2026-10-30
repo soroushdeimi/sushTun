@@ -225,6 +225,7 @@ def test_connection_plumbs_system_dns_when_flag_on_and_omits_when_off(monkeypatc
     monkeypatch.setattr(net, "detect_interface", lambda: Interface("eth0", "192.0.2.2", "192.0.2.1"))
     monkeypatch.setattr(net, "foreign_tunnel", lambda _a: None)
     monkeypatch.setattr(net, "backup_dns", lambda _a: DnsState("DHCP", ["192.168.1.1"]))
+    monkeypatch.setattr(net, "system_dns_servers", lambda _a, state: list(state.servers), raising=False)
     monkeypatch.setattr(connection, "_resolve", lambda host: "192.0.2.9")
     for name in ("remove_routes", "add_host_route", "add_default_routes", "set_dns_loopback", "restore_dns"):
         monkeypatch.setattr(net, name, lambda *a, **k: None)

@@ -74,6 +74,11 @@ def backup_dns(alias: str) -> DnsState:
     return DnsState(mode=mode, servers=servers)
 
 
+def system_dns_servers(alias: str, state: DnsState) -> list[str]:
+    """netsh already lists DHCP-assigned servers, so the backup is the answer."""
+    return list(state.servers)
+
+
 def dns_target_exists(alias: str, state: DnsState) -> bool | None:
     result = proc.powershell(
         "try { $a = @(Get-NetAdapter -IncludeHidden -ErrorAction Stop); "
@@ -299,6 +304,7 @@ if sys.platform != "win32":
 
     detect_interface = _posix.detect_interface
     backup_dns = _posix.backup_dns
+    system_dns_servers = _posix.system_dns_servers
     set_dns_loopback = _posix.set_dns_loopback
     restore_dns = _posix.restore_dns
     stranded_loopback_adapters = _posix.stranded_loopback_adapters

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -170,6 +171,79 @@ def backup_dns(alias: str) -> DnsState:
             return DnsState(mode="FILE", servers=_without_loopback(f.read().splitlines()))
     except OSError:
         return DnsState(mode="FILE", servers=[])
+
+
+_RESOLVECTL_LINE = re.compile(r"^\s*(Global|Link \d+ \(.*?\)):\s*(.*)$")
+
+
+def _ip_literal(token: str) -> str | None:
+    # resolvectl appends "#server-name" (SNI) and "%scope" (link-local zone).
+    word = token.split("#", 1)[0].split("%", 1)[0]
+    return word if _is_ip(word) else None
+
+
+def parse_resolvectl_dns(text: str, *, global_only: bool = False) -> list[str]:
+    """Addresses from `resolvectl dns [link]` ("Link 2 (eth0): 192.168.1.1 fe80::1")."""
+    out: list[str] = []
+    for line in text.splitlines():
+        match = _RESOLVECTL_LINE.match(line)
+        if not match or (global_only and match.group(1) != "Global"):
+            continue
+        out.extend(ip for ip in map(_ip_literal, match.group(2).split()) if ip and ip not in out)
+    return out
+
+
+def parse_scutil_dns(text: str) -> list[str]:
+    """Nameservers of the first `scutil --dns` resolver block that has a usable one."""
+    blocks: list[list[str]] = []
+    for line in text.splitlines():
+        if line.startswith("resolver #"):
+            blocks.append([])
+        match = re.match(r"\s*nameserver\[\d+\]\s*:\s*(\S+)", line)
+        if match and blocks:
+            ip = _ip_literal(match.group(1))
+            if ip:
+                blocks[-1].append(ip)
+    for block in blocks:
+        usable = [ip for ip in block if not ipaddress.ip_address(ip).is_loopback]
+        if usable:
+            return usable
+    return []
+
+
+def parse_nameserver_lines(lines: list[str]) -> list[str]:
+    out: list[str] = []
+    for line in lines:
+        parts = line.split()
+        if len(parts) >= 2 and parts[0] == "nameserver" and _is_ip(parts[1]) and parts[1] not in out:
+            out.append(parts[1])
+    return out
+
+
+def system_dns_servers(alias: str, state: DnsState) -> list[str]:
+    """The resolvers in effect before we take DNS over; [] when they can't be read.
+
+    backup_dns is only the restore record: it has no addresses on
+    systemd-resolved, nor for DHCP DNS on macOS. Read-only and best effort.
+    """
+    try:
+        if IS_MAC:
+            found = [w for w in state.servers[1:] if _is_ip(w)]
+            if not found:
+                result = proc.run(["scutil", "--dns"], timeout=5)
+                found = parse_scutil_dns(result.stdout) if result.returncode == 0 else []
+            return found
+        if state.mode == "RESOLVED":
+            result = proc.run(["resolvectl", "dns", alias], timeout=5)
+            found = parse_resolvectl_dns(result.stdout) if result.returncode == 0 else []
+            if not found:
+                result = proc.run(["resolvectl", "dns"], timeout=5)
+                found = (parse_resolvectl_dns(result.stdout, global_only=True)
+                         if result.returncode == 0 else [])
+            return found
+        return parse_nameserver_lines(state.servers)
+    except (subprocess.TimeoutExpired, OSError):
+        return []
 
 
 def _run_best_effort(cmd: list[str]) -> None:
