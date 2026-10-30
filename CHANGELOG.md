@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.12.0b2
+
+Pre-release: for testing. The in-app updater does not offer it; download it from this page.
+
+### Fixed
+- **Serverless only no longer goes dead right after connecting.** On some connections roughly one handshake in five stalls, and DNS ran over a single connection: when that one stalled, no site got an address for over a minute. DNS now runs over two separate connections at once and takes whichever answers first.
+
+<!-- fa -->
+
+نسخه‌ی پیش‌انتشار، برای تست. آپدیت خودکار داخل برنامه پیشنهادش نمی‌ده؛ از همین صفحه دانلودش کن.
+
+### چی درست شده
+- **«فقط سرورلس» دیگه بعد از وصل شدن از کار نمی‌افته.** رو بعضی اینترنت‌ها تقریباً از هر پنج تا دست‌دادن یکی گیر می‌کنه، و DNS فقط از یه اتصال می‌رفت: اگه همون گیر می‌کرد، تا بیشتر از یه دقیقه هیچ سایتی آدرس نمی‌گرفت. حالا DNS هم‌زمان از دو اتصال جدا می‌ره و جواب هر کدوم زودتر برسه استفاده می‌شه.
+
 ## v0.12.0b1
 
 Pre-release: for testing. The in-app updater does not offer it; download it from this page.
