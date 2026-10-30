@@ -479,6 +479,8 @@ class MainWindow(QMainWindow):
         self.btn_connect = self.status_card.btn_connect
         self.btn_disconnect = self.status_card.btn_disconnect
         self.btn_reconnect = self.status_card.btn_reconnect
+        self.status_card.set_serverless(bool((self.settings.get("serverless") or {}).get("enabled")))
+        self.status_card.serverlessToggled.connect(self._toggle_serverless)
 
         # btn_cleanup: no longer a standalone button; menu-only in the ⋯
         # menu.  Keep a reference so _set_busy doesn't crash.
@@ -1966,6 +1968,11 @@ class MainWindow(QMainWindow):
             return
         self.status_card.show_reconnect(
             tr("{what} — reconnect to apply.", what=what))
+
+    def _toggle_serverless(self, on: bool) -> None:
+        self.settings.setdefault("serverless", {})["enabled"] = on
+        app_settings.save(self.settings)
+        self._needs_reconnect(tr("Serverless turned on") if on else tr("Serverless turned off"))
 
     def _reconnect_now(self) -> None:
         if self._busy:
