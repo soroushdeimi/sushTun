@@ -13,7 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from .. import paths
-from . import bootrestore, chains, coreopts, hotspot, network, render, routing
+from . import bootrestore, chains, coreopts, hotspot, network, render, routing, serverless
 from . import exits as exits_mod
 from . import forwards as forwards_mod
 from . import settings as app_settings
@@ -113,6 +113,11 @@ class Connection:
             except ValueError as exc:
                 raise ConnectError(str(exc)) from exc
             profile = plan.entry
+        if serverless.enabled(app_settings.load().get("serverless")):
+            message = serverless.problem(profile)
+            if message:
+                raise ConnectError(message)
+            self._log("Serverless: the first server is dialed through the local fragmenting outbound.")
         if not profile.address or (not profile.id and profile.protocol not in ("http", "socks")):
             raise ConnectError("profile is missing address or id")
         if profile.protocol == "wireguard" and not profile.pbk:
@@ -250,7 +255,8 @@ class Connection:
                                 dns_cfg=dns_cfg, tun_mtu=cfgs.get("tun_mtu"),
                                 server_ip=server_ip, core_cfg=cfgs.get("core"),
                                 exits=exits, exits_cfg=cfgs.get("exits"),
-                                forwards=forwards, system_dns=system_dns)
+                                forwards=forwards, system_dns=system_dns,
+                                serverless_cfg=cfgs.get("serverless"))
 
         cfg = build(exits, forwards)
         self._log_lan_share(cfgs.get("core") or {}, iface)
@@ -458,7 +464,8 @@ class Connection:
                                 dns_cfg=dns_cfg, server_ip=server_ip,
                                 core_cfg=core_cfg, exits=exits,
                                 exits_cfg=cfgs.get("exits"), forwards=forwards,
-                                system_dns=system_dns)
+                                system_dns=system_dns,
+                                serverless_cfg=cfgs.get("serverless"))
 
         cfg = build(exits, forwards)
         self._log_lan_share(core_cfg, iface)

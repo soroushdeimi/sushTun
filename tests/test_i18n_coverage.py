@@ -31,9 +31,10 @@ def _placeholder_names(template: str) -> set[str]:
 
 
 def _ui_py_files() -> list[Path]:
-    """UI modules plus the Qt-free chain validator's translated diagnostics."""
+    """UI modules plus the Qt-free chain and serverless checks' translated diagnostics."""
     return sorted([*UI_DIR.glob("*.py"), *(UI_DIR / "pages").glob("*.py"),
-                   UI_DIR.parent / "core" / "chains.py"])
+                   UI_DIR.parent / "core" / "chains.py",
+                   UI_DIR.parent / "core" / "serverless.py"])
 
 
 def _tr_literal_calls() -> list[tuple[str, set[str], str, int]]:

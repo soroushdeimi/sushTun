@@ -17,6 +17,7 @@ from . import dns as dns_mod
 from . import exits as exits_mod
 from . import forwards as forwards_mod
 from . import routing as routing_mod
+from . import serverless as serverless_mod
 from . import settings as app_settings
 from .metrics import STATS_API_PORT
 from .profiles import Profile
@@ -135,9 +136,11 @@ def build_text(
     forwards: list[forwards_mod.Forward] | None = None,
     tun_name: str | None = None,
     system_dns: list[str] | None = None,
+    serverless_cfg: dict | None = None,
 ) -> str:
     tmpl_path = template_path or paths.config_template()
     cfg = json.loads(tmpl_path.read_text(encoding="utf-8"))
+    profile_entry = profile
     plan = profile if isinstance(profile, chains.ResolvedChain) else None
     if plan:
         chains.apply(cfg, plan, core_cfg)
@@ -209,6 +212,10 @@ def build_text(
             # AsIs so their hostnames are resolved by the preceding server.
             entry = next(o for o in cfg["outbounds"] if o.get("tag") == "chain-1")
             entry["streamSettings"]["sockopt"]["domainStrategy"] = "ForceIPv4"
+    if serverless_mod.enabled(serverless_cfg):
+        entry = plan.entry if plan else profile_entry
+        if serverless_mod.problem(entry) is None:
+            serverless_mod.apply(cfg, entry.address, server_ip)
     if tun_mtu:
         _apply_mtu(cfg, tun_mtu)
     _apply_iface_alias(cfg, iface_alias)
@@ -233,6 +240,7 @@ def build(
     forwards: list[forwards_mod.Forward] | None = None,
     tun_name: str | None = None,
     system_dns: list[str] | None = None,
+    serverless_cfg: dict | None = None,
 ) -> Path:
     out = paths.runtime_config()
     # Forward by keyword: a positional forward silently mis-binds the next time
@@ -256,6 +264,7 @@ def build(
             forwards=forwards,
             tun_name=tun_name,
             system_dns=system_dns,
+            serverless_cfg=serverless_cfg,
         ),
         encoding="utf-8",
     )

@@ -1837,6 +1837,9 @@ TRANSLATIONS_FA: dict[str, str] = {
     "Hop {hop}: XHTTP separate download settings bypass earlier hops and cannot be chained.": "گام {hop}: تنظیمات دانلود جداگانهٔ XHTTP گام‌های قبلی را دور می‌زند و امکان قرارگیری در زنجیره را ندارد.",
     "Hop {hop}: flow {flow} is not verified for chains.": "گام {hop}: جریان {flow} برای زنجیره‌ها تأیید نشده است.",
     "Mux and XUDP are not verified for chains; disable mux to connect.": "Mux و XUDP برای زنجیره‌ها تأیید نشده‌اند؛ برای اتصال mux را غیرفعال کنید.",
+    "Serverless works only with TCP servers; {name} uses {protocol}.": "سرورلس فقط با سرورهای TCP کار می‌کند؛ {name} از {protocol} استفاده می‌کند.",
+    "Serverless needs a TLS or REALITY server; {name} has no TLS.": "سرورلس به سروری با TLS یا REALITY نیاز دارد؛ {name} TLS ندارد.",
+    "Serverless cannot cover {name}: its XHTTP download settings dial separately.": "سرورلس نمی‌تواند {name} را پوشش دهد: تنظیمات دانلود XHTTP آن جدا و مستقیم وصل می‌شود.",
     "The template already uses chain outbound tag {tag}.": "قالب از قبل از برچسب خروجی زنجیرهٔ {tag} استفاده می‌کند.",
     "The template has no proxy outbound for the chain.": "قالب فاقد خروجی proxy برای زنجیره است.",
 
