@@ -94,9 +94,9 @@ def _norm_domain(d: str) -> str:
     low = d.lower()
     for prefix in _PREFIXES:
         if low.startswith(prefix):
-            if prefix == "regexp:":
-                return d
             rest = d[len(prefix):].strip()
+            if prefix in ("ext:", "geosite:", "regexp:"):
+                return f"{prefix}{rest}"
             if prefix == "domain:":
                 rest = rest.lstrip("*.").strip()
             return f"{prefix}{rest.lower()}"

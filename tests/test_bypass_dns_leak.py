@@ -193,3 +193,25 @@ def test_bypass_ui_hint_and_translation(monkeypatch):
     assert translated != hint
     assert "DNS" in translated
     i18n.set_language("en")
+
+
+def test_norm_domain_preserves_case_for_ext_geosite_regexp():
+    assert routing._norm_domain("ext:MyList.dat:Tag") == "ext:MyList.dat:Tag"
+    assert routing._norm_domain("geosite:CN") == "geosite:CN"
+    assert routing._norm_domain("regexp:^Foo[A-Z]$") == "regexp:^Foo[A-Z]$"
+
+
+def test_norm_domain_preserves_old_behaviour_for_lowercase_inputs():
+    table = [
+        "full:example.com",
+        "keyword:google",
+        "geosite:cn",
+        "ext:geoip.dat:cn",
+        "regexp:^foo.*bar$",
+        "example.com",
+        "domain:x.com",
+    ]
+    for entry in table:
+        old_output = entry.strip() if entry.strip().startswith(routing._PREFIXES) else f"domain:{entry.strip()}"
+        assert routing._norm_domain(entry) == old_output
+
