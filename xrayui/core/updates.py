@@ -90,6 +90,9 @@ def _default_fetch() -> dict:
     # module is imported at startup (the update check itself runs on a timer).
     import urllib.request
 
+    from . import subscription
+
+    subscription._opener()  # the shared TLS context (distro CA bundle) and redirect guard
     req = urllib.request.Request(
         _API_URL, headers={"User-Agent": f"sushTun/{__version__}"}
     )
@@ -192,6 +195,9 @@ Cancelled = Callable[[], bool]
 def _read_url(url: str, timeout: float = 60.0) -> bytes:
     import urllib.request
 
+    from . import subscription
+
+    subscription._opener()
     req = urllib.request.Request(url, headers={"User-Agent": f"sushTun/{__version__}"})
     with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
         return resp.read()
@@ -202,6 +208,9 @@ def _stream_url(url: str, dest: Path, on_progress: Progress | None,
     import http.client
     import urllib.request
 
+    from . import subscription
+
+    subscription._opener()
     req = urllib.request.Request(url, headers={"User-Agent": f"sushTun/{__version__}"})
     with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
         total = int(resp.headers.get("Content-Length") or 0)

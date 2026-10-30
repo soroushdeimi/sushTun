@@ -89,10 +89,13 @@ def build_opener(proxy: str | None):
             req.set_proxy(parts.netloc, 'http')
             return None
 
+    from . import tls
+
+    https = urllib.request.HTTPSHandler(context=tls.https_context())
     if proxy:
         return urllib.request.build_opener(
-            ExplicitProxyHandler({"http": proxy, "https": proxy}))
-    return urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            ExplicitProxyHandler({"http": proxy, "https": proxy}), https)
+    return urllib.request.build_opener(urllib.request.ProxyHandler({}), https)
 
 
 def detect(proxy=None, timeout: float = 8.0) -> ExitInfo | None:

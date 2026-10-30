@@ -1486,6 +1486,8 @@ TRANSLATIONS_FA: dict[str, str] = {
     "No duplicate servers to remove.": "سرور تکراری‌ای برای حذف وجود ندارد.",
     "Refreshing {name}…": "در حال به‌روزرسانی {name}…",
     "Subscription refresh failed: {error}": "به‌روزرسانی اشتراک ناموفق بود: {error}",
+    "No trusted CA certificates were found on this system. Install the ca-certificates package or set SSL_CERT_FILE.":
+        "هیچ گواهی CA معتبری روی این سیستم پیدا نشد. بستهٔ ca-certificates رو نصب کن یا SSL_CERT_FILE رو تنظیم کن.",
     "Subscription updated.": "اشتراک به‌روزرسانی شد.",
     "Delete subscription and its profiles?": "اشتراک و سرورهای آن حذف شود؟",
     "No enabled subscriptions to update.": "اشتراک فعالی برای به‌روزرسانی وجود ندارد.",

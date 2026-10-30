@@ -59,6 +59,9 @@ def _default_fetch(url: str, timeout: float = 60.0) -> bytes:
     import http.client
     import urllib.request
 
+    from . import subscription
+
+    subscription._opener()  # the shared TLS context (distro CA bundle) and redirect guard
     req = urllib.request.Request(url, headers={"User-Agent": "sushTun"})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310

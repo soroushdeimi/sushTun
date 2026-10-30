@@ -80,7 +80,10 @@ def _opener():
     """
     import urllib.request
 
-    opener = urllib.request.build_opener(_redirect_handler_class())
+    from . import tls
+
+    opener = urllib.request.build_opener(
+        urllib.request.HTTPSHandler(context=tls.https_context()), _redirect_handler_class())
     urllib.request.install_opener(opener)
     return opener
 

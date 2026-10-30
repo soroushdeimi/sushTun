@@ -1349,8 +1349,14 @@ class MainWindow(QMainWindow):
 
         def done(result=None, error=None):
             if error:
-                self.step_label.setText(
-                    tr("Subscription refresh failed: {error}", error=error))
+                from ..core import tls  # lazy: keeps ssl out of startup
+
+                text = tr("Subscription refresh failed: {error}", error=error)
+                if tls.needs_ca_hint(error):
+                    text += "\n" + tr(
+                        "No trusted CA certificates were found on this system. "
+                        "Install the ca-certificates package or set SSL_CERT_FILE.")
+                self.step_label.setText(text)
             else:
                 self.step_label.setText(tr("Subscription updated."))
             self._reload_subs()
