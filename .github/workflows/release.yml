@@ -160,10 +160,34 @@ jobs:
           name: sushtun-deb
           path: dist/*.deb
 
+  # Built inside Fedora so the bundle matches the glibc and CA paths it runs on.
+  rpm:
+    runs-on: ubuntu-latest
+    container: fedora:42
+    steps:
+      - name: Install system packages
+        run: dnf install -y python3.12 rpm-build git gcc binutils patchelf mesa-libEGL mesa-libGL libxkbcommon fontconfig dbus-libs xcb-util-cursor
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: python3.12 -m pip install --upgrade pip -r requirements-dev.txt
+      - name: Fetch redistributables
+        run: python3.12 scripts/fetch_deps.py
+      - name: Build one-dir
+        run: python3.12 -m PyInstaller tools/build.spec
+        env:
+          SUSHTUN_ONEDIR: "1"
+      - name: Package .rpm
+        run: python3.12 scripts/build_rpm.py
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sushtun-rpm
+          path: dist/*.rpm
+
   # Publishing runs once, after every build: jobs racing to create the same
   # release drops assets from whichever loses.
   publish:
-    needs: [build, windows-installer, macos-app, deb]
+    needs: [build, windows-installer, macos-app, deb, rpm]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:

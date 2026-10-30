@@ -190,6 +190,14 @@ sudo apt install ./sushtun_*_amd64.deb   # then launch "sushTun" from the app me
 sudo apt remove sushtun                  # uninstall (purge also deletes your data)
 ```
 
+On Fedora/RHEL the `sushtun-<version>-1.x86_64.rpm` asset does the same, built
+on Fedora itself:
+
+```bash
+sudo dnf install ./sushtun-*.rpm   # then launch "sushTun" from the app menu
+sudo dnf remove sushtun
+```
+
 On macOS open `sushTun-macos.dmg` and drag sushTun into Applications; it keeps
 settings and profiles in `/Library/Application Support/sushTun`. The build is
 for Apple Silicon, and it is signed only ad-hoc — there is no Apple Developer

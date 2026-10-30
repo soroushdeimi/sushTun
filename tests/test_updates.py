@@ -416,3 +416,16 @@ def test_a_missing_dpkg_is_an_update_error(monkeypatch, tmp_path):
     monkeypatch.setattr(updates.proc, "run", boom)
     with pytest.raises(updates.UpdateError):
         updates.install(tmp_path / "a.deb")
+
+
+def test_rpm_install_is_not_updated_through_dpkg(monkeypatch, tmp_path):
+    exe = tmp_path / "sushtun"
+    exe.write_text("")
+    (tmp_path / updates.RPM_MARKER).touch()
+    monkeypatch.setattr(updates, "IS_WIN", False)
+    monkeypatch.setattr(updates, "IS_MAC", False)
+    monkeypatch.setattr(updates.paths, "installed", lambda: True)
+    monkeypatch.setattr(updates.sys, "executable", str(exe))
+    assert updates.installed_rpm() and not updates.installed_deb()
+    (tmp_path / updates.RPM_MARKER).unlink()
+    assert updates.installed_deb() and not updates.installed_rpm()

@@ -52,6 +52,8 @@ PORTABLE_ASSETS = {"win32": "sushTun-windows.exe", "darwin": "sushTun-macos"}
 PORTABLE_LINUX = "sushTun-linux"
 SETUP_ASSET = "sushTun-Setup-{version}.exe"
 DEB_ASSET = "sushtun_{version}_amd64.deb"
+# build_rpm.py drops this next to the executable of an rpm install.
+RPM_MARKER = ".rpm-package"
 # The installable macOS package (see .github/workflows/release.yml's
 # macos-app job): the .app inside a drag-to-Applications disk image. An
 # installed .app cannot replace itself (it would break its own signature),
@@ -150,7 +152,14 @@ def installed_windows() -> bool:
 def installed_deb() -> bool:
     """The Linux .deb. dpkg owns those files, so it is updated by running dpkg
     on the new package rather than by replacing the executable."""
-    return not IS_WIN and not IS_MAC and paths.installed()
+    return not IS_WIN and not IS_MAC and paths.installed() and not installed_rpm()
+
+
+def installed_rpm() -> bool:
+    """The Fedora .rpm. rpm owns those files, so like the macOS app it is sent
+    to the release page instead of being overwritten."""
+    return (not IS_WIN and not IS_MAC and paths.installed()
+            and (Path(sys.executable).resolve().parent / RPM_MARKER).exists())
 
 
 def installed_macos_app() -> bool:
@@ -169,7 +178,7 @@ def asset_for_this_build(release: Release) -> str | None:
     import platform
     if sys.platform == "linux" and platform.machine().lower() in ("aarch64", "arm64"):
         return None
-    if installed_macos_app():
+    if installed_macos_app() or installed_rpm():
         return None
     if installed_windows():
         name = SETUP_ASSET.format(version=release.version)
