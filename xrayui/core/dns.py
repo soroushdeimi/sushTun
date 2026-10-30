@@ -9,7 +9,14 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import logging
 import re
+
+from ._net_common import TUN_ADDRESS
+
+logger = logging.getLogger(__name__)
+
+_TUN_NETWORK = ipaddress.ip_network("172.19.0.0/30")
 
 QUERY_STRATEGIES = ("UseIP", "UseIPv4", "UseIPv6", "UseSystem")
 
@@ -398,6 +405,42 @@ def clean_domestic(entries) -> list[str]:
     return out
 
 
+def clean_system_dns(servers: list[str] | None) -> list[str]:
+    """Return up to 3 valid, deduplicated IPv4/IPv6 literals for system DNS.
+
+    Drops loopback, unspecified, link-local, and TUN adapter addresses.
+    """
+    out: list[str] = []
+    seen: set[str] = set()
+    for raw in servers or []:
+        if not isinstance(raw, str):
+            continue
+        entry = raw.strip()
+        if not entry:
+            continue
+        if entry.startswith("nameserver "):
+            parts = entry.split()
+            if len(parts) >= 2:
+                entry = parts[1].strip()
+        try:
+            ip = ipaddress.ip_address(entry)
+        except ValueError:
+            continue
+        if ip.is_loopback or ip.is_unspecified or ip.is_link_local:
+            continue
+        if ip.version == 4 and ip in _TUN_NETWORK:
+            continue
+        if str(ip) in (TUN_ADDRESS, "172.19.0.1"):
+            continue
+        ip_str = str(ip)
+        if ip_str not in seen:
+            seen.add(ip_str)
+            out.append(ip_str)
+            if len(out) == 3:
+                break
+    return out
+
+
 def _domestic_server_object(addr: str, domains: list[str]) -> dict:
     host, port = _split_host_port(addr)
     obj: dict = {"address": host, "domains": list(domains),
@@ -500,6 +543,7 @@ def raw_override_issues(raw: str) -> list[str]:
 
 def build_dns_and_rules(
     d: dict, direct_domains: list[str], proxy_address: str, server_ip: str | None = None,
+    system_dns: list[str] | None = None,
 ) -> tuple[dict, list[dict]]:
     """The Xray `dns` object, plus any routing rules it needs.
 
@@ -541,6 +585,16 @@ def build_dns_and_rules(
         entries = [_domestic_server_object(addr, direct_domains) for addr in domestic]
         block["servers"] = entries + (block.get("servers") or [])
         needs_direct_dns_rule = True
+    elif d.get("bypass_use_system_dns") and not d.get("domestic_servers") and direct_domains:
+        usable = clean_system_dns(system_dns)
+        if usable:
+            entries = [_domestic_server_object(addr, direct_domains) for addr in usable]
+            block["servers"] = entries + (block.get("servers") or [])
+            needs_direct_dns_rule = True
+        else:
+            logger.warning(
+                "dns.bypass_use_system_dns is enabled but no usable system DNS servers found; skipping"
+            )
 
     internal = clean_internal(d.get("internal"))
     if internal:

@@ -78,6 +78,26 @@ def _last_log_line() -> str:
     return lines[-1].strip() if lines else "no log output"
 
 
+def _extract_system_dns(dns) -> list[str] | None:
+    if dns is None:
+        return None
+    raw = dns.servers if hasattr(dns, "servers") else dns
+    if not isinstance(raw, list):
+        return None
+    out = []
+    for s in raw:
+        if not isinstance(s, str):
+            continue
+        line = s.strip()
+        if line.startswith("nameserver "):
+            parts = line.split()
+            if len(parts) >= 2:
+                out.append(parts[1])
+                continue
+        out.append(line)
+    return out
+
+
 class Connection:
     def __init__(self, on_step: Callable[[str], None] | None = None) -> None:
         self._log = on_step or (lambda _m: None)
@@ -229,15 +249,17 @@ class Connection:
         rules = routing.build_rules(cfgs["routing"])
         exits = self._exits(cfgs)
         forwards = self._forwards(cfgs)
+        dns_cfg = cfgs.get("dns") or {}
+        system_dns = _extract_system_dns(dns) if dns_cfg.get("bypass_use_system_dns") else None
 
         def build(exits, forwards):
             return render.build(profile, iface.alias, routing_rules=rules,
                                 domain_strategy=routing.domain_strategy_for(cfgs["routing"]),
                                 stats=True, log_level=cfgs.get("log_level"),
-                                dns_cfg=cfgs.get("dns"), tun_mtu=cfgs.get("tun_mtu"),
+                                dns_cfg=dns_cfg, tun_mtu=cfgs.get("tun_mtu"),
                                 server_ip=server_ip, core_cfg=cfgs.get("core"),
                                 exits=exits, exits_cfg=cfgs.get("exits"),
-                                forwards=forwards)
+                                forwards=forwards, system_dns=system_dns)
 
         cfg = build(exits, forwards)
         self._log_lan_share(cfgs.get("core") or {}, iface)
@@ -433,6 +455,8 @@ class Connection:
         core_cfg = cfgs.get("core") or {}
         exits = self._exits(cfgs)
         forwards = self._forwards(cfgs)
+        dns_cfg = cfgs.get("dns") or {}
+        system_dns = _extract_system_dns(dns) if dns_cfg.get("bypass_use_system_dns") else None
         native = True
 
         def build(exits, forwards):
@@ -440,9 +464,10 @@ class Connection:
                                 domain_strategy=routing.domain_strategy_for(cfgs["routing"]),
                                 stats=True, include_tun=native, tun_name=t2s.DEVICE,
                                 tun_mtu=cfgs.get("tun_mtu"), log_level=cfgs.get("log_level"),
-                                dns_cfg=cfgs.get("dns"), server_ip=server_ip,
+                                dns_cfg=dns_cfg, server_ip=server_ip,
                                 core_cfg=core_cfg, exits=exits,
-                                exits_cfg=cfgs.get("exits"), forwards=forwards)
+                                exits_cfg=cfgs.get("exits"), forwards=forwards,
+                                system_dns=system_dns)
 
         cfg = build(exits, forwards)
         self._log_lan_share(core_cfg, iface)
