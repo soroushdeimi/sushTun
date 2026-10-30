@@ -88,6 +88,8 @@ _ON_STEP_KEYS = {
     "Backing up DNS...",
     "Building runtime config...",
     "Starting Xray...",
+    "Serverless: the first server is dialed through the local fragmenting outbound.",
+    "Serverless only: no server; sites see this network's own IP.",
     "Waiting for TUN adapter...",
     "Configuring tunnel adapter...",
     "Routing DNS and traffic through the tunnel...",
