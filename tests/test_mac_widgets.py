@@ -372,7 +372,7 @@ def test_connection_header_restore_network_menu_signal(qapp):
     fired: list[str] = []
     h.restoreNetworkRequested.connect(lambda: fired.append(True))
     actions = h.btn_more.menu().actions()
-    assert [a.text() for a in actions] == ["Restore network"]
+    assert [a.text() for a in actions] == ["Restore network", "Connect with Serverless only"]
     actions[0].trigger()
     assert fired == [True]
 

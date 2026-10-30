@@ -43,6 +43,7 @@ class ConnectionHeader(QFrame):
     connectRequested = Signal()
     disconnectRequested = Signal()
     restoreNetworkRequested = Signal()
+    serverlessOnlyRequested = Signal()
     reconnectRequested = Signal()
     serverlessToggled = Signal(bool)
 
@@ -240,6 +241,12 @@ class ConnectionHeader(QFrame):
                  tr("Undoes the tunnel's changes to your routes, DNS and hotspot "
                     "sharing so the internet works normally again."),
                  tr("Closed the app badly and now no site loads? Try this first."))
+        self.act_serverless_only = menu.addAction(tr("Connect with Serverless only"),
+                                                  self.serverlessOnlyRequested.emit)
+        set_help(
+            self.act_serverless_only,
+            tr("Connects with no server: sites are reached straight from your network, "
+               "with the filter's name and DNS checks dodged. Your IP stays Iranian."))
         menu.setToolTipsVisible(True)
         more.setMenu(menu)
         return more
@@ -373,6 +380,7 @@ class ConnectionHeader(QFrame):
         # offers an action that cannot apply to the current state.
         self.btn_connect.setVisible(not connected)
         self.btn_disconnect.setVisible(connected)
+        self.act_serverless_only.setEnabled(not connected)
         if not connected:
             self.set_timer("")
 

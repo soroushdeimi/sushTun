@@ -11,6 +11,7 @@ from PySide6.QtCore import QEvent, Qt, QThreadPool, QTimer, Signal
 from PySide6.QtGui import QAction, QActionGroup, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QComboBox,
     QFrame,
     QHBoxLayout,
@@ -34,6 +35,7 @@ from ..core import (
     chains,
     hotspot,
     network,
+    serverless,
     speedtest,
 )
 from ..core import autostart as autostart_mod
@@ -105,6 +107,26 @@ def _help_routing_action(action: QAction, value: str) -> None:
                  tr("Uses the rules in this set of yours instead of the Simple "
                     "switches. Edit it on the Routing page."),
                  tr("Pick your movie-night set, then switch back when the credits roll."))
+
+
+def _ask_serverless_only(parent) -> tuple[bool, bool]:
+    """(connect?, never ask again?)"""
+    box = QMessageBox(parent)
+    box.setIcon(QMessageBox.Warning)
+    box.setWindowTitle(tr("Connect without a server?"))
+    box.setText(tr(
+        "Serverless only connects with no server behind it. Your IP stays Iranian, so:\n\n"
+        "• services that block Iran (some AI tools, Google Play, …) still won't open;\n"
+        "• sites whose IP addresses are blocked outright still won't open.\n\n"
+        "It only gets past name and DNS filtering. For the rest, connect to a server, and turn "
+        "the Serverless button on if the server itself gets filtered."))
+    never = QCheckBox(tr("Don't show this again"))
+    box.setCheckBox(never)
+    connect = box.addButton(tr("Connect"), QMessageBox.AcceptRole)
+    box.addButton(QMessageBox.Cancel)
+    box.setDefaultButton(connect)
+    box.exec()
+    return box.clickedButton() is connect, never.isChecked()
 
 
 def _tunnel_device_name() -> str:
@@ -323,6 +345,7 @@ class MainWindow(QMainWindow):
         self.chain_results = chain_test.ResultStore()
         self._chain_cancel = None
         self._connected_chain = None
+        self._reconnect_to_active = False
         self.settings = app_settings.load()
         self.throttle = alerts.Throttle()
         self.pool = QThreadPool.globalInstance()
@@ -481,6 +504,7 @@ class MainWindow(QMainWindow):
         self.btn_reconnect = self.status_card.btn_reconnect
         self.status_card.set_serverless(bool((self.settings.get("serverless") or {}).get("enabled")))
         self.status_card.serverlessToggled.connect(self._toggle_serverless)
+        self.status_card.serverlessOnlyRequested.connect(self._connect_serverless_only)
 
         # btn_cleanup: no longer a standalone button; menu-only in the ⋯
         # menu.  Keep a reference so _set_busy doesn't crash.
@@ -988,6 +1012,10 @@ class MainWindow(QMainWindow):
         if not self.conn.is_connected():
             return None
         uid = self.conn.state.profile_uid
+        if uid == serverless.ONLY_UID:
+            profile = serverless.only_profile()
+            profile.name = tr("Serverless only")
+            return profile
         return self.store.get(uid) if uid else self._active_profile()
 
     def _active_profile(self) -> Profile | None:
@@ -1078,6 +1106,8 @@ class MainWindow(QMainWindow):
         # other than the one actually connected needs a reconnect.
         if self.conn.is_connected():
             if uid != self.conn.state.profile_uid:
+                if self.conn.state.profile_uid == serverless.ONLY_UID:
+                    self._reconnect_to_active = True
                 self._needs_reconnect(tr("Active server changed"))
             else:
                 self.status_card.hide_reconnect()
@@ -1213,6 +1243,13 @@ class MainWindow(QMainWindow):
         self._run_async(work, done)
 
     def _on_exit_detected(self, uid: str, info) -> None:
+        if uid == serverless.ONLY_UID:
+            # No stored profile to write to; the header still shows the flag.
+            self._only_exit = info.country
+            self._refresh_status_subtitle()
+            self._show_exit_of_connected()
+            self._refresh_tray()
+            return
         fields = {"country": info.country, "exit_ip": info.ip}
         self.results.set(uid, **fields)
         self.profiles.update_detail(uid, fields)
@@ -1234,6 +1271,9 @@ class MainWindow(QMainWindow):
                     country=geo_exit.country_name(country, current())))
             return
         profile = self._connected_profile()
+        if profile and serverless.is_only(profile):
+            self.status_card.set_exit(getattr(self, "_only_exit", None))
+            return
         self.status_card.set_exit(
             self.profiles.model.country_of(profile.uid) if profile else None)
 
@@ -1662,6 +1702,7 @@ class MainWindow(QMainWindow):
         self._run_async(self.conn.cleanup, self._on_conn_done)
 
     def _on_conn_done(self, result=None, error: str | None = None) -> None:
+        self._reconnect_to_active = False
         self._set_busy(False)
         if error:
             # The detail is a raw core exception string: keep it verbatim but
@@ -1972,12 +2013,35 @@ class MainWindow(QMainWindow):
     def _toggle_serverless(self, on: bool) -> None:
         self.settings.setdefault("serverless", {})["enabled"] = on
         app_settings.save(self.settings)
+        if self.conn.state.profile_uid == serverless.ONLY_UID:
+            return  # no server to apply it to
         self._needs_reconnect(tr("Serverless turned on") if on else tr("Serverless turned off"))
+
+    def _connect_serverless_only(self) -> None:
+        if self._busy or self.conn.is_connected():
+            return
+        prefs = self.settings.setdefault("serverless", {})
+        if not prefs.get("skip_only_warning"):
+            go, never_again = _ask_serverless_only(self)
+            if not go:
+                return
+            if never_again:
+                prefs["skip_only_warning"] = True
+                app_settings.save(self.settings)
+        profile = serverless.only_profile()
+        self._only_exit = None
+        self._set_busy(True)
+        self.log.append_line("Connecting with Serverless only…")
+        self._run_async(lambda: self.conn.connect(profile), self._on_conn_done)
 
     def _reconnect_now(self) -> None:
         if self._busy:
             return
-        profile = self._connected_chain if self.conn.state.chain_uid else self._active_profile()
+        if (not self.conn.state.chain_uid and not self._reconnect_to_active
+                and self.conn.state.profile_uid == serverless.ONLY_UID):
+            profile = serverless.only_profile()
+        else:
+            profile = self._connected_chain if self.conn.state.chain_uid else self._active_profile()
         if not profile:
             return
         self._set_busy(True)
