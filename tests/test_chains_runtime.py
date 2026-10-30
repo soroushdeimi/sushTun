@@ -151,11 +151,12 @@ def lab(tmp_path):
                           "inbounds": [{"listen": "127.0.0.1", "port": port,
                                         "protocol": protocol, "settings": settings,
                                         "streamSettings": stream}],
-                          "outbounds": [{"protocol": "freedom"}]}
+                          "outbounds": [{"protocol": "freedom",
+                                         "settings": {"finalRules": [{"action": "allow"}]}}]}
                 if hostnames:
                     config["dns"] = {"hosts": {f"hop-{i}.invalid": "127.0.0.1" for i in range(count)},
                                      "servers": [{"address": "127.0.0.1", "port": free_port()}]}
-                    config["outbounds"][0]["settings"] = {"domainStrategy": "UseIP"}
+                    config["outbounds"][0].setdefault("settings", {})["domainStrategy"] = "UseIP"
                     profile.address = f"hop-{n}.invalid"
                 servers.append(launch(config, port))
             chain = chains.Chain(uid="runtime", name="Runtime", hops=[p.uid for p in items])

@@ -60,8 +60,12 @@ def _run_test(config_text: str, asset_dir=None) -> str | None:
     last = lines[-1] if lines else "xray -test failed"
     # Same convention as the speedtest "invalid config" fix: Xray's own
     # error is one long " > "-joined chain of wrapped context; only the
-    # last segment is the actual reason.
-    return last.rsplit(" > ", 1)[-1].strip()
+    # last segment is the actual reason. Newer cores wrap geodata errors with
+    # a trailing EOF token; unwrap to the informative segment before it.
+    segments = [s.strip() for s in last.split(" > ") if s.strip()]
+    if not segments:
+        return "xray -test failed"
+    return segments[-2] if segments[-1] in ("EOF", "unexpected EOF") and len(segments) > 1 else segments[-1]
 
 
 def check_rules(rules: list[dict], asset_dir=None) -> str | None:

@@ -107,7 +107,7 @@ def validate(chain: Chain, profiles: Iterable[Profile] | Mapping[str, Profile]) 
         network = str(profile.network or "")
         if protocol in {"http", "socks"} and network != "tcp":
             problems.append(tr("Hop {hop}: HTTP and SOCKS servers only work over TCP.", hop=hop))
-        # v26.3.27 transport/internet/splithttp/dialer.go:403-438 dials separate
+        # v26.10.29 transport/internet/splithttp/dialer.go:353-396 dials separate
         # downloadSettings direct on the host NIC, bypassing dialerProxy.
         # Measured on v26.3.27: back-to-back ws hops drop responses on close.
         if network == "ws" and previous_network == "ws":
@@ -120,7 +120,7 @@ def validate(chain: Chain, profiles: Iterable[Profile] | Mapping[str, Profile]) 
         elif network == "xhttp" and outbounds.has_download_settings(profile):
             problems.append(tr("Hop {hop}: XHTTP separate download settings bypass earlier hops "
                                "and cannot be chained.", hop=hop))
-        # v26.3.27 proxy/vless/outbound/outbound.go:249-295 inspects the
+        # v26.10.29 proxy/vless/outbound/outbound.go:247-395 inspects the
         # underlying connection for Vision; redirected pipes need separate proof.
         if profile.flow:
             problems.append(tr("Hop {hop}: flow {flow} is not verified for chains.",
@@ -162,7 +162,7 @@ def resolve(chain: Chain, profiles: Iterable[Profile] | Mapping[str, Profile]) -
 def check(plan: ResolvedChain, core_cfg: dict | None = None) -> None:
     profiles = plan.profiles
     problems = validate(Chain(uid=plan.uid, name=plan.name, hops=[p.uid for p in profiles]), profiles)
-    # v26.3.27 app/proxyman/outbound/handler.go:213-238 dispatches mux/XUDP
+    # v26.10.29 app/proxyman/outbound/handler.go:207-238 dispatches mux/XUDP
     # through separate clients; the plain TCP/UDP proof does not cover them.
     if ((core_cfg or {}).get("mux") or {}).get("enabled"):
         problems.append(tr("Mux and XUDP are not verified for chains; disable mux to connect."))
@@ -178,7 +178,7 @@ def build(plan: ResolvedChain, core_cfg: dict | None = None) -> list[dict]:
     for index, profile in enumerate(profiles):
         outbound = outbounds.build(profile, "proxy")
         if index:
-            # v26.3.27 transport/internet/dialer.go:111-139,271-282 routes
+            # v26.10.29 transport/internet/dialer.go:110-138,270-282 routes
             # this server dial through the preceding outbound, without falling
             # back to a system socket. AsIs passes downstream hostnames through.
             outbound["streamSettings"]["sockopt"] = {"dialerProxy": f"chain-{index}"}
