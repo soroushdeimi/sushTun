@@ -1955,4 +1955,10 @@ TRANSLATIONS_FA: dict[str, str] = {
         "سرور CDNت مدام توسط فیلتر ریست می‌شود؟ این را روشن کن و دوباره وصل شو.",
     "Serverless turned on": "سرورلس روشن شد",
     "Serverless turned off": "سرورلس خاموش شد",
+    "Connect with Serverless only": "اتصال فقط با سرورلس",
+    "Connects with no server: sites are reached straight from your network, with the filter's name and DNS checks dodged. Your IP stays Iranian.": "بدون هیچ سروری وصل می‌شود: سایت‌ها مستقیم از اینترنت خودت باز می‌شوند و از بررسی اسم و DNS فیلترینگ رد می‌شوند. IP تو ایرانی می‌ماند.",
+    "Connect without a server?": "اتصال بدون سرور؟",
+    "Serverless only connects with no server behind it. Your IP stays Iranian, so:\n\n• services that block Iran (some AI tools, Google Play, …) still won't open;\n• sites whose IP addresses are blocked outright still won't open.\n\nIt only gets past name and DNS filtering. For the rest, connect to a server, and turn the Serverless button on if the server itself gets filtered.": "«فقط سرورلس» بدون هیچ سروری وصل می‌شود. IP تو ایرانی می‌ماند، پس:\n\n• سرویس‌هایی که ایران را تحریم کرده‌اند (مثل بعضی ابزارهای هوش مصنوعی و گوگل‌پلی) باز نمی‌شوند؛\n• سایت‌هایی که IPشان کامل بسته شده باز نمی‌شوند.\n\nفقط از فیلترینگ اسم سایت و DNS رد می‌شود. برای بقیه به یک سرور وصل شو، و اگر خود سرور فیلتر می‌شود دکمهٔ سرورلس را هم روشن کن.",
+    "Don't show this again": "دیگر نشان نده",
+    "Serverless only": "فقط سرورلس",
 }
