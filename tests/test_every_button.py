@@ -41,7 +41,10 @@ def qapp():
 
 
 @pytest.fixture
-def win(qapp, tmp_path, monkeypatch):
+def win(qapp, tmp_path, monkeypatch, flush_widgets):
+    # A half-destroyed widget from an earlier test crashes when the new window
+    # polishes it (see conftest._flush_qt_widgets).
+    flush_widgets()
     monkeypatch.setattr(paths, "base_dir", lambda: tmp_path)
     monkeypatch.setattr(paths, "state_dir", lambda: tmp_path / "state")
     monkeypatch.setattr(paths, "profiles_dir", lambda: tmp_path / "profiles")

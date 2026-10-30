@@ -46,7 +46,8 @@ def datadir(tmp_path, monkeypatch):
 
 
 @pytest.fixture
-def win(qapp, datadir, monkeypatch):
+def win(qapp, datadir, monkeypatch, flush_widgets):
+    flush_widgets()
     window = mw.MainWindow(elevated=True)
     window.show()
     qapp.processEvents()

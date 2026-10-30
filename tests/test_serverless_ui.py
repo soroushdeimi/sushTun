@@ -44,7 +44,8 @@ def datadir(tmp_path, monkeypatch):
 
 
 @pytest.fixture
-def win(qapp, datadir):
+def win(qapp, datadir, flush_widgets):
+    flush_widgets()
     window = mw.MainWindow(elevated=True)
     window.show()
     qapp.processEvents()
@@ -116,7 +117,8 @@ def test_disconnected_toggle_shows_no_prompt(win, saves, prompts, monkeypatch):
     assert prompts == []
 
 
-def test_saved_setting_starts_the_button_checked(qapp, datadir):
+def test_saved_setting_starts_the_button_checked(qapp, datadir, flush_widgets):
+    flush_widgets()
     app_settings.save({**app_settings.load(), "serverless": {"enabled": True}})
     window = mw.MainWindow(elevated=True)
     try:
