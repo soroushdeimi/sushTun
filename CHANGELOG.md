@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.11.0
+
+### New
+- **XHTTP servers can be used in proxy chains.** An XHTTP server now works as the first, a middle or the last hop, in every mode (`stream-one`, `stream-up`, `packet-up`). A server that uses separate download settings (`downloadSettings`) is still refused in a chain, with a clear message, because Xray sends that download half straight out instead of through the earlier hops.
+- **Sites you bypass can be looked up outside the tunnel.** New option in the DNS page, "Resolve bypassed sites with this computer's own DNS": the sites in Routing → bypass are resolved through your own network's DNS servers (read when you connect) instead of through the tunnel, so their lookups no longer leave through the tunnel's resolvers. It is off by default and does nothing when Domestic DNS is filled in, since that one wins. It takes effect on the next connect.
+- **A hint under the bypass list** says that bypassed sites still resolve through the tunnel unless Domestic DNS or the new option is set.
+
+### Fixed
+- **Bypass entries are cleaned up.** `*.example.com`, upper-case names, stray dots and duplicates in the bypass and force-through-tunnel lists now become a single, valid `domain:` rule; `ext:`, `geosite:` and `regexp:` entries are left exactly as typed.
+- **Windows: exporting a backup no longer crashes.** Saving the backup file failed with an error on Windows.
+- **The bundled Xray is now a fixed, tested release (26.3.27)** instead of whatever was newest when a build was made. Newer cores (26.5.9 onwards) stopped passing our chain tests, so builds follow the release the chains are verified on until the newer ones are checked.
+
+<!-- fa -->
+
+### چی اضافه شده
+- **سرور XHTTP تو زنجیره‌ی پروکسی کار می‌کنه.** حالا یه سرور XHTTP می‌تونه هاپ اول، وسط یا آخر باشه، تو همه‌ی حالت‌ها (`stream-one`، `stream-up`، `packet-up`). سروری که تنظیمات دانلود جدا (`downloadSettings`) داره هنوز تو زنجیره قبول نمی‌شه و پیام واضح می‌گیری، چون Xray نیمه‌ی دانلودش رو مستقیم می‌فرسته و از هاپ‌های قبلی رد نمی‌کنه.
+- **سایت‌های مستقیم رو می‌شه بیرون از تونل ترجمه کرد.** یه گزینه‌ی جدید تو صفحه‌ی DNS: «ترجمه سایت‌های مستقیم با DNS خود این کامپیوتر». سایت‌های بخش routing → مستقیم با DNS خود شبکه‌ات (که موقع وصل شدن خونده می‌شه) ترجمه می‌شن، نه از تونل، پس ترجمه‌ی اسم اون سایت‌ها دیگه از resolverهای تونل رد نمی‌شه. پیش‌فرضش خاموشه و وقتی «DNS داخلی» پر باشه کاری نمی‌کنه، چون اون اولویت داره. تو وصل شدن بعدی اعمال می‌شه.
+- **یه راهنما زیر لیست مستقیم‌ها** می‌گه سایت‌های مستقیم هنوز از تونل ترجمه می‌شن، مگه اینکه «DNS داخلی» یا گزینه‌ی جدید تنظیم باشه.
+
+### چی درست شده
+- **ورودی‌های لیست مستقیم تمیز می‌شن.** `*.example.com`، حروف بزرگ، نقطه‌ی اضافه و تکراری‌ها تو لیست مستقیم و اجبار به تونل حالا یه قانون `domain:` درست می‌شن؛ ورودی‌های `ext:` و `geosite:` و `regexp:` همون‌طور که نوشتی می‌مونن.
+- **ویندوز: گرفتن بکاپ دیگه کرش نمی‌کنه.** ذخیره‌ی فایل بکاپ تو ویندوز با خطا تموم می‌شد.
+- **Xray داخل برنامه حالا یه نسخه‌ی ثابت و تست‌شده‌ست (۲۶.۳.۲۷)** نه هر چی موقع ساخت بیلد تازه‌تر بود. هسته‌های جدیدتر (از ۲۶.۵.۹ به بعد) تست‌های زنجیره‌ی ما رو رد نمی‌کردن، پس بیلدها با نسخه‌ای که زنجیره‌ها روش تأیید شده می‌ساختن تا بقیه بررسی بشن.
+
 ## v0.10.2
 
 ### New
