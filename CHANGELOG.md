@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.11.1
+
+### New
+- **A Fedora / RHEL package.** Releases now include `sushtun-<version>-1.x86_64.rpm`, built on Fedora itself: `sudo dnf install ./sushtun-*.rpm`. Like the `.deb`, it adds sushTun to the app menu and keeps settings in `/var/lib/sushtun`. An installed rpm is not replaced by the in-app updater; the update window sends you to the release page for the new file.
+- **WebSocket servers can be used in proxy chains.** A WebSocket hop works anywhere in a chain, as long as two WebSocket hops are not next to each other: with Xray 26.3.27, back-to-back WebSocket hops lose responses when a connection closes, so that combination is refused with a message. Put another transport (TCP, gRPC, HTTPUpgrade) between them.
+
+### Fixed
+- **Fedora and other distros: HTTPS downloads (subscriptions, update check, geo files) no longer fail with "unable to get local issuer certificate".** The packaged app looked for the certificate bundle where Ubuntu keeps it; it now falls back to the usual locations on Fedora, Arch, openSUSE and others. Certificate checking is never turned off. When no bundle is found at all, the error now says so.
+- **A failed Xray start leaves a reason in the log.** If Xray cannot be started (missing file, permission denied, SELinux) or dies without printing anything, the cause or exit code is written to `xray.log` instead of leaving it empty.
+
+<!-- fa -->
+
+### چی اضافه شده
+- **پکیج مخصوص فدورا / RHEL.** تو ریلیزها حالا یه فایل `sushtun-<version>-1.x86_64.rpm` هست که روی خود فدورا ساخته می‌شه: `sudo dnf install ./sushtun-*.rpm`. مثل `.deb` برنامه رو تو منوی برنامه‌ها می‌ذاره و تنظیمات رو تو `/var/lib/sushtun` نگه می‌داره. آپدیت خودکار داخل برنامه روی rpm نصب‌شده فایل رو عوض نمی‌کنه و تو پنجره‌ی آپدیت می‌فرستت صفحه‌ی ریلیز برای فایل جدید.
+- **سرور WebSocket تو زنجیره‌ی پروکسی کار می‌کنه.** هاپ WebSocket هر جای زنجیره می‌تونه باشه، به شرطی که دو هاپ WebSocket کنار هم نباشن: با Xray 26.3.27 دو WebSocket پشت‌سرهم موقع بسته شدن اتصال جواب رو از دست می‌دن، برای همین این ترکیب با پیام رد می‌شه. بینشون یه ترنسپورت دیگه (TCP، gRPC یا HTTPUpgrade) بذار.
+
+### چی درست شده
+- **فدورا و بقیه‌ی توزیع‌ها: دانلودهای HTTPS (ساب‌اسکریپشن، چک آپدیت، فایل‌های geo) دیگه با خطای «unable to get local issuer certificate» رد نمی‌شن.** برنامه‌ی پکیج‌شده بسته‌ی گواهی‌ها رو همون‌جایی می‌گشت که اوبونتو نگه می‌داره؛ حالا مسیرهای رایج فدورا، آرچ، اوپن‌سوزه و بقیه رو هم امتحان می‌کنه. بررسی گواهی هیچ‌وقت خاموش نمی‌شه. اگه هیچ بسته‌ای پیدا نشه هم خطا همین رو می‌گه.
+- **اگه Xray بالا نیاد، دلیلش تو لاگ می‌مونه.** وقتی Xray اجرا نمی‌شه (فایل نیست، دسترسی نداره، SELinux) یا بدون هیچ خروجی می‌میره، علت یا exit code تو `xray.log` نوشته می‌شه، نه یه فایل خالی.
+
 ## v0.11.0
 
 ### New
