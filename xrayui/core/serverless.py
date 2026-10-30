@@ -113,16 +113,20 @@ def is_only(profile) -> bool:
 
 
 # DoH is blocked by name and by address, but the filter leaves the addresses
-# of DOH_FRONT open. Pointing the DoH name there, with the handshake going out
-# through the fragmenting "proxy", makes the resolver reachable.
-DOH_URL = "https://cloudflare-dns.com/dns-query"
-DOH_HOST = "cloudflare-dns.com"
+# of DOH_FRONT open. Pointing the DoH names there, with the handshake going out
+# through the fragmenting "proxy", makes the resolver reachable. Two names give
+# two separate connections that race (enableParallelQuery): about one
+# fragmented handshake in five stalls, and a lone DoH client then hangs every
+# lookup on it for over a minute.
+DOH_HOSTS = ("cloudflare-dns.com", "1dot1dot1dot1.cloudflare-dns.com")
+DOH_URLS = [f"https://{host}/dns-query" for host in DOH_HOSTS]
 DOH_FRONT = "challenges.cloudflare.com"
 FALLBACK_BOOTSTRAP = "1.1.1.1"
 # What the filter answers blocked names with; a connection to one just hangs.
 SINKHOLES = ["10.10.34.0/24", "2001:4188:2:600::/64"]
 # Dropped so the DNS block can only ever use our two servers.
-_DNS_KEYS = ("servers", "queryStrategy", "disableFallback", "tag", "clientIp")
+_DNS_KEYS = ("servers", "queryStrategy", "disableFallback", "tag", "clientIp",
+             "enableParallelQuery")
 
 
 def only_outbound() -> dict:
@@ -168,13 +172,15 @@ def apply_only_network(cfg: dict, bootstrap: list[str] | None) -> None:
     hosts = dict(dns.get("hosts") or {})
     for key in _DNS_KEYS:
         dns.pop(key, None)
-    hosts[DOH_HOST] = DOH_FRONT
+    for host in DOH_HOSTS:
+        hosts[host] = DOH_FRONT
     # DOH_FRONT itself goes to the system resolver (plain UDP through the NIC).
     # The OS resolver points at Xray while connected, so it cannot be localhost.
-    dns["servers"] = [DOH_URL, {"address": _bootstrap_ip(bootstrap),
-                                "domains": [f"full:{DOH_FRONT}"], "skipFallback": True}]
+    dns["servers"] = [*DOH_URLS, {"address": _bootstrap_ip(bootstrap),
+                                  "domains": [f"full:{DOH_FRONT}"], "skipFallback": True}]
     dns["hosts"] = hosts
     dns["queryStrategy"] = "UseIPv4"
+    dns["enableParallelQuery"] = True
     rules = cfg.setdefault("routing", {}).setdefault("rules", [])
     # QUIC is blocked so browsers fall back to TCP+TLS, where fragmenting works.
     rules[:0] = [

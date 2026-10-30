@@ -51,12 +51,20 @@ def test_the_proxy_outbound_is_the_fragmenting_direct_one():
 def test_dns_goes_through_doh_with_the_system_resolver_for_the_front():
     dns = _render()["dns"]
     assert dns["servers"] == [
-        serverless.DOH_URL,
+        "https://cloudflare-dns.com/dns-query",
+        "https://1dot1dot1dot1.cloudflare-dns.com/dns-query",
         {"address": "192.168.1.1", "domains": ["full:challenges.cloudflare.com"],
          "skipFallback": True},
     ]
-    assert dns["hosts"][serverless.DOH_HOST] == serverless.DOH_FRONT
+    for host in serverless.DOH_HOSTS:
+        assert dns["hosts"][host] == serverless.DOH_FRONT
     assert dns["queryStrategy"] == "UseIPv4"
+
+
+def test_doh_queries_race_so_one_stalled_handshake_cannot_hang_dns():
+    # Measured from Iran: about one fragmented handshake in five stalls, and a
+    # lone DoH client then waits on that one connection for over a minute.
+    assert _render()["dns"]["enableParallelQuery"] is True
 
 
 def test_user_dns_cannot_replace_our_servers_but_its_hosts_stay():
@@ -65,11 +73,11 @@ def test_user_dns_cannot_replace_our_servers_but_its_hosts_stay():
     user["query_strategy"] = "UseIP"
     user["hosts"] = ["my.example = 10.1.1.1"]
     dns = _render(dns_cfg=user)["dns"]
-    assert dns["servers"][0] == serverless.DOH_URL
-    assert len(dns["servers"]) == 2
+    assert dns["servers"][:2] == serverless.DOH_URLS
+    assert len(dns["servers"]) == 3
     assert dns["queryStrategy"] == "UseIPv4"
     assert dns["hosts"]["my.example"] == "10.1.1.1"
-    assert dns["hosts"][serverless.DOH_HOST] == serverless.DOH_FRONT
+    assert dns["hosts"][serverless.DOH_HOSTS[0]] == serverless.DOH_FRONT
 
 
 @pytest.mark.parametrize("given, expected", [
@@ -85,7 +93,7 @@ def test_user_dns_cannot_replace_our_servers_but_its_hosts_stay():
 ])
 def test_bootstrap_resolver_choice(given, expected):
     dns = _render(serverless_bootstrap=given)["dns"]
-    assert dns["servers"][1]["address"] == expected
+    assert dns["servers"][-1]["address"] == expected
 
 
 def test_blocks_come_first_and_the_other_rules_stay():
@@ -170,8 +178,8 @@ def test_connect_needs_no_server_route_or_lookup(rig, monkeypatch, platform):
     assert not any(c[0] == "add_host_route" for c in calls)
     assert not any(c[0] == "resolve" for c in calls)
     started = [c[1] for c in calls if c[0] == "start"]
-    assert started and serverless.DOH_URL in started[0]["dns"]["servers"]
-    assert started[0]["dns"]["servers"][1]["address"] == "192.0.2.53"
+    assert started and serverless.DOH_URLS[0] in started[0]["dns"]["servers"]
+    assert started[0]["dns"]["servers"][-1]["address"] == "192.0.2.53"
     assert not conn.state.server_ip
     assert State().profile_uid == serverless.ONLY_UID
     conn.disconnect()
