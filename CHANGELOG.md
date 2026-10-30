@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.12.0b1
+
+Pre-release: for testing. The in-app updater does not offer it; download it from this page.
+
+### New
+- **Serverless button.** A new button next to Connect. When it is on, the first server of your connection (a single server, or the first link of a chain) is reached through a local outbound that sends the TLS handshake out in small pieces, so filtering that reads the server name from it misses it. It works with TLS and REALITY servers; a server without TLS, and Hysteria2 or WireGuard servers, are refused with a message. Off by default, and an untouched install builds exactly the config it did before.
+- **Connect with Serverless only.** In the header's ⋯ menu: connect with no server at all. Sites are reached straight from your own network, with name (SNI) filtering and DNS poisoning dodged: DNS comes over DoH that itself goes out in pieces, the filter's fake answers (10.10.34.x) are dropped, and QUIC is blocked so browsers use TCP. **Your IP stays Iranian**, so services that block Iran and sites whose IP addresses are blocked outright still won't open; a warning says so the first time.
+
+<!-- fa -->
+
+نسخه‌ی پیش‌انتشار، برای تست. آپدیت خودکار داخل برنامه پیشنهادش نمی‌ده؛ از همین صفحه دانلودش کن.
+
+### چی اضافه شده
+- **دکمه‌ی سرورلس.** یه دکمه‌ی جدید کنار Connect. وقتی روشنه، اولین سرور اتصالت (یه سرور تنها، یا اولین حلقه‌ی زنجیره) از یه مسیر محلی وصل می‌شه که دست‌دادن TLS رو تیکه‌تیکه می‌فرسته، برای همین فیلترینگی که اسم سرور رو ازش می‌خونه نمی‌بینتش. با سرورهای TLS و REALITY کار می‌کنه؛ سرور بدون TLS و سرورهای Hysteria2 و WireGuard با پیام رد می‌شن. پیش‌فرض خاموشه و اگه دستش نزنی کانفیگ دقیقاً مثل قبل ساخته می‌شه.
+- **اتصال فقط با سرورلس.** تو منوی ⋯ بالای صفحه: بدون هیچ سروری وصل شو. سایت‌ها مستقیم از اینترنت خودت باز می‌شن و از فیلترینگ اسم (SNI) و DNS مسموم رد می‌شن: DNS از DoH میاد که خودش هم تیکه‌تیکه می‌ره، جواب‌های قلابی فیلتر (10.10.34.x) دور ریخته می‌شن و QUIC بسته می‌شه که مرورگر با TCP بره. **IPت ایرانی می‌مونه**، پس سرویس‌هایی که ایران رو تحریم کردن و سایت‌هایی که IPشون کامل بسته شده باز نمی‌شن؛ بار اول یه هشدار همینو می‌گه.
+
 ## v0.11.1
 
 ### New
