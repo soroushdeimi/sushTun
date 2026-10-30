@@ -33,6 +33,14 @@ def test_is_newer_false_for_a_prerelease_or_non_numeric_tag():
     assert updates.is_newer("", "0.1.13") is False
 
 
+def test_a_prerelease_build_is_offered_its_final_release():
+    assert updates.is_newer("v0.12.0", "0.12.0b1") is True
+    assert updates.is_newer("v0.12.1", "0.12.0b1") is True
+    assert updates.is_newer("v0.11.1", "0.12.0b1") is False
+    # A tag is still never a pre-release, even for a pre-release build.
+    assert updates.is_newer("v0.12.0b2", "0.12.0b1") is False
+
+
 def test_is_newer_handles_missing_v_prefix():
     assert updates.is_newer("0.2.0", "0.1.13") is True
 

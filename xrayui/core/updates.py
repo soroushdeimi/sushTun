@@ -39,6 +39,8 @@ from . import proc
 
 _API_URL = "https://api.github.com/repos/soroushdeimi/sushTun/releases/latest"
 _VERSION_RE = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)$")
+# This build itself may be a pre-release ("0.12.0b1"); tags never are.
+_CURRENT_RE = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)(b\d+)?$")
 
 IS_WIN = sys.platform == "win32"
 IS_MAC = sys.platform == "darwin"
@@ -136,10 +138,13 @@ def is_newer(tag: str, current: str) -> bool:
     who is already caught up.
     """
     tag_m = _VERSION_RE.match(tag.strip())
-    cur_m = _VERSION_RE.match(current.strip())
+    cur_m = _CURRENT_RE.match(current.strip())
     if not tag_m or not cur_m:
         return False
-    return tuple(map(int, tag_m.groups())) > tuple(map(int, cur_m.groups()))
+    tag_v = tuple(map(int, tag_m.groups()))
+    cur_v = tuple(map(int, cur_m.groups()[:3]))
+    # A pre-release build is older than the final release of its own number.
+    return tag_v > cur_v or (tag_v == cur_v and cur_m.group(4) is not None)
 
 
 # -- what this particular copy can install ---------------------------------
