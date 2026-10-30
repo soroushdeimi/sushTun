@@ -101,12 +101,42 @@ def test_file_mode_parses_the_backup_lines(monkeypatch):
     assert posix.system_dns_servers("eth0", state) == ["10.0.0.1"]
 
 
-def test_macos_prefers_networksetup_servers_then_scutil(monkeypatch):
+def test_parse_ipconfig_option_takes_every_address_and_ignores_noise():
+    assert posix.parse_ipconfig_dns("45.159.149.19\n") == ["45.159.149.19"]
+    assert posix.parse_ipconfig_dns("10.0.0.1 10.0.0.2\n10.0.0.1\n") == ["10.0.0.1", "10.0.0.2"]
+    assert posix.parse_ipconfig_dns("") == []
+    assert posix.parse_ipconfig_dns("The operation couldn't be completed.") == []
+
+
+def test_macos_order_is_networksetup_then_dhcp_option_then_scutil(monkeypatch):
     monkeypatch.setattr(posix, "IS_MAC", True)
-    monkeypatch.setattr(posix.proc, "run", lambda *a, **k: pytest.fail("no shell-out expected"))
+    calls = []
+
+    def fake(args, **k):
+        calls.append(list(args))
+        if args[0] == "ipconfig":
+            return SimpleNamespace(stdout="45.159.149.19\n", returncode=0)
+        return SimpleNamespace(stdout=SCUTIL, returncode=0)
+
+    monkeypatch.setattr(posix.proc, "run", fake)
+    # static servers recorded by networksetup win and need no shell-out
     assert posix.system_dns_servers("en0", DnsState("MACOS", ["Wi-Fi", "10.1.1.1"])) == ["10.1.1.1"]
-    monkeypatch.setattr(posix.proc, "run", _run(SCUTIL))
-    # service name only (DHCP DNS): networksetup gave no addresses
+    assert calls == []
+    # DHCP DNS: the lease is read straight from the interface, even while
+    # scutil only shows the 127.0.0.1 we put there ourselves
+    assert posix.system_dns_servers("en0", DnsState("MACOS", ["Wi-Fi"])) == ["45.159.149.19"]
+    assert calls == [["ipconfig", "getoption", "en0", "domain_name_server"]]
+
+
+def test_macos_falls_back_to_scutil_when_the_lease_has_no_dns(monkeypatch):
+    monkeypatch.setattr(posix, "IS_MAC", True)
+
+    def fake(args, **k):
+        if args[0] == "ipconfig":
+            return SimpleNamespace(stdout="", returncode=1)
+        return SimpleNamespace(stdout=SCUTIL, returncode=0)
+
+    monkeypatch.setattr(posix.proc, "run", fake)
     assert posix.system_dns_servers("en0", DnsState("MACOS", ["Wi-Fi"])) == ["192.168.1.1", "fe80::1"]
 
 
