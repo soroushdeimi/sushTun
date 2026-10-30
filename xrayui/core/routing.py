@@ -91,7 +91,17 @@ _NETWORKS = ("tcp", "udp", "tcp,udp")
 
 def _norm_domain(d: str) -> str:
     d = d.strip()
-    return d if d.startswith(_PREFIXES) else f"domain:{d}"
+    low = d.lower()
+    for prefix in _PREFIXES:
+        if low.startswith(prefix):
+            if prefix == "regexp:":
+                return d
+            rest = d[len(prefix):].strip()
+            if prefix == "domain:":
+                rest = rest.lstrip("*.").strip()
+            return f"{prefix}{rest.lower()}"
+    clean = d.lstrip("*.").strip().lower()
+    return f"domain:{clean}"
 
 
 def _sanitize_simple_domain(entry) -> str | None:
@@ -106,7 +116,10 @@ def _sanitize_simple_domain(entry) -> str | None:
         return None
     if any(c.isspace() for c in d):
         return None
-    return _norm_domain(d)
+    normed = _norm_domain(d)
+    if normed == "domain:" or normed in _PREFIXES:
+        return None
+    return normed
 
 
 def _simple_rules(r: dict) -> list[dict]:
@@ -132,11 +145,11 @@ def _simple_rules(r: dict) -> list[dict]:
         direct_domains.extend(low_usage_domains())
     for d in _coerce_str_list(r.get("bypass_domains", [])):
         normed = _sanitize_simple_domain(d)
-        if normed:
+        if normed and normed not in direct_domains:
             direct_domains.append(normed)
     for ip in _coerce_str_list(r.get("bypass_ips", [])):
         good = _sanitize_ip(ip)
-        if good:
+        if good and good not in direct_ips:
             direct_ips.append(good)
 
     if direct_domains:
@@ -147,7 +160,7 @@ def _simple_rules(r: dict) -> list[dict]:
     proxy_domains = []
     for d in _coerce_str_list(r.get("proxy_domains", [])):
         normed = _sanitize_simple_domain(d)
-        if normed:
+        if normed and normed not in proxy_domains:
             proxy_domains.append(normed)
     if proxy_domains:
         rules.append({"type": "field", "domain": proxy_domains, "outboundTag": "proxy"})
@@ -258,9 +271,15 @@ def convert_user_rule(rule: dict) -> list[dict]:
     for d in _coerce_str_list(rule.get("domain")):
         d = d.replace("<COMMA>", ",").strip()
         if d and not d.startswith("#"):
-            domains.append(_norm_domain(d))
+            normed = _norm_domain(d)
+            if normed != "domain:" and normed not in _PREFIXES and normed not in domains:
+                domains.append(normed)
 
-    ips = [ip for ip in (_sanitize_ip(x) for x in _coerce_str_list(rule.get("ip"))) if ip]
+    ips = []
+    for x in _coerce_str_list(rule.get("ip")):
+        ip = _sanitize_ip(x)
+        if ip and ip not in ips:
+            ips.append(ip)
 
     def base() -> dict:
         out: dict = {"type": "field", "outboundTag": outbound}

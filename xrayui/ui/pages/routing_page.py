@@ -410,6 +410,12 @@ class RoutingPage(QWidget):
         set_help(bypass_label, *domains_help)
         layout.addWidget(self.domains)
 
+        bypass_hint = QLabel(tr(
+            "Bypassed sites resolve via the tunnel unless Domestic DNS is set in DNS settings."))
+        bypass_hint.setObjectName("Muted")
+        bypass_hint.setWordWrap(True)
+        layout.addWidget(bypass_hint)
+
         ips_label = QLabel(tr("Bypass IPs / CIDRs (one per line — direct):"))
         ips_label.setWordWrap(True)
         layout.addWidget(ips_label)

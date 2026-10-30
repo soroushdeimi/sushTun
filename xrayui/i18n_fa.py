@@ -172,6 +172,8 @@ TRANSLATIONS_FA: dict[str, str] = {
     "Russia sites && IPs direct": "سایت‌ها و آی‌پی‌های روسیه مستقیم",
     "China sites && IPs direct": "سایت‌ها و آی‌پی‌های چین مستقیم",
     "Bypass domains (one per line — direct):": "دامنه‌های مستقیم (هر خط یک مورد):",
+    "Bypassed sites resolve via the tunnel unless Domestic DNS is set in DNS settings.":
+        "سایت‌های مستقیم از طریق DNS تونل ترجمه می‌شوند مگر اینکه «DNS داخلی» در تنظیمات DNS تنظیم شده باشد.",
     "Bypass IPs / CIDRs (one per line — direct):": "IPها / CIDR مستقیم (هر خط یک مورد):",
     "Force through tunnel (one per line — proxy):": "اجبار به تونل (هر خط یک مورد):",
     "Empty": "خالی",
