@@ -96,3 +96,17 @@ def apply(cfg: dict, entry_address: str, server_ip: str | None) -> None:
             hosts = dict(dns.get("hosts") or {})
             hosts[entry_address] = server_ip
             dns["hosts"] = hosts
+
+
+# -- Serverless only: no server at all, every site straight from this device --
+ONLY_UID = "serverless-only"
+ONLY_PROTOCOL = "serverless"
+
+
+def only_profile() -> Profile:
+    """Stand-in profile for a connection with no server behind it."""
+    return Profile(name="Serverless only", protocol=ONLY_PROTOCOL, address="", uid=ONLY_UID)
+
+
+def is_only(profile) -> bool:
+    return isinstance(profile, Profile) and profile.protocol == ONLY_PROTOCOL

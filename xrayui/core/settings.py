@@ -137,7 +137,7 @@ DEFAULTS: dict = {
     # "via": "proxy"|"direct", "network"}. Empty: nothing is rendered for it.
     "forwards": [],
     # Serverless entry (core/serverless.py). Off: nothing is rendered for it.
-    "serverless": {"enabled": False},
+    "serverless": {"enabled": False, "skip_only_warning": False},
     "startup": {
         "start_on_login": False,
         "start_minimized": False,

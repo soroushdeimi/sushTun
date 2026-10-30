@@ -60,7 +60,7 @@ def test_off_is_a_no_op():
 
 
 def test_default_setting_is_off():
-    assert app_settings.DEFAULTS["serverless"] == {"enabled": False}
+    assert app_settings.DEFAULTS["serverless"] == {"enabled": False, "skip_only_warning": False}
 
 
 def test_single_server_goes_through_serverless():

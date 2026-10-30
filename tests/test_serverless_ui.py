@@ -95,10 +95,10 @@ def test_restoring_the_state_is_silent_but_a_click_emits(qapp):
 def test_clicking_saves_the_setting_both_ways(win, saves):
     win.status_card.btn_serverless.click()
     assert win.settings["serverless"]["enabled"] is True
-    assert saves == [{"enabled": True}]
+    assert [s["enabled"] for s in saves] == [True]
     win.status_card.btn_serverless.click()
     assert win.settings["serverless"]["enabled"] is False
-    assert saves == [{"enabled": True}, {"enabled": False}]
+    assert [s["enabled"] for s in saves] == [True, False]
 
 
 def test_connected_toggle_asks_to_reconnect(win, saves, prompts, monkeypatch):
@@ -126,6 +126,6 @@ def test_saved_setting_starts_the_button_checked(qapp, datadir):
 
 
 def test_settings_default_and_round_trip(datadir):
-    assert app_settings.load()["serverless"] == {"enabled": False}
+    assert app_settings.load()["serverless"] == {"enabled": False, "skip_only_warning": False}
     app_settings.save({**app_settings.load(), "serverless": {"enabled": True}})
-    assert app_settings.load()["serverless"] == {"enabled": True}
+    assert app_settings.load()["serverless"]["enabled"] is True
