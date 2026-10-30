@@ -20,7 +20,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import Qt  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
-from PySide6.QtWidgets import QApplication  # noqa: E402
+from PySide6.QtWidgets import QApplication, QCheckBox  # noqa: E402
 
 from xrayui.core import xraycheck  # noqa: E402
 from xrayui.core.settings import DEFAULTS  # noqa: E402
@@ -129,3 +129,92 @@ def test_enter_in_the_resolvers_editor_inserts_a_newline_not_an_apply(qapp, monk
     QTest.keyClick(page.servers, Qt.Key_Return)
     assert not calls  # Return is a new paragraph, never a save
     assert "\n" in page.servers.toPlainText()
+
+
+def test_bypass_use_system_dns_checkbox_lifecycle(qapp, monkeypatch):
+    monkeypatch.setattr(xraycheck, "check_config", lambda *a, **k: None)
+    page = DnsPage(DEFAULTS["dns"], DEFAULTS["routing"])
+
+    # Checkbox exists
+    assert hasattr(page, "bypass_use_system_dns")
+    assert isinstance(page.bypass_use_system_dns, QCheckBox)
+
+    # Defaults unchecked
+    assert not page.bypass_use_system_dns.isChecked()
+    assert page.bypass_use_system_dns.isEnabled()
+
+    # Becomes disabled when domestic servers has text and re-enabled when cleared
+    page.domestic.setText("178.22.122.100")
+    assert not page.bypass_use_system_dns.isEnabled()
+    assert "Disabled because" in page.bypass_use_system_dns.toolTip()
+
+    page.domestic.setText("")
+    assert page.bypass_use_system_dns.isEnabled()
+    assert "Takes effect on the next connection" in page.bypass_use_system_dns.toolTip()
+
+    # Presets and off buttons update the state
+    page._fill_domestic(["178.22.122.100"])
+    assert not page.bypass_use_system_dns.isEnabled()
+    page._fill_domestic([])
+    assert page.bypass_use_system_dns.isEnabled()
+
+    # Round-trips through load/save (apply) and saved dict contains the key as a real bool
+    page.bypass_use_system_dns.setChecked(True)
+    assert page.is_dirty()
+    page.apply()
+    _pump(lambda: not page._busy)
+    assert not page.is_dirty()
+    saved = page.result_dns()
+    assert "bypass_use_system_dns" in saved
+    assert saved["bypass_use_system_dns"] is True
+    assert type(saved["bypass_use_system_dns"]) is bool
+
+    # Round-trip through load
+    loaded_cfg = copy.deepcopy(saved)
+    loaded_cfg["bypass_use_system_dns"] = False
+    page.load(loaded_cfg, DEFAULTS["routing"])
+    assert not page.bypass_use_system_dns.isChecked()
+    assert not page.is_dirty()
+
+    loaded_cfg["bypass_use_system_dns"] = True
+    page.load(loaded_cfg, DEFAULTS["routing"])
+    assert page.bypass_use_system_dns.isChecked()
+    assert not page.is_dirty()
+
+    # Revert restores original state
+    page.bypass_use_system_dns.setChecked(False)
+    assert page.is_dirty()
+    page.revert()
+    assert not page.is_dirty()
+    assert page.bypass_use_system_dns.isChecked()
+
+
+def test_bypass_dns_strings_have_persian_translations():
+    from xrayui import i18n_fa
+    expected_strings = [
+        "Resolve bypassed sites with this computer's own DNS",
+        (
+            "Resolves sites in Routing bypass using this computer's own DNS. "
+            "Only applies when Domestic DNS is empty. "
+            "Takes effect on the next connection."
+        ),
+        (
+            "Disabled because Domestic DNS is set, which takes precedence. "
+            "Clear Domestic DNS to use this computer's own DNS for bypassed sites."
+        ),
+        (
+            'Bypassed sites resolve via the tunnel unless Domestic DNS or '
+            '"Resolve bypassed sites with this computer\'s own DNS" is set in DNS settings.'
+        ),
+    ]
+    for text in expected_strings:
+        assert text in i18n_fa.TRANSLATIONS_FA, f"Missing translation for: {text!r}"
+        assert i18n_fa.TRANSLATIONS_FA[text], f"Empty translation for: {text!r}"
+
+
+
+def test_bypass_checkbox_ignores_invalid_domestic_text(qapp, monkeypatch):
+    monkeypatch.setattr(xraycheck, "check_config", lambda *a, **k: None)
+    page = DnsPage(DEFAULTS["dns"], DEFAULTS["routing"])
+    page.domestic.setText("not a server !!")
+    assert page.bypass_use_system_dns.isEnabled()
