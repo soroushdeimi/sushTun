@@ -211,6 +211,15 @@ def parse_scutil_dns(text: str) -> list[str]:
     return []
 
 
+def parse_ipconfig_dns(text: str) -> list[str]:
+    """Addresses from `ipconfig getoption <dev> domain_name_server` (the DHCP lease)."""
+    out: list[str] = []
+    for word in text.split():
+        if _is_ip(word) and word not in out:
+            out.append(word)
+    return out
+
+
 def parse_nameserver_lines(lines: list[str]) -> list[str]:
     out: list[str] = []
     for line in lines:
@@ -229,6 +238,11 @@ def system_dns_servers(alias: str, state: DnsState) -> list[str]:
     try:
         if IS_MAC:
             found = [w for w in state.servers[1:] if _is_ip(w)]
+            if not found:
+                # The lease survives our own 127.0.0.1 hijack (a parked state
+                # after a crash); scutil would only show the hijack.
+                result = proc.run(["ipconfig", "getoption", alias, "domain_name_server"], timeout=5)
+                found = parse_ipconfig_dns(result.stdout) if result.returncode == 0 else []
             if not found:
                 result = proc.run(["scutil", "--dns"], timeout=5)
                 found = parse_scutil_dns(result.stdout) if result.returncode == 0 else []
