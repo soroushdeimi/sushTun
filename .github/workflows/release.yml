@@ -166,7 +166,7 @@ jobs:
     container: fedora:42
     steps:
       - name: Install system packages
-        run: dnf install -y python3.12 rpm-build git gcc binutils patchelf mesa-libEGL mesa-libGL libxkbcommon fontconfig dbus-libs xcb-util-cursor
+        run: dnf install -y python3.12 python3.12-pip rpm-build git gcc binutils patchelf mesa-libEGL mesa-libGL libxkbcommon fontconfig dbus-libs xcb-util-cursor
       - uses: actions/checkout@v4
       - name: Install dependencies
         run: python3.12 -m pip install --upgrade pip -r requirements-dev.txt
