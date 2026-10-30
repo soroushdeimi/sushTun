@@ -218,3 +218,20 @@ def test_bypass_checkbox_ignores_invalid_domestic_text(qapp, monkeypatch):
     page = DnsPage(DEFAULTS["dns"], DEFAULTS["routing"])
     page.domestic.setText("not a server !!")
     assert page.bypass_use_system_dns.isEnabled()
+
+
+def test_bypass_checkbox_value_survives_the_settings_file(qapp, monkeypatch, tmp_path):
+    """UI -> settings.save -> settings.load: the schema merge must not drop the key."""
+    from xrayui.core import settings as app_settings
+    monkeypatch.setattr(xraycheck, "check_config", lambda *a, **k: None)
+    page = DnsPage(DEFAULTS["dns"], DEFAULTS["routing"])
+    page.bypass_use_system_dns.setChecked(True)
+    page.apply()
+    _pump(lambda: not page._busy)
+    saved = page.result_dns()
+    # Only now point the settings file at tmp: build_text needs the real base dir.
+    monkeypatch.setattr(app_settings.paths, "base_dir", lambda: tmp_path)
+    cfg = app_settings.load()
+    cfg["dns"] = saved
+    app_settings.save(cfg)
+    assert app_settings.load()["dns"]["bypass_use_system_dns"] is True
