@@ -345,6 +345,7 @@ class MainWindow(QMainWindow):
         self.chain_results = chain_test.ResultStore()
         self._chain_cancel = None
         self._connected_chain = None
+        self._reconnect_to_active = False
         self.settings = app_settings.load()
         self.throttle = alerts.Throttle()
         self.pool = QThreadPool.globalInstance()
@@ -1105,6 +1106,8 @@ class MainWindow(QMainWindow):
         # other than the one actually connected needs a reconnect.
         if self.conn.is_connected():
             if uid != self.conn.state.profile_uid:
+                if self.conn.state.profile_uid == serverless.ONLY_UID:
+                    self._reconnect_to_active = True
                 self._needs_reconnect(tr("Active server changed"))
             else:
                 self.status_card.hide_reconnect()
@@ -1699,6 +1702,7 @@ class MainWindow(QMainWindow):
         self._run_async(self.conn.cleanup, self._on_conn_done)
 
     def _on_conn_done(self, result=None, error: str | None = None) -> None:
+        self._reconnect_to_active = False
         self._set_busy(False)
         if error:
             # The detail is a raw core exception string: keep it verbatim but
@@ -2009,6 +2013,8 @@ class MainWindow(QMainWindow):
     def _toggle_serverless(self, on: bool) -> None:
         self.settings.setdefault("serverless", {})["enabled"] = on
         app_settings.save(self.settings)
+        if self.conn.state.profile_uid == serverless.ONLY_UID:
+            return  # no server to apply it to
         self._needs_reconnect(tr("Serverless turned on") if on else tr("Serverless turned off"))
 
     def _connect_serverless_only(self) -> None:
@@ -2031,7 +2037,8 @@ class MainWindow(QMainWindow):
     def _reconnect_now(self) -> None:
         if self._busy:
             return
-        if not self.conn.state.chain_uid and self.conn.state.profile_uid == serverless.ONLY_UID:
+        if (not self.conn.state.chain_uid and not self._reconnect_to_active
+                and self.conn.state.profile_uid == serverless.ONLY_UID):
             profile = serverless.only_profile()
         else:
             profile = self._connected_chain if self.conn.state.chain_uid else self._active_profile()

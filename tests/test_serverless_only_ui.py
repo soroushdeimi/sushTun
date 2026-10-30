@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import os
-from types import SimpleNamespace
 
 import pytest
 
@@ -19,6 +18,7 @@ from xrayui import paths  # noqa: E402
 from xrayui.core import serverless  # noqa: E402
 from xrayui.core import settings as app_settings  # noqa: E402
 from xrayui.core.geo_exit import ExitInfo  # noqa: E402
+from xrayui.core.profiles import Profile  # noqa: E402
 from xrayui.i18n import set_language, tr  # noqa: E402
 from xrayui.ui import main_window as mw  # noqa: E402
 from xrayui.ui.connection_header import ConnectionHeader  # noqa: E402
@@ -82,19 +82,36 @@ def asked(monkeypatch):
     return install
 
 
-def only_state(win, monkeypatch):
-    # State exposes uids read-only; stand in for a live Serverless only tunnel.
-    monkeypatch.setattr(win.conn, "state", SimpleNamespace(
-        profile_uid=serverless.ONLY_UID, chain_uid="", is_connected=lambda: False))
+class _OnlyState:
+    """The real state with the uids of a live Serverless only tunnel."""
+
+    profile_uid = serverless.ONLY_UID
+    chain_uid = ""
+
+    def __init__(self, real, connected):
+        self._real = real
+        self._connected = connected
+
+    def is_connected(self):
+        return self._connected
+
+    def __getattr__(self, name):
+        return getattr(self._real, name)
 
 
-def test_header_entry_sits_before_restore_and_follows_the_state(qapp):
+def only_state(win, monkeypatch, connected=False):
+    # State exposes uids read-only, so wrap it instead of assigning.
+    monkeypatch.setattr(win.conn, "state", _OnlyState(win.conn.state, connected))
+
+
+def test_header_entry_sits_after_restore_and_follows_the_state(qapp):
     header = ConnectionHeader()
     actions = header.btn_more.menu().actions()
     act = header.act_serverless_only
     assert act.text() == tr("Connect with Serverless only")
     assert act.toolTip()
-    assert actions.index(act) < [a.text() for a in actions].index(tr("Restore network"))
+    assert [a.text() for a in actions].index(tr("Restore network")) == 0
+    assert actions.index(act) == 1
     seen: list[bool] = []
     header.serverlessOnlyRequested.connect(lambda: seen.append(True))
     act.trigger()
@@ -173,3 +190,38 @@ def test_exit_detected_stores_nothing_for_the_mode(win, monkeypatch):
     assert [p.uid for p in win.store.list()] == before
     assert win.store.get(serverless.ONLY_UID) is None
     assert win.results.load() == results
+
+
+def test_picking_a_server_in_only_mode_reconnects_to_it(win, monkeypatch):
+    prompts: list[str] = []
+    monkeypatch.setattr(win.status_card, "show_reconnect", prompts.append)
+    picked = Profile(name="picked", address="example.com")
+    win.store.save(picked)
+    only_state(win, monkeypatch, connected=True)
+    order: list = []
+    monkeypatch.setattr(win.conn, "disconnect", lambda: order.append("disconnect"))
+    monkeypatch.setattr(win.conn, "connect", lambda p: order.append(p))
+    monkeypatch.setattr(win, "_on_conn_done", lambda *a, **k: None)
+    win._set_active(picked.uid)
+    assert len(prompts) == 1
+    assert tr("Active server changed") in prompts[0]
+    win._reconnect_now()
+    assert order[0] == "disconnect"
+    assert order[1].uid == picked.uid
+    assert not serverless.is_only(order[1])
+
+
+def test_toggling_serverless_in_only_mode_saves_without_a_prompt(win, saves, monkeypatch):
+    prompts: list[str] = []
+    monkeypatch.setattr(win.status_card, "show_reconnect", prompts.append)
+    only_state(win, monkeypatch, connected=True)
+    win.status_card.btn_serverless.click()
+    assert win.settings["serverless"]["enabled"] is True
+    assert saves and saves[-1]["enabled"] is True
+    assert prompts == []
+
+
+def test_finishing_a_connect_clears_the_reconnect_intent(win):
+    win._reconnect_to_active = True
+    win._on_conn_done()
+    assert win._reconnect_to_active is False
