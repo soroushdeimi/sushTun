@@ -89,6 +89,18 @@ TRANSLATIONS_FA: dict[str, str] = {
     "Static overrides (domain = address):": "بازنویسی‌های ثابت (دامنه = آدرس):",
     "Domestic DNS (for sites that go direct):": "DNS داخلی (برای سایت‌هایی که مستقیم می‌روند):",
     "Off": "خاموش",
+    "Resolve bypassed sites with this computer's own DNS":
+        "ترجمه سایت‌های مستقیم با DNS خود این کامپیوتر",
+    "Resolves sites in Routing bypass using this computer's own DNS. "
+    "Only applies when Domestic DNS is empty. "
+    "Takes effect on the next connection.":
+        "سایت‌های موجود در بخش دامنه‌های مستقیم را با DNS خود این کامپیوتر ترجمه می‌کند. "
+        "فقط وقتی اعمال می‌شود که DNS داخلی خالی باشد. "
+        "در اتصال بعدی اعمال می‌شود.",
+    "Disabled because Domestic DNS is set, which takes precedence. "
+    "Clear Domestic DNS to use this computer's own DNS for bypassed sites.":
+        "غیرفعال است چون DNS داخلی تنظیم شده و اولویت دارد. "
+        "برای استفاده از DNS خود این کامپیوتر برای سایت‌های مستقیم، DNS داخلی را پاک کنید.",
     "Resolve other sites through the tunnel": "پرس‌وجوی DNS سایر سایت‌ها از طریق تونل",
     "DNS queries for other sites go through the tunnel; "
     "the proxy and any resolver hostname still resolve directly.":
@@ -172,8 +184,10 @@ TRANSLATIONS_FA: dict[str, str] = {
     "Russia sites && IPs direct": "سایت‌ها و آی‌پی‌های روسیه مستقیم",
     "China sites && IPs direct": "سایت‌ها و آی‌پی‌های چین مستقیم",
     "Bypass domains (one per line — direct):": "دامنه‌های مستقیم (هر خط یک مورد):",
-    "Bypassed sites resolve via the tunnel unless Domestic DNS is set in DNS settings.":
-        "سایت‌های مستقیم از طریق DNS تونل ترجمه می‌شوند مگر اینکه «DNS داخلی» در تنظیمات DNS تنظیم شده باشد.",
+    'Bypassed sites resolve via the tunnel unless Domestic DNS or '
+    '"Resolve bypassed sites with this computer\'s own DNS" is set in DNS settings.':
+        "سایت‌های مستقیم از طریق DNS تونل ترجمه می‌شوند مگر اینکه «DNS داخلی» یا "
+        "«ترجمه سایت‌های مستقیم با DNS خود این کامپیوتر» در تنظیمات DNS تنظیم شده باشد.",
     "Bypass IPs / CIDRs (one per line — direct):": "IPها / CIDR مستقیم (هر خط یک مورد):",
     "Force through tunnel (one per line — proxy):": "اجبار به تونل (هر خط یک مورد):",
     "Empty": "خالی",

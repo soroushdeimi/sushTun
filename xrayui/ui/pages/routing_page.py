@@ -411,7 +411,8 @@ class RoutingPage(QWidget):
         layout.addWidget(self.domains)
 
         bypass_hint = QLabel(tr(
-            "Bypassed sites resolve via the tunnel unless Domestic DNS is set in DNS settings."))
+            'Bypassed sites resolve via the tunnel unless Domestic DNS or '
+            '"Resolve bypassed sites with this computer\'s own DNS" is set in DNS settings.'))
         bypass_hint.setObjectName("Muted")
         bypass_hint.setWordWrap(True)
         layout.addWidget(bypass_hint)

@@ -39,6 +39,8 @@ DEFAULTS: dict = {
         "raw_override": "",
         # Company / internal networks: `domain = DNS server IP` lines (dns.py).
         "internal": [],
+        # Resolve direct domains through system DNS when domestic_servers is empty.
+        "bypass_use_system_dns": False,
     },
     "routing": {
         # The flat toggles below are "Simple" mode -- unreshaped, so no

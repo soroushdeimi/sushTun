@@ -134,6 +134,7 @@ def build_text(
     exits_cfg: dict | None = None,
     forwards: list[forwards_mod.Forward] | None = None,
     tun_name: str | None = None,
+    system_dns: list[str] | None = None,
 ) -> str:
     tmpl_path = template_path or paths.config_template()
     cfg = json.loads(tmpl_path.read_text(encoding="utf-8"))
@@ -159,7 +160,7 @@ def build_text(
         direct_domains = routing_mod.direct_domains(routing_rules or [])
         dns_block, dns_routing_rules = dns_mod.build_dns_and_rules(
             dns_cfg, direct_domains, plan.entry.address if plan else profile.address,
-            server_ip=server_ip)
+            server_ip=server_ip, system_dns=system_dns)
         if any(r.get("outboundTag") == dns_mod.INTERNAL_OUTBOUND for r in dns_routing_rules):
             # No interface binding: the OS must route these into the company VPN.
             cfg.setdefault("outbounds", []).append(
@@ -231,6 +232,7 @@ def build(
     exits_cfg: dict | None = None,
     forwards: list[forwards_mod.Forward] | None = None,
     tun_name: str | None = None,
+    system_dns: list[str] | None = None,
 ) -> Path:
     out = paths.runtime_config()
     # Forward by keyword: a positional forward silently mis-binds the next time
@@ -253,6 +255,7 @@ def build(
             exits_cfg=exits_cfg,
             forwards=forwards,
             tun_name=tun_name,
+            system_dns=system_dns,
         ),
         encoding="utf-8",
     )
