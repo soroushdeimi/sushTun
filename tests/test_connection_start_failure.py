@@ -54,3 +54,31 @@ def test_launch_oserror_cleans_up_each_call_site(monkeypatch, tmp_path, entry):
     assert "wait_for_tun" not in calls and "add_default_routes" not in calls
     assert not runtime.exists()
     assert not conn.state.is_connected()
+
+
+def test_connect_spawn_failure_leaves_readable_log_line(monkeypatch, tmp_path):
+    from test_tun_routing import _iface, _stub_connect
+
+    conn, _calls = _stub_connect(monkeypatch, tmp_path)
+    conn.xray = connection.xray_mod.XrayProcess()
+    monkeypatch.setattr(connection.network, "remove_routes", lambda *a: None)
+    log_file = tmp_path / "xray.log"
+    monkeypatch.setattr(paths, "log_file", lambda: log_file)
+    monkeypatch.setattr(paths, "base_dir", lambda: tmp_path)
+    monkeypatch.setattr(paths, "asset_dir", lambda: tmp_path)
+    monkeypatch.setattr(connection.xray_mod, "_kill_all", lambda: None)
+
+    def fail_popen(*a, **k):
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(connection.xray_mod.subprocess, "Popen", fail_popen)
+
+    server = "203.0.113.10"
+    with pytest.raises(connection.ConnectError, match="Could not start Xray"):
+        conn._connect_generic(SimpleNamespace(uid="p1"), _iface(), server, DnsState())
+
+    assert log_file.exists()
+    assert "Failed to start Xray: [Errno 13] Permission denied" in log_file.read_text(encoding="utf-8")
+    assert connection._last_log_line() == "Failed to start Xray: [Errno 13] Permission denied"
+
+

@@ -92,23 +92,57 @@ class XrayProcess:
         # Point Xray at the bundled geo data explicitly: without it a frozen
         # build can fail to resolve geoip:/geosite: rules and refuse to start.
         env = proc.child_env({"XRAY_LOCATION_ASSET": str(paths.asset_dir())})
-        self._proc = subprocess.Popen(
-            [str(paths.xray_exe()), "run", "-c", str(config_path)],
-            stdout=self._log,
-            stderr=subprocess.STDOUT,
-            cwd=str(paths.base_dir()),
-            env=env,
-            creationflags=proc.CREATE_NO_WINDOW,
-            startupinfo=proc._startupinfo(),
-        )
+        try:
+            self._proc = subprocess.Popen(
+                [str(paths.xray_exe()), "run", "-c", str(config_path)],
+                stdout=self._log,
+                stderr=subprocess.STDOUT,
+                cwd=str(paths.base_dir()),
+                env=env,
+                creationflags=proc.CREATE_NO_WINDOW,
+                startupinfo=proc._startupinfo(),
+            )
+        except OSError as exc:
+            # Leave a readable reason in the log so failure doesn't show "no log output".
+            try:
+                self._log.write(f"Failed to start Xray: {exc}\n")
+                self._log.flush()
+            except OSError:
+                pass
+            raise
 
         self._stopped_clean = False
 
+    def _record_exit(self) -> None:
+        """Record the process exit code if it exited with no log output."""
+        if self._proc is not None and self._log is not None:
+            rc = self._proc.poll()
+            if rc is not None:
+                try:
+                    self._log.flush()
+                except OSError:
+                    pass
+                try:
+                    log_path = paths.log_file()
+                    if not log_path.exists() or not log_path.read_text(encoding="utf-8", errors="replace").strip():
+                        msg = (f"Xray process exited with code {rc}\n" if rc >= 0
+                               else f"Xray process killed by signal {-rc}\n")
+                        self._log.write(msg)
+                        self._log.flush()
+                except OSError:
+                    pass
+
     def is_running(self) -> bool:
-        return self._proc is not None and self._proc.poll() is None
+        if self._proc is None:
+            return False
+        if self._proc.poll() is None:
+            return True
+        self._record_exit()
+        return False
 
     def stop(self, *, sweep_orphans: bool = True) -> None:
         try:
+            self._record_exit()
             if self._proc is not None:
                 if self._proc.poll() is None:
                     if IS_WIN:
