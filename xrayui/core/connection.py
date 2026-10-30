@@ -89,6 +89,15 @@ def _system_dns(dns_cfg: dict, alias: str, state) -> list[str] | None:
     return found or None
 
 
+def _bootstrap_dns(alias: str, state) -> list[str] | None:
+    """Resolvers for Serverless only's one plain lookup; never breaks connect."""
+    try:
+        found = network.system_dns_servers(alias, state)
+    except Exception:  # an optional lookup must never break connect
+        return None
+    return found or None
+
+
 class Connection:
     def __init__(self, on_step: Callable[[str], None] | None = None) -> None:
         self._log = on_step or (lambda _m: None)
@@ -113,12 +122,14 @@ class Connection:
             except ValueError as exc:
                 raise ConnectError(str(exc)) from exc
             profile = plan.entry
-        if serverless.enabled(app_settings.load().get("serverless")):
+        only = serverless.is_only(profile)
+        if not only and serverless.enabled(app_settings.load().get("serverless")):
             message = serverless.problem(profile)
             if message:
                 raise ConnectError(message)
             self._log("Serverless: the first server is dialed through the local fragmenting outbound.")
-        if not profile.address or (not profile.id and profile.protocol not in ("http", "socks")):
+        if not only and (not profile.address
+                         or (not profile.id and profile.protocol not in ("http", "socks"))):
             raise ConnectError("profile is missing address or id")
         if profile.protocol == "wireguard" and not profile.pbk:
             raise ConnectError("WireGuard profile is missing the peer public key")
@@ -141,11 +152,15 @@ class Connection:
                 "disconnect it first; two full tunnels cannot share the default route"
             )
 
-        try:
-            server_ip = _resolve(profile.address)
-        except OSError as exc:
-            # A dead DNS or an IPv6-only name is a bad address, not a crash.
-            raise ConnectError(f"could not resolve {profile.address}: {exc}") from exc
+        if only:
+            server_ip = ""
+            self._log("Serverless only: no server; sites see this network's own IP.")
+        else:
+            try:
+                server_ip = _resolve(profile.address)
+            except OSError as exc:
+                # A dead DNS or an IPv6-only name is a bad address, not a crash.
+                raise ConnectError(f"could not resolve {profile.address}: {exc}") from exc
         self._log("Backing up DNS...")
         parked = self.state.pending().get(iface.alias)
         dns = parked.dns if parked else network.backup_dns(iface.alias)
@@ -247,6 +262,7 @@ class Connection:
         forwards = self._forwards(cfgs)
         dns_cfg = cfgs.get("dns") or {}
         system_dns = _system_dns(dns_cfg, iface.alias, dns)
+        bootstrap = _bootstrap_dns(iface.alias, dns) if serverless.is_only(profile) else None
 
         def build(exits, forwards):
             return render.build(profile, iface.alias, routing_rules=rules,
@@ -256,7 +272,8 @@ class Connection:
                                 server_ip=server_ip, core_cfg=cfgs.get("core"),
                                 exits=exits, exits_cfg=cfgs.get("exits"),
                                 forwards=forwards, system_dns=system_dns,
-                                serverless_cfg=cfgs.get("serverless"))
+                                serverless_cfg=cfgs.get("serverless"),
+                                serverless_bootstrap=bootstrap)
 
         cfg = build(exits, forwards)
         self._log_lan_share(cfgs.get("core") or {}, iface)
@@ -266,7 +283,8 @@ class Connection:
         # Pin the server route first: Xray dials the moment it starts, and
         # until this exists that dial races the default route out of the box.
         try:
-            network.add_host_route(server_ip, iface.gateway)
+            if server_ip:
+                network.add_host_route(server_ip, iface.gateway)
         except (OSError, RuntimeError) as exc:
             self._fail_connect(server_ip, f"Could not pin the server route: {exc}")
         self._start_xray(cfg, server_ip)
@@ -454,6 +472,7 @@ class Connection:
         forwards = self._forwards(cfgs)
         dns_cfg = cfgs.get("dns") or {}
         system_dns = _system_dns(dns_cfg, iface.alias, dns)
+        bootstrap = _bootstrap_dns(iface.alias, dns) if serverless.is_only(profile) else None
         native = True
 
         def build(exits, forwards):
@@ -465,14 +484,16 @@ class Connection:
                                 core_cfg=core_cfg, exits=exits,
                                 exits_cfg=cfgs.get("exits"), forwards=forwards,
                                 system_dns=system_dns,
-                                serverless_cfg=cfgs.get("serverless"))
+                                serverless_cfg=cfgs.get("serverless"),
+                                serverless_bootstrap=bootstrap)
 
         cfg = build(exits, forwards)
         self._log_lan_share(core_cfg, iface)
         self._log("Starting Xray...")
         network.remove_routes(server_ip)
         t2s.kill_stale()  # a crashed bridge session would still hold the device
-        network.add_host_route(server_ip, iface.gateway)
+        if server_ip:
+            network.add_host_route(server_ip, iface.gateway)
         if network.mac_ensure_scoped_default(iface.alias, iface.gateway):
             self._log(f"Restored the missing default route scoped to {iface.alias}.")
         self._start_xray(cfg, server_ip)

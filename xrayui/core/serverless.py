@@ -110,3 +110,65 @@ def only_profile() -> Profile:
 
 def is_only(profile) -> bool:
     return isinstance(profile, Profile) and profile.protocol == ONLY_PROTOCOL
+
+# DoH is blocked by name and by address, but the filter leaves the addresses
+# of DOH_FRONT open. Pointing the DoH name there, with the handshake going out
+# through the fragmenting "proxy", makes the resolver reachable.
+DOH_URL = "https://cloudflare-dns.com/dns-query"
+DOH_HOST = "cloudflare-dns.com"
+DOH_FRONT = "challenges.cloudflare.com"
+FALLBACK_BOOTSTRAP = "1.1.1.1"
+# What the filter answers blocked names with; a connection to one just hangs.
+SINKHOLES = ["10.10.34.0/24", "2001:4188:2:600::/64"]
+# Dropped so the DNS block can only ever use our two servers.
+_DNS_KEYS = ("servers", "queryStrategy", "disableFallback", "tag", "clientIp")
+
+
+def only_outbound() -> dict:
+    out = outbound()
+    out["tag"] = "proxy"
+    return out
+
+
+def apply_only_outbound(cfg: dict) -> None:
+    """Make the first outbound ("proxy") the fragmenting direct one, so every
+    rule that sends traffic to "proxy" now means "direct, fragmented"."""
+    outbounds_list = cfg.setdefault("outbounds", [])
+    for i, out in enumerate(outbounds_list):
+        if out.get("tag") == "proxy":
+            outbounds_list[i] = only_outbound()
+            return
+    outbounds_list.insert(0, only_outbound())
+
+
+def _bootstrap_ip(bootstrap: list[str] | None) -> str:
+    for item in bootstrap or []:
+        try:
+            ip = ipaddress.ip_address(item)
+        except ValueError:
+            continue
+        if not ip.is_loopback:
+            return item
+    return FALLBACK_BOOTSTRAP
+
+
+def apply_only_network(cfg: dict, bootstrap: list[str] | None) -> None:
+    """DNS over the fragmenting outbound, plus the rules that keep a filtered
+    answer or a QUIC attempt from hanging a connection."""
+    dns = cfg.setdefault("dns", {})
+    hosts = dict(dns.get("hosts") or {})
+    for key in _DNS_KEYS:
+        dns.pop(key, None)
+    hosts[DOH_HOST] = DOH_FRONT
+    # DOH_FRONT itself goes to the system resolver (plain UDP through the NIC).
+    # The OS resolver points at Xray while connected, so it cannot be localhost.
+    dns["servers"] = [DOH_URL, {"address": _bootstrap_ip(bootstrap),
+                                "domains": [f"full:{DOH_FRONT}"], "skipFallback": True}]
+    dns["hosts"] = hosts
+    dns["queryStrategy"] = "UseIPv4"
+    rules = cfg.setdefault("routing", {}).setdefault("rules", [])
+    # QUIC is blocked so browsers fall back to TCP+TLS, where fragmenting works.
+    rules[:0] = [
+        {"type": "field", "ip": list(SINKHOLES), "outboundTag": "block"},
+        {"type": "field", "network": "udp", "port": "443", "outboundTag": "block"},
+    ]

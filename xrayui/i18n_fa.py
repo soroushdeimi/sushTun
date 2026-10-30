@@ -1544,6 +1544,8 @@ TRANSLATIONS_FA: dict[str, str] = {
     "Backing up DNS...": "در حال پشتیبان‌گیری از DNS...",
     "Building runtime config...": "در حال ساخت پیکربندی اجرایی...",
     "Starting Xray...": "در حال اجرای Xray...",
+    "Serverless: the first server is dialed through the local fragmenting outbound.": "سرورلس: اولین سرور از مسیر خروجی تکه‌تکه‌کنندهٔ محلی وصل می‌شود.",
+    "Serverless only: no server; sites see this network's own IP.": "فقط سرورلس: بدون سرور؛ سایت‌ها IP همین شبکه را می‌بینند.",
     "Waiting for TUN adapter...": "در انتظار آداپتور TUN...",
     "Configuring tunnel adapter...": "در حال پیکربندی آداپتور تونل...",
     "Routing DNS and traffic through the tunnel...": "در حال مسیریابی DNS و ترافیک از طریق تونل...",
