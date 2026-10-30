@@ -16,16 +16,14 @@ def _load():
     return mod
 
 
-def test_files_section_lists_dirs_files_and_symlinks(tmp_path):
+def test_files_section_owns_the_install_dir_and_lists_loose_files_only(tmp_path):
     rpm = _load()
-    (tmp_path / "opt/sushtun").mkdir(parents=True)
-    (tmp_path / "opt/sushtun/sushtun").write_text("x")
+    (tmp_path / "opt/sushtun/sub dir").mkdir(parents=True)
+    (tmp_path / "opt/sushtun/sub dir/Lorem ipsum 100%.txt").write_text("x")
     (tmp_path / "usr/bin").mkdir(parents=True)
     (tmp_path / "usr/bin/sushtun").symlink_to("/opt/sushtun/sushtun")
     lines = rpm.files_section(tmp_path).splitlines()
-    assert "%dir /opt/sushtun" in lines
-    assert "/opt/sushtun/sushtun" in lines
-    assert "/usr/bin/sushtun" in lines and "%dir /usr/bin/sushtun" not in lines
+    assert lines == ['"/opt/sushtun"', '"/usr/bin/sushtun"']
 
 
 def test_spec_carries_version_and_cleans_the_polkit_rule_only_on_removal(tmp_path):
@@ -35,4 +33,4 @@ def test_spec_carries_version_and_cleans_the_polkit_rule_only_on_removal(tmp_pat
     assert "Version:        1.2.3" in text
     assert "@" not in text.replace("soroushdeimi@", "")
     assert '[ "$1" = 0 ]' in text
-    assert "%dir /opt" in text
+    assert '"/opt/sushtun"' in text

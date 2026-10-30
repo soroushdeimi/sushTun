@@ -61,14 +61,15 @@ fi
 
 
 def files_section(root: Path) -> str:
-    lines = []
-    for p in sorted(root.rglob("*")):
-        rel = "/" + p.relative_to(root).as_posix()
-        if p.is_dir() and not p.is_symlink():
-            lines.append(f"%dir {rel}")
-        else:
-            lines.append(rel)
-    return "\n".join(lines)
+    """The install dir as one recursive entry (bundled files have spaces and
+    other characters a per-file %files line would trip on), plus the loose
+    files elsewhere. System directories like /usr/bin belong to other packages."""
+    own = build_deb.PREFIX
+    loose = [p for p in sorted(root.rglob("*"))
+             if not (p.is_dir() and not p.is_symlink())
+             and not ("/" + p.relative_to(root).as_posix()).startswith(own + "/")]
+    lines = [own] + ["/" + p.relative_to(root).as_posix() for p in loose]
+    return "\n".join(f'"{line}"'.replace("%", "%%") for line in lines)
 
 
 def spec_text(root: Path, version: str) -> str:
