@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.12.0
+
+### New
+- **Serverless.** A new button next to Connect sends the TLS handshake to your first server (or the first link of a chain) out in small pieces, so filtering that reads the server name from it misses it. And in the header's ⋯ menu, **Connect with Serverless only** connects with no server at all: sites are reached straight from your own network with name (SNI) filtering and DNS poisoning dodged. Your IP stays Iranian, so services that block Iran still won't open. Both were in the 0.12.0 pre-releases; they are now on for everyone.
+- **Newer Xray core.** Releases now ship Xray 26.10.31.
+
+### Fixed
+- **Serverless only no longer goes dead right after connecting:** DNS now runs over two separate connections at once and takes whichever answers first, so one stalled handshake can no longer leave every site without an address.
+
+<!-- fa -->
+
+### چی اضافه شده
+- **سرورلس.** یه دکمه‌ی جدید کنار Connect، دست‌دادن TLS رو به اولین سرورت (یا اولین حلقه‌ی زنجیره) تیکه‌تیکه می‌فرسته، برای همین فیلترینگی که اسم سرور رو ازش می‌خونه نمی‌بینتش. تو منوی ⋯ بالای صفحه هم **اتصال فقط با سرورلس** هست: بدون هیچ سروری وصل شو؛ سایت‌ها مستقیم از اینترنت خودت باز می‌شن و از فیلترینگ اسم (SNI) و DNS مسموم رد می‌شن. IPت ایرانی می‌مونه، پس سرویس‌هایی که ایران رو تحریم کردن باز نمی‌شن. هر دو تو پیش‌انتشارهای ۰.۱۲.۰ بودن و حالا برای همه فعالن.
+- **هسته‌ی Xray جدیدتر.** ریلیزها از این به بعد Xray نسخه‌ی 26.10.31 رو همراهشون دارن.
+
+### چی درست شده
+- **«فقط سرورلس» دیگه بعد از وصل شدن از کار نمی‌افته:** DNS حالا هم‌زمان از دو اتصال جدا می‌ره و جواب هر کدوم زودتر برسه استفاده می‌شه، پس یه دست‌دادن گیرکرده دیگه نمی‌ذاره هیچ سایتی آدرس نگیره.
+
 ## v0.12.0b2
 
 Pre-release: for testing. The in-app updater does not offer it; download it from this page.
