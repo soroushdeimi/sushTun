@@ -62,6 +62,14 @@ jobs:
         run: pyinstaller tools/build.spec
         env:
           SUSHTUN_ONEDIR: "1"
+      - name: Verify MSVC runtime DLLs
+        shell: pwsh
+        run: |
+          $found = Get-ChildItem -Recurse dist/sushtun -Filter msvcp140.dll
+          $found | ForEach-Object { $_.FullName }
+          Get-ChildItem -Recurse dist/sushtun -Filter vcruntime140*.dll | ForEach-Object { $_.FullName }
+          if (-not $found) { Write-Error "msvcp140.dll is missing from dist/sushtun"; exit 1 }
+          if (-not (Get-ChildItem -Recurse dist/sushtun -Filter vcruntime140.dll)) { Write-Error "vcruntime140.dll is missing from dist/sushtun"; exit 1 }
       - name: Read version
         id: version
         shell: bash

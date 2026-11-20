@@ -247,6 +247,14 @@ does not reach an app running as administrator.
 | Linux   | Uses Xray's native TUN inbound, the same model as Windows. Connect path is experimental and being hardened. |
 | macOS   | Tested on Apple Silicon (macOS 26). Uses Xray's own TUN inbound on a `utun` device, with a [tun2socks](https://github.com/xjasonlyu/tun2socks) bridge as the fallback, and takes over with four `/2` routes so it can run alongside another VPN. Ships as an Apple Silicon `.dmg`. No Wi-Fi hotspot: macOS cannot share Wi-Fi over Wi-Fi, so share the local proxy instead. |
 
+## Windows: the app closes right after start
+
+If the app crashes at start on a PC running McAfee Endpoint Security, update to
+the newest build first: it now loads its own C++ runtime before anything else,
+which fixes the crash. On an older build, add your install folder (the default
+is `C:\Program Files\sushTun\`) to the exclusions of McAfee — or pause Threat
+Prevention / AMSI scanning once — and start the app again.
+
 ## Building from source
 
 ```bash

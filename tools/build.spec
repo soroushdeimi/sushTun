@@ -123,6 +123,16 @@ def _is_unused_qt_entry(dest: str, src: str) -> bool:
 a.binaries = [e for e in a.binaries if not _is_unused_qt_entry(e[0], e[1])]
 a.datas = [e for e in a.datas if not _is_unused_qt_entry(e[0], e[1])]
 
+# A security product can inject its own msvcp140.dll into the process, so ship ours.
+if IS_WIN:
+    _system32 = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32"
+    for _name in ("vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll",
+                  "msvcp140_1.dll", "msvcp140_2.dll", "concrt140.dll"):
+        _path = _system32 / _name
+        if _path.is_file() and not any(
+                e[0].lower() == _name.lower() for e in a.binaries):
+            a.binaries.append((_name, str(_path), "BINARY"))
+
 pyz = PYZ(a.pure)
 
 if ONEDIR:
