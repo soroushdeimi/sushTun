@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.12.1
+
+### Fixed
+- **Windows: the app no longer crashes at start on PCs running McAfee Endpoint Security.** It now loads its own C++ runtime first, so the copy McAfee injects into the process can no longer take its place.
+
+<!-- fa -->
+
+### چی درست شده
+- **ویندوز: برنامه روی سیستم‌هایی که McAfee Endpoint Security روشنه دیگه موقع استارت کرش نمی‌کنه.** حالا اول از همه runtime C++ خودش رو لود می‌کنه، برای همین کپی‌ای که McAfee تو پروسه می‌ندازه دیگه جاش رو نمی‌گیره.
+
 ## v0.12.0
 
 ### New

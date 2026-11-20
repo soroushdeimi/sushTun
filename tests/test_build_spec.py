@@ -43,6 +43,31 @@ def test_build_spec_drops_unused_qt_but_keeps_what_the_app_loads():
     assert "libqpdf" in spec
 
 
+def test_build_spec_ships_the_msvc_runtime_dlls():
+    spec = (ROOT / "tools" / "build.spec").read_text(encoding="utf-8")
+    for name in ("vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll",
+                 "msvcp140_1.dll", "msvcp140_2.dll", "concrt140.dll"):
+        assert f'"{name}"' in spec, f"build.spec does not ship {name}"
+    assert '"BINARY"' in spec
+    # The DLLs must be added after the Qt filter, when the binaries are final,
+    # and only on Windows.
+    filter_line = spec.index("a.datas = [e for e in a.datas if not _is_unused_qt_entry")
+    # The DLLs must be added after the Qt filter, when the binaries are final,
+    # and only on Windows.
+    dlls = spec.index('"msvcp140.dll"')
+    assert filter_line < dlls
+    assert spec.index("if IS_WIN:", filter_line) < dlls
+
+
+def test_release_yml_verifies_the_msvc_runtime_dlls():
+    yml = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    job = yml[yml.index("windows-installer:"):]
+    job = job[:job.index("macos-app:")]
+    assert "Verify MSVC runtime DLLs" in job
+    assert "msvcp140.dll" in job
+    assert "exit 1" in job
+
+
 def _filter_from_spec():
     """The spec's own filter function, exec'd from its marked block so this
     test exercises the real matcher, not a copy of it."""
