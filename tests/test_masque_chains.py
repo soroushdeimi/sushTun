@@ -27,6 +27,11 @@ def _profile(**over) -> Profile:
     base = dict(name="p", protocol="vless", address="a.example.com", port=443,
                 id="11111111-1111-1111-1111-111111111111", encryption="none",
                 network="tcp", security="tls", sni="a.example.com")
+    # MASQUE is TLS-only over a single carrier with basic auth (both-or-
+    # neither); default those so a bare _profile(protocol="masque") is a
+    # valid profile, then let explicit overrides (incl. negative cases) win.
+    if over.get("protocol") == "masque":
+        base.update(network="masque", security="tls", id="", username="")
     base.update(over)
     return Profile(**base)
 
@@ -62,9 +67,10 @@ def test_masque_profile_without_id_passes_id_check(monkeypatch):
     # profile stays valid under the stricter shared builder.
     conn = _conn(monkeypatch)
     p = Profile(protocol="masque", address="1.2.3.4", port=443,
-                security="tls",
+                network="masque", security="tls",
                 masque_private_key="AQID", masque_public_key="BAUG",
                 masque_addresses="10.0.0.1/32")
+    assert p.is_valid()
     with pytest.raises(_Halt):
         conn.connect(p)
 
@@ -98,7 +104,7 @@ def test_non_masque_protocol_without_id_still_rejected(monkeypatch):
 
 def _masque_entry(**over) -> Profile:
     base = dict(uid="m1", protocol="masque", address="1.2.3.4", port=443,
-                security="tls", username="user", id="pass",
+                network="masque", security="tls", username="user", id="pass",
                 masque_http_version="h2")
     base.update(over)
     return Profile(**base)
@@ -114,6 +120,7 @@ def _vless(**over) -> Profile:
 def test_masque_accepted_as_h2_entry():
     entry = _masque_entry()
     exit_ = _vless()
+    assert entry.is_valid() and exit_.is_valid()
     chain = chains.Chain(uid="c1", hops=["m1", "v1"])
     assert chains.validate(chain, {p.uid: p for p in (entry, exit_)}) == []
 
@@ -157,6 +164,7 @@ def test_masque_h2_chain_renders_through_shared_model():
     # MASQUE entry is built by outbounds.build and the exit dials through it.
     entry = _masque_entry()
     exit_ = _vless()
+    assert entry.is_valid() and exit_.is_valid()
     plan = chains.resolve(chains.Chain(uid="c1", name="c", hops=["m1", "v1"]),
                           {p.uid: p for p in (entry, exit_)})
     out = json.loads(render.build_text(plan, "lo", TEMPLATE, include_tun=False))
