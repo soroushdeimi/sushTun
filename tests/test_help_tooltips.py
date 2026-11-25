@@ -315,7 +315,7 @@ def test_every_settings_page_and_option_is_explained(qapp):
     try:
         assert list(win._pages) == [
             "general", "anti-filter", "local-proxy", "geo-data", "hotspot",
-            "startup", "exits", "forwards", "backup", "language"]
+            "startup", "security", "exits", "forwards", "backup", "language"]
         for key, page in win._pages.items():
             assert _missing(page) == [], key
         assert _missing(win._sidebar) == []

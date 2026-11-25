@@ -47,6 +47,7 @@ from ..i18n import ltr, tr
 from .help import set_help
 from .icons import icon
 from .mac import InsetGroup, Switch
+from .security_page import SecurityPage
 from .titlebar import TrafficLight, _LightGroup
 from .workers import Worker
 
@@ -66,6 +67,7 @@ TOPICS = [
     ("geo-data", "Geo data", "routing", "#0a84ff"),
     ("hotspot", "Hotspot", "hotspot", "#34c759"),
     ("startup", "Startup", "arrow-up", "#ff9f0a"),
+    ("security", "Security", "shield-check", "#ff375f"),
     ("exits", "Multi-exit port", "subscriptions", "#5e5ce6"),
     ("forwards", "Port forwarding", "activity", "#ff9f0a"),
     ("backup", "Backup", "archive", "#64d2ff"),
@@ -101,6 +103,10 @@ def _topic_help(key: str) -> tuple[str, str]:
                     tr("Have sushTun waiting in the menu bar before you open a browser."))
         return (tr("What happens when you turn on your computer."),
                 tr("Have sushTun waiting in the tray before you open a browser."))
+    if key == "security":
+        return (tr("Keep your real IP away from AI sites: the kill switch, strict "
+                   "mode, the leak check and the OS firewall."),
+                tr("Worried your real IP is leaking? Start here."))
     if key == "exits":
         return (tr("One local port where each username leaves through a different "
                    "server."),
@@ -226,6 +232,12 @@ class _GeneralPage(QWidget):
     updateAvailable = Signal(object)
     tourRequested = Signal()
 
+    # The kill switch moved to the Security page; this accessor keeps the old
+    # location working for anything that still reaches it here.
+    @property
+    def killswitch(self):
+        return self._security_page.killswitch
+
     def __init__(self, settings: dict, parent=None) -> None:
         super().__init__(parent)
         self._settings = settings
@@ -291,19 +303,6 @@ class _GeneralPage(QWidget):
                  tr("How much detail Xray writes to the log. Warning stays quiet; "
                     "debug is very chatty."),
                  tr("Chasing a problem? Raise it for a while, then put it back."))
-
-        self.killswitch = Switch()
-        self.killswitch.setChecked(
-            bool((self._settings.get("killswitch") or {}).get("enabled")))
-        group.add_row(tr("Block the internet if the VPN drops (kill switch)"),
-                      self.killswitch,
-                      tr("Applies from the next connect."))
-        set_help(self.killswitch,
-                 tr("If the tunnel dies while you are connected, your traffic is "
-                    "blocked instead of falling back to your normal connection and "
-                    "leaking your real IP. Turn it off and disconnect to get your "
-                    "internet back."),
-                 tr("Protects an account that bans your real IP if the VPN drops."))
 
         self.check_updates = Switch()
         self.check_updates.setChecked(bool((self._settings.get("updates") or {}).get("check", True)))
@@ -379,7 +378,6 @@ class _GeneralPage(QWidget):
             "sample_seconds": self.sample_seconds.value(),
             "tun_mtu": self.tun_mtu.value(),
             "log_level": self.log_level.currentText(),
-            "killswitch": {"enabled": self.killswitch.isChecked()},
             "updates": {"check": self.check_updates.isChecked()},
             "speedtest": {**(self._settings.get("speedtest") or {}),
                           "mode": self.delay_mode.currentData()},
@@ -1722,6 +1720,8 @@ class SettingsWindow(QDialog):
         self._pages["geo-data"] = _GeoDataPage(geo_cfg)
         self._pages["hotspot"] = _HotspotPage(self._settings.get("gateway") or {})
         self._pages["startup"] = _StartupPage(startup_cfg)
+        self._pages["security"] = SecurityPage(self._settings)
+        self._pages["general"]._security_page = self._pages["security"]
         self._pages["exits"] = _ExitsPage(self._settings.get("exits") or {}, core_cfg,
                                           self._settings.get("dns") or {}, self._profiles)
         self._pages["forwards"] = _ForwardsPage(self._settings.get("forwards"), core_cfg,
@@ -1870,6 +1870,7 @@ class SettingsWindow(QDialog):
         self._settings["core"] = core_cfg
         self._pages["geo-data"].apply_to(self._settings.setdefault("geo", {}))
         self._pages["startup"].apply_to(self._settings.setdefault("startup", {}))
+        self._pages["security"].apply_to(self._settings)
         self._pages["language"].apply_to(self._settings)
         # updates extra fields are carried through
         self._settings["updates"] = {
@@ -1898,12 +1899,14 @@ class SettingsWindow(QDialog):
         self._pages["anti-filter"].apply_to(core_cfg)
         self._pages["local-proxy"].apply_to(core_cfg)
 
-        return {
+        values = {
             "ping_target": self._pages["general"].ping_target.text().strip() or "1.1.1.1",
             "sample_seconds": self._pages["general"].sample_seconds.value(),
             "tun_mtu": self._pages["general"].tun_mtu.value(),
             "log_level": self._pages["general"].log_level.currentText(),
-            "killswitch": {"enabled": self._pages["general"].killswitch.isChecked()},
+            "killswitch": {"enabled": self._pages["security"].killswitch.isChecked()},
+            "strict": self._pages["security"].collect()["strict"],
+            "leakcheck": self._pages["security"].collect()["leakcheck"],
             "speedtest": self._pages["general"].collect()["speedtest"],
             "language": self._pages["language"].language.currentData() or "en",
             "geo": self._pages["geo-data"].collect(),
@@ -1917,6 +1920,11 @@ class SettingsWindow(QDialog):
                 "check": self._pages["general"].check_updates.isChecked(),
             },
         }
+        # The firewall group only exists on a platform that supports it, so the
+        # key is only emitted there (an unsupported platform never edits it).
+        if self._pages["security"].firewall_enabled is not None:
+            values["firewall"] = self._pages["security"].collect()["firewall"]
+        return values
 
     def geo_updated(self) -> bool:
         """Whether Update now succeeded while this window was open."""
