@@ -43,8 +43,18 @@ SOCK_PATH = Path("/var/run/sushtun-helper.sock")
 # launchd.plist: "Property lists don't support octal, so convert to decimal."
 SOCK_MODE = 0o660  # 408
 
-# The app binary the daemon starts: the installed .app's executable.
-APP_EXE = Path("/Applications/sushTun.app/Contents/MacOS/sushtun")
+# Where the user installed the app (the copy source) and where the daemon
+# actually runs from.
+#
+# The daemon executes the app as root, so it must never run a copy a user can
+# modify: /Applications is root:admin and *group*-writable, so an admin-group
+# user could swap the bundle there even if it were root-owned. The install
+# step therefore copies the bundle to /Library/PrivilegedHelperTools (root:
+# wheel, not group-writable), hardens it (chown -R root:wheel, chmod -R go-w),
+# and the daemon runs only that root-owned copy.
+SOURCE_APP = Path("/Applications/sushTun.app")
+HELPER_APP_DIR = Path("/Library/PrivilegedHelperTools/sushTun.app")
+HELPER_APP_EXE = HELPER_APP_DIR / "Contents/MacOS/sushtun"
 
 # Protocol bounds.
 MAX_REQUEST = 8192
@@ -106,51 +116,78 @@ def _getpeereid(fd: int) -> int:
 
 # -- path safety -------------------------------------------------------------
 
-def _path_is_safe(path: Path, console_uid: int | None) -> bool:
-    """True when `path` is the real installed app, not a user-planted copy.
+def _is_root_owned_and_not_writable(st) -> bool:
+    """root-owned and not group/world-writable: the only ownership a file the
+    root daemon will execute may have."""
+    return st.st_uid == 0 and not (st.st_mode & (stat.S_IWGRP | stat.S_IWOTH))
 
-    The property enforced: no user other than the owner can swap the binary,
-    and the app sits in a system location, not a dev checkout.
 
-    macOS reality (verified on a live machine) shapes two details:
-      * ``/Applications`` is ``root:admin`` and *group*-writable by design, so
-        a "not group-writable" rule would refuse every real install. The rule
-        is therefore "not *world*-writable" for the parents.
-      * A drag-installed ``.app`` is owned by the user who dragged it in, not
-        root. So the executable may be owned by root *or* the console user;
-        a copy owned by some other uid is refused.
-    Every parent directory must be root-owned and not world-writable, which
-    rejects a dev copy (its parents, e.g. ``~/Desktop``, are user-owned) and a
-    ``/tmp`` copy (``/tmp`` is world-writable).
+def _parents_are_safe(path: Path) -> bool:
+    """Every parent directory up to / is root-owned and not world-writable.
+
+    ``/Applications`` is root:admin and group-writable, so a bundle *there*
+    can be swapped by an admin-group user; that is why the daemon runs a copy
+    under /Library/PrivilegedHelperTools instead (whose parents are
+    root:wheel). A world-writable parent (e.g. /tmp) is refused outright.
     """
-    p = Path(path).resolve()
-    if not p.is_file():
-        return False
-    # The executable itself: not world-writable, owned by root or the console
-    # user (a drag-install). A third uid means someone else's copy. os.lstat
-    # (not Path.lstat) so the lookup is explicit and patchable in tests.
-    try:
-        st = os.lstat(p)
-    except OSError:
-        return False
-    if st.st_mode & stat.S_IWOTH:
-        return False
-    if st.st_uid != 0 and (console_uid is None or st.st_uid != console_uid):
-        return False
-    # Every parent directory: root-owned and not world-writable.
-    parent = p.parent
+    parent = path.parent
     while True:
         try:
             pst = os.lstat(parent)
         except OSError:
             return False
-        if pst.st_uid != 0:
-            return False
-        if pst.st_mode & stat.S_IWOTH:
+        if pst.st_uid != 0 or pst.st_mode & stat.S_IWOTH:
             return False
         if parent == parent.parent:
             return True
         parent = parent.parent
+
+
+def _bundle_is_safe(bundle: Path) -> bool:
+    """True when the whole .app bundle is safe for the root daemon to run.
+
+    The daemon executes the bundle as root, so any file a user can modify
+    becomes root-executed. The check therefore walks the entire tree:
+      * the bundle directory itself is root-owned and not group/world-writable
+        (a group-writable bundle dir lets an admin-group user swap it);
+      * every file and directory inside is root-owned and not
+        group/world-writable (a single user-writable dylib or python file is
+        enough to escalate);
+      * no symlink escapes the bundle (a link to a user-writable file outside
+        would defeat the per-file check);
+      * every parent up to / is root-owned and not world-writable.
+    """
+    try:
+        bstat = os.lstat(bundle)
+    except OSError:
+        return False
+    if not stat.S_ISDIR(bstat.st_mode):
+        return False
+    if not _is_root_owned_and_not_writable(bstat):
+        return False
+    if not _parents_are_safe(bundle):
+        return False
+    root = bundle.resolve()
+    for dirpath, dirnames, filenames in os.walk(bundle, followlinks=False):
+        for name in dirnames + filenames:
+            p = Path(dirpath) / name
+            try:
+                st = os.lstat(p)
+            except OSError:
+                return False
+            if stat.S_ISLNK(st.st_mode):
+                # A symlink's own mode is meaningless (always 0o777); what
+                # matters is where it points. One that leaves the bundle could
+                # reference a user-writable file the walk never sees. A link
+                # that stays inside is fine: its target is checked when the
+                # walk reaches the target's real path.
+                target = Path(os.path.realpath(p))
+                if not (target == root or str(target).startswith(str(root) + os.sep)):
+                    return False
+                continue
+            if not _is_root_owned_and_not_writable(st):
+                return False
+    return True
 
 
 # -- request validation ------------------------------------------------------
@@ -223,13 +260,13 @@ def _session_launch_prefix(uid: int) -> list[str]:
 
 
 def _launch_command(uid: int, session: list[str]) -> list[str]:
-    """The elevated app: the fixed installed path, in the user's session.
+    """The elevated app: the root-owned hardened copy, in the user's session.
 
     No path or argument comes from the request: the helper executes exactly
     what ``elevate._elevated_cmd`` + ``elevate._session_launch_prefix`` do
-    today, with the installed app standing in for the launcher's own binary.
+    today, with the hardened copy standing in for the launcher's own binary.
     """
-    return [*_session_launch_prefix(uid), str(APP_EXE), *session]
+    return [*_session_launch_prefix(uid), str(HELPER_APP_EXE), *session]
 
 
 # -- plist -------------------------------------------------------------------
@@ -238,8 +275,8 @@ def _plist_escape(value: str) -> str:
     return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-def plist_xml(app_exe: str = str(APP_EXE), version: int = HELPER_VERSION) -> str:
-    """The LaunchDaemon plist: socket-activated, starts the installed app."""
+def plist_xml(app_exe: str = str(HELPER_APP_EXE), version: int = HELPER_VERSION) -> str:
+    """The LaunchDaemon plist: socket-activated, starts the hardened copy."""
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -270,27 +307,47 @@ def plist_xml(app_exe: str = str(APP_EXE), version: int = HELPER_VERSION) -> str
 
 # -- install / uninstall command construction --------------------------------
 
-def install_commands(python: str = sys.executable,
-                     app_exe: str = str(APP_EXE)) -> list[list[str]]:
+def install_commands(source_app: str = str(SOURCE_APP),
+                     helper_app: str = str(HELPER_APP_DIR),
+                     app_exe: str = str(HELPER_APP_EXE)) -> list[list[str]]:
     """The argv steps that install the helper, run as root.
 
-    One osascript admin prompt writes the plist (root:wheel 0644) and
-    bootstraps it. No shell: every path is a separate argv element, so a path
-    with spaces or quotes cannot inject.
+    One osascript admin prompt:
+      * copies the installed app to /Library/PrivilegedHelperTools (a
+        root:wheel, non-group-writable location) and hardens the copy
+        (chown -R root:wheel, chmod -R go-w) so no user can modify any file
+        the root daemon will execute;
+      * writes the plist (root:wheel 0644) and bootstraps it.
+    No shell injection: every path is shlex-quoted, and the plist body is a
+    single-quoted heredoc. The caller (install) then verifies the hardened
+    copy with the same checker the daemon uses and rolls back on failure.
     """
     xml = plist_xml(app_exe=app_exe)
-    # The plist is written by the elevated step, not by this (unelevated)
-    # process, so it is passed as a single argv element to the shell script.
-    write = (
-        f"cat > {shlex.quote(str(PLIST_PATH))} <<'SUSHTUN_PLIST_EOF'\n"
+    src = shlex.quote(source_app)
+    dst = shlex.quote(helper_app)
+    parent = shlex.quote(str(HELPER_APP_DIR.parent))
+    plist = shlex.quote(str(PLIST_PATH))
+    script = (
+        f"set -e\n"
+        f"mkdir -p {parent}\n"
+        f"chown root:wheel {parent}\n"
+        f"chmod 0755 {parent}\n"
+        # Re-copy on every install so a version change replaces the copy;
+        # bootout first so bootstrap below does not fail on a live job.
+        f"/bin/launchctl bootout system {shlex.quote(LABEL)} 2>/dev/null || true\n"
+        f"rm -rf {dst}\n"
+        f"cp -R {src} {dst}\n"
+        f"chown -R root:wheel {dst}\n"
+        f"chmod -R go-w {dst}\n"
+        f"cat > {plist} <<'SUSHTUN_PLIST_EOF'\n"
         f"{xml}SUSHTUN_PLIST_EOF\n"
-        f"chown root:wheel {shlex.quote(str(PLIST_PATH))}\n"
-        f"chmod 0644 {shlex.quote(str(PLIST_PATH))}\n"
-        f"/bin/launchctl bootstrap system {shlex.quote(str(PLIST_PATH))}\n"
+        f"chown root:wheel {plist}\n"
+        f"chmod 0644 {plist}\n"
+        f"/bin/launchctl bootstrap system {plist}\n"
     )
     return [
         ["osascript", "-e",
-         f'do shell script {shlex.quote(write)} with administrator privileges'],
+         f'do shell script {shlex.quote(script)} with administrator privileges'],
     ]
 
 
@@ -298,6 +355,7 @@ def uninstall_commands() -> list[list[str]]:
     """The argv steps that remove the helper, run as root."""
     script = (
         f"/bin/launchctl bootout system {shlex.quote(LABEL)} 2>/dev/null; "
+        f"rm -rf {shlex.quote(str(HELPER_APP_DIR))}; "
         f"rm -f {shlex.quote(str(PLIST_PATH))} {shlex.quote(str(SOCK_PATH))}\n"
     )
     return [
@@ -422,7 +480,14 @@ def should_offer() -> bool:
 
 
 def install() -> bool:
-    """Install the helper with one osascript admin prompt."""
+    """Install the helper with one osascript admin prompt.
+
+    After the elevated step copies and hardens the bundle, the copy is
+    verified with the same checker the daemon uses. If verification fails the
+    install is rolled back (bootout + remove the copy and plist) and the app
+    keeps the password prompt -- it never leaves a daemon that could run an
+    unhardened bundle.
+    """
     if not _is_mac():
         return False
     for argv in install_commands():
@@ -432,6 +497,14 @@ def install() -> bool:
             return False
         if result.returncode != 0:
             return False
+    if not _bundle_is_safe(HELPER_APP_DIR):
+        # The copy is not safe to run as root: undo it, keep the password.
+        for argv in uninstall_commands():
+            try:
+                subprocess.run(argv, capture_output=True, text=True)
+            except OSError:
+                pass
+        return False
     return healthy()
 
 
@@ -521,8 +594,11 @@ def _serve_one(sock: socket.socket) -> None:
             if not _RATE.allow():
                 raise Refusal("rate limited")
             session = _validate_request(data)
-            if not _path_is_safe(APP_EXE, peer):
-                raise Refusal("app path is not the installed app")
+            # The daemon runs the bundle as root, so the whole tree must be
+            # root-owned and not group/world-writable, or a user could plant a
+            # payload that the daemon then executes as root.
+            if not _bundle_is_safe(HELPER_APP_DIR):
+                raise Refusal("app bundle is not root-owned")
             if _already_running():
                 reply = {"op": "already running"}
             else:

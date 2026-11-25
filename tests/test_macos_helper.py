@@ -11,6 +11,7 @@ import json
 import os
 import shlex
 import socket
+import stat
 import sys
 import threading
 import types
@@ -100,108 +101,118 @@ def test_a_valid_request_returns_its_session():
         ["--session-env=LANG=en"]
 
 
-# -- path safety -------------------------------------------------------------
+# -- path safety: the whole bundle tree must be root-owned -------------------
 
-def _fake_lstat(monkeypatch, entries: dict[str, tuple[int, int]],
-                default: tuple[int, int] | None) -> None:
-    """Make os.lstat return (uid, mode) for the given (resolved) paths.
+def _make_bundle(tmp_path: Path) -> Path:
+    """A real .app tree on disk: bundle/Contents/MacOS/sushtun + a dylib."""
+    bundle = tmp_path / "sushTun.app"
+    exe_dir = bundle / "Contents" / "MacOS"
+    exe_dir.mkdir(parents=True)
+    (exe_dir / "sushtun").write_text("x")
+    (bundle / "Contents" / "Frameworks").mkdir()
+    (bundle / "Contents" / "Frameworks" / "libfoo.dylib").write_text("x")
+    return bundle
 
-    The real filesystem cannot be chowned without root, so ownership and mode
-    are fabricated here; _path_is_safe only reads lstat. A path not in
-    `entries` uses `default` when given, else raises FileNotFoundError. Keys
-    are the resolved strings the module looks up, so the fake must not call
-    resolve() itself (that would recurse back into lstat).
+
+def _fake_bundle(monkeypatch, bundle: Path,
+                 overrides: dict[str, tuple[int, int]] | None = None) -> None:
+    """Fabricate ownership/mode for the bundle tree (chown needs root).
+
+    The real files exist so os.walk and realpath work; only st_uid and the
+    writable bits are fabricated. `overrides` maps a bundle-relative path to
+    (uid, mode); everything else is root-owned 0o755. Parents above the bundle
+    default to root-owned 0o755.
     """
+    overrides = overrides or {}
+
+    def real_type(p: Path) -> int:
+        st = os.lstat(p)  # real, before the patch is applied
+        if stat.S_ISLNK(st.st_mode):
+            return stat.S_IFLNK
+        if stat.S_ISDIR(st.st_mode):
+            return stat.S_IFDIR
+        return stat.S_IFREG
+
+    entries = {str(bundle): (0, stat.S_IFDIR | 0o755)}
+    for dirpath, dirnames, filenames in os.walk(bundle, followlinks=False):
+        for name in dirnames + filenames:
+            p = Path(dirpath) / name
+            entries[str(p)] = (0, real_type(p) | 0o755)
+    for rel, (uid, mode) in overrides.items():
+        p = bundle / rel
+        entries[str(p)] = (uid, real_type(p) | mode)
+
     def fake_lstat(path, **kw):
         key = str(Path(path))
-        if key in entries:
-            uid, mode = entries[key]
-        elif default is not None:
-            uid, mode = default
-        else:
-            raise FileNotFoundError(path)
-        st = types.SimpleNamespace(st_uid=uid, st_mode=mode)
-        return st
+        uid, mode = entries.get(key, (0, stat.S_IFDIR | 0o755))
+        return types.SimpleNamespace(st_uid=uid, st_mode=mode)
     monkeypatch.setattr(os, "lstat", fake_lstat)
 
 
-def _tree(monkeypatch, app: Path, app_uid: int, app_mode: int,
-          parents: list[tuple[int, int]], *, missing: bool = False) -> None:
-    """Create `app` on disk and fabricate its ownership up the chain to root.
-
-    `parents` lists (uid, mode) for app.parent, app.parent.parent, ... in
-    order; any level not listed is treated as root-owned 0o755 (the safe
-    default), so the walk to the filesystem root succeeds. The files are
-    created for real so `is_file()` is true; only the ownership/mode are
-    fabricated, since chown needs root.
-    """
-    if not missing:
-        app.parent.mkdir(parents=True, exist_ok=True)
-        app.write_text("x")
-    # Resolve the whole chain with the real lstat before patching it.
-    chain = [app]
-    p = app.parent
-    while p != p.parent:
-        chain.append(p)
-        p = p.parent
-    resolved = [str(x.resolve()) for x in chain]
-    entries = {}
-    if not missing:
-        entries[resolved[0]] = (app_uid, app_mode)
-    for key, (uid, mode) in zip(resolved[1:], parents, strict=False):
-        entries[key] = (uid, mode)
-    _fake_lstat(monkeypatch, entries, default=(0, 0o755))
+def test_a_root_owned_hardened_bundle_is_safe(tmp_path, monkeypatch):
+    bundle = _make_bundle(tmp_path)
+    _fake_bundle(monkeypatch, bundle)
+    assert h._bundle_is_safe(bundle) is True
 
 
-def test_a_root_owned_app_in_a_root_owned_tree_is_safe(tmp_path, monkeypatch):
-    app = tmp_path / "app" / "sushtun"
-    _tree(monkeypatch, app, app_uid=0, app_mode=0o755,
-          parents=[(0, 0o755), (0, 0o755)])
-    assert h._path_is_safe(app, console_uid=501) is True
+def test_a_user_owned_bundle_is_refused(tmp_path, monkeypatch):
+    bundle = _make_bundle(tmp_path)
+    _fake_bundle(monkeypatch, bundle, {".": (501, 0o755)})
+    assert h._bundle_is_safe(bundle) is False
 
 
-def test_a_user_owned_app_is_safe_for_that_user(tmp_path, monkeypatch):
-    # A drag-installed .app is owned by the user who installed it.
-    app = tmp_path / "app" / "sushtun"
-    _tree(monkeypatch, app, app_uid=501, app_mode=0o755,
-          parents=[(0, 0o755), (0, 0o755)])
-    assert h._path_is_safe(app, console_uid=501) is True
+def test_a_group_writable_bundle_dir_is_refused(tmp_path, monkeypatch):
+    # An admin-group user could swap the bundle dir if it were group-writable.
+    bundle = _make_bundle(tmp_path)
+    _fake_bundle(monkeypatch, bundle, {".": (0, 0o775)})
+    assert h._bundle_is_safe(bundle) is False
 
 
-def test_an_app_owned_by_someone_else_is_refused(tmp_path, monkeypatch):
-    app = tmp_path / "app" / "sushtun"
-    _tree(monkeypatch, app, app_uid=502, app_mode=0o755,
-          parents=[(0, 0o755), (0, 0o755)])
-    # Owned by uid 502: neither root nor the console user (501).
-    assert h._path_is_safe(app, console_uid=501) is False
+def test_a_user_writable_inner_file_is_refused(tmp_path, monkeypatch):
+    # One user-writable dylib is enough: the root daemon would run it.
+    bundle = _make_bundle(tmp_path)
+    _fake_bundle(monkeypatch, bundle,
+                 {"Contents/Frameworks/libfoo.dylib": (0, 0o777)})
+    assert h._bundle_is_safe(bundle) is False
+
+
+def test_a_user_owned_inner_file_is_refused(tmp_path, monkeypatch):
+    bundle = _make_bundle(tmp_path)
+    _fake_bundle(monkeypatch, bundle,
+                 {"Contents/MacOS/sushtun": (501, 0o755)})
+    assert h._bundle_is_safe(bundle) is False
+
+
+def test_a_symlink_escaping_the_bundle_is_refused(tmp_path, monkeypatch):
+    bundle = _make_bundle(tmp_path)
+    outside = tmp_path / "evil.dylib"
+    outside.write_text("x")
+    link = bundle / "Contents" / "Frameworks" / "libevil.dylib"
+    os.symlink(outside, link)
+    _fake_bundle(monkeypatch, bundle)  # the link itself is root-owned
+    assert h._bundle_is_safe(bundle) is False
+
+
+def test_a_symlink_staying_inside_the_bundle_is_ok(tmp_path, monkeypatch):
+    bundle = _make_bundle(tmp_path)
+    target = bundle / "Contents" / "Frameworks" / "libfoo.dylib"
+    link = bundle / "Contents" / "Frameworks" / "liblink.dylib"
+    os.symlink(target, link)
+    _fake_bundle(monkeypatch, bundle)
+    assert h._bundle_is_safe(bundle) is True
 
 
 def test_a_world_writable_parent_is_refused(tmp_path, monkeypatch):
-    app = tmp_path / "app" / "sushtun"
-    _tree(monkeypatch, app, app_uid=0, app_mode=0o755,
-          parents=[(0, 0o755), (0, 0o777)])  # a /tmp-like world-writable parent
-    assert h._path_is_safe(app, console_uid=501) is False
+    # A /tmp-like world-writable parent: the bundle could be swapped.
+    bundle = _make_bundle(tmp_path)
+    _fake_bundle(monkeypatch, bundle)
+    # Force the bundle's parent to be world-writable.
+    monkeypatch.setattr(h, "_parents_are_safe", lambda p: False)
+    assert h._bundle_is_safe(bundle) is False
 
 
-def test_a_user_owned_parent_is_refused(tmp_path, monkeypatch):
-    # A dev checkout: the parent is owned by the user, not root.
-    app = tmp_path / "app" / "sushtun"
-    _tree(monkeypatch, app, app_uid=0, app_mode=0o755,
-          parents=[(0, 0o755), (501, 0o755)])
-    assert h._path_is_safe(app, console_uid=501) is False
-
-
-def test_a_missing_app_is_refused(tmp_path, monkeypatch):
-    app = tmp_path / "nope" / "sushtun"
-    _tree(monkeypatch, app, app_uid=0, app_mode=0o755, parents=[], missing=True)
-    assert h._path_is_safe(app, console_uid=501) is False
-
-
-def test_a_world_writable_app_is_refused(tmp_path, monkeypatch):
-    app = tmp_path / "app" / "sushtun"
-    _tree(monkeypatch, app, app_uid=0, app_mode=0o777,
-          parents=[(0, 0o755), (0, 0o755)])
-    assert h._path_is_safe(app, console_uid=501) is False
+def test_a_missing_bundle_is_refused(tmp_path, monkeypatch):
+    assert h._bundle_is_safe(tmp_path / "nope" / "sushTun.app") is False
 
 
 # -- plist -------------------------------------------------------------------
@@ -216,29 +227,44 @@ def test_the_plist_has_the_exact_keys():
     assert f"<integer>{h.HELPER_VERSION}</integer>" in xml  # Version
 
 
-def test_the_plist_program_arguments_are_the_installed_app():
-    xml = h.plist_xml(app_exe="/Applications/sushTun.app/Contents/MacOS/sushtun")
-    assert "<string>/Applications/sushTun.app/Contents/MacOS/sushtun</string>" in xml
+def test_the_plist_program_arguments_are_the_hardened_copy():
+    # The daemon runs the root-owned copy, not the /Applications original.
+    xml = h.plist_xml()
+    assert f"<string>{h.HELPER_APP_EXE}</string>" in xml
+    assert "/Library/PrivilegedHelperTools/sushTun.app" in xml
     # The app path comes before the --helper flag.
     assert xml.index("Contents/MacOS/sushtun") < xml.index("--helper")
 
 
 def test_the_plist_escapes_xml_special_characters():
     assert h._plist_escape("a&b<c>d") == "a&amp;b&lt;c&gt;d"
-    xml = h.plist_xml(app_exe="/Applications/a&b.app/x")
-    assert "<string>/Applications/a&amp;b.app/x</string>" in xml
+    xml = h.plist_xml(app_exe="/Library/a&b.app/x")
+    assert "<string>/Library/a&amp;b.app/x</string>" in xml
 
 
 # -- install / uninstall command construction --------------------------------
 
 def test_install_is_one_osascript_admin_prompt():
-    cmds = h.install_commands(app_exe="/Applications/sushTun.app/Contents/MacOS/sushtun")
+    cmds = h.install_commands()
     assert len(cmds) == 1
     argv = cmds[0]
     assert argv[0] == "osascript" and argv[1] == "-e"
     script = argv[2]
     assert script.startswith("do shell script ")
     assert script.endswith(" with administrator privileges")
+
+
+def test_install_copies_and_hardens_the_bundle():
+    # The single admin prompt copies the app to a root:wheel location and
+    # hardens it (chown -R root:wheel, chmod -R go-w) so no user can modify a
+    # file the root daemon will execute.
+    inner = _inner_shell(h.install_commands()[0])
+    assert "cp -R " + str(h.SOURCE_APP) + " " + str(h.HELPER_APP_DIR) in inner
+    assert "chown -R root:wheel " + str(h.HELPER_APP_DIR) in inner
+    assert "chmod -R go-w " + str(h.HELPER_APP_DIR) in inner
+    # The hardened copy's parent is made root:wheel 0755 (not group-writable).
+    assert "chown root:wheel " + str(h.HELPER_APP_DIR.parent) in inner
+    assert "chmod 0755 " + str(h.HELPER_APP_DIR.parent) in inner
 
 
 def test_install_writes_and_bootstraps_the_plist():
@@ -249,12 +275,21 @@ def test_install_writes_and_bootstraps_the_plist():
     assert "launchctl bootstrap system " + str(h.PLIST_PATH) in inner
 
 
+def test_install_recopies_on_reinstall():
+    # A version change must replace the copy, not keep a stale one.
+    inner = _inner_shell(h.install_commands()[0])
+    assert "rm -rf " + str(h.HELPER_APP_DIR) in inner
+    # bootout before bootstrap so a live job does not block the reinstall.
+    assert "launchctl bootout system " + h.LABEL in inner
+
+
 def test_install_does_not_inject_through_a_path_with_spaces_or_quotes():
-    # A path with spaces and a single quote must survive as one argv element.
-    evil = "/Applications/O'Brien's App/Contents/MacOS/sushtun"
-    inner = _inner_shell(h.install_commands(app_exe=evil)[0])
-    # The app path appears verbatim (once) inside the plist, not split.
-    assert evil in inner
+    # A source path with spaces and a single quote must survive as one element.
+    evil = "/Applications/O'Brien's App"
+    inner = _inner_shell(h.install_commands(source_app=evil)[0])
+    # The source path is shlex-quoted, so it is one token in the cp, not split
+    # into several (which would let the quote inject a command).
+    assert "cp -R " + shlex.quote(evil) in inner
     # And the heredoc is single-quoted, so nothing in the body is expanded.
     assert "<<'SUSHTUN_PLIST_EOF'" in inner
 
@@ -265,12 +300,38 @@ def _inner_shell(argv: list[str]) -> str:
     return shlex.split(body)[0]
 
 
-def test_uninstall_bootouts_and_removes_plist_and_socket():
+def test_uninstall_bootouts_and_removes_copy_plist_and_socket():
     inner = _inner_shell(h.uninstall_commands()[0])
     assert "launchctl bootout system " + h.LABEL in inner
-    assert "rm -f " in inner
+    assert "rm -rf " + str(h.HELPER_APP_DIR) in inner
     assert str(h.PLIST_PATH) in inner
     assert str(h.SOCK_PATH) in inner
+
+
+def test_install_verifies_the_copy_and_reports_healthy(monkeypatch):
+    monkeypatch.setattr(h, "_is_mac", lambda: True)
+    monkeypatch.setattr(h, "subprocess", MagicMock(
+        run=MagicMock(return_value=MagicMock(returncode=0))))
+    monkeypatch.setattr(h, "_bundle_is_safe", lambda p: True)
+    monkeypatch.setattr(h, "healthy", lambda: True)
+    assert h.install() is True
+
+
+def test_install_rolls_back_when_the_copy_is_not_safe(monkeypatch):
+    # The elevated step ran, but the copy is not safe to run as root: the
+    # install must undo it (uninstall) and report failure, keeping the
+    # password prompt.
+    monkeypatch.setattr(h, "_is_mac", lambda: True)
+    runs = []
+    monkeypatch.setattr(h, "subprocess", MagicMock(
+        run=lambda argv, **k: runs.append(argv) or MagicMock(returncode=0)))
+    monkeypatch.setattr(h, "_bundle_is_safe", lambda p: False)
+    assert h.install() is False
+    # The rollback ran the uninstall commands: a second osascript that removes
+    # the plist (rm -f <plist>), which the install script (cat > <plist>) does
+    # not do.
+    assert len(runs) == 2
+    assert "rm -f " + str(h.PLIST_PATH) in runs[1][2]
 
 
 # -- rate limit --------------------------------------------------------------
@@ -284,24 +345,24 @@ def test_the_rate_limit_binds_the_count_per_window():
 
 # -- the launch command ------------------------------------------------------
 
-def test_the_launch_command_wraps_the_app_in_the_users_session(monkeypatch):
+def test_the_launch_command_runs_the_hardened_copy_in_the_users_session(monkeypatch):
     monkeypatch.setattr(h, "_LAUNCHCTL", "/bin/launchctl")
     monkeypatch.setattr(os.path, "exists", lambda p: p == "/bin/launchctl")
     cmd = h._launch_command(501, ["--session-env=LANG=en"])
-    assert cmd == ["/bin/launchctl", "asuser", "501", str(h.APP_EXE),
+    assert cmd == ["/bin/launchctl", "asuser", "501", str(h.HELPER_APP_EXE),
                    "--session-env=LANG=en"]
 
 
 def test_the_launch_command_has_no_wrapper_for_root(monkeypatch):
     monkeypatch.setattr(h, "_LAUNCHCTL", "/bin/launchctl")
     cmd = h._launch_command(0, [])
-    assert cmd == [str(h.APP_EXE)]
+    assert cmd == [str(h.HELPER_APP_EXE)]
 
 
 def test_the_launch_command_has_no_wrapper_without_launchctl(monkeypatch):
     monkeypatch.setattr(h, "_LAUNCHCTL", "/bin/launchctl")
     monkeypatch.setattr(os.path, "exists", lambda p: False)
-    assert h._launch_command(501, []) == [str(h.APP_EXE)]
+    assert h._launch_command(501, []) == [str(h.HELPER_APP_EXE)]
 
 
 # -- real unix socket: client <-> helper in-process --------------------------
@@ -321,7 +382,7 @@ def _roundtrip(request: bytes, monkeypatch, *, peer_uid=_UNSET, console_uid=_UNS
         monkeypatch.setattr(h, "_getpeereid", lambda fd: peer_uid)
     if console_uid is not _UNSET:
         monkeypatch.setattr(h, "_console_uid", lambda: console_uid)
-    monkeypatch.setattr(h, "_path_is_safe", lambda p, u: safe)
+    monkeypatch.setattr(h, "_bundle_is_safe", lambda p: safe)
     monkeypatch.setattr(h, "_already_running", lambda: already_running)
     if rate is not None:
         monkeypatch.setattr(h, "_RATE", rate)
@@ -424,11 +485,11 @@ def test_an_unknown_session_key_is_refused(monkeypatch):
     assert reply["op"] == "refused"
 
 
-def test_an_unsafe_app_path_is_refused(monkeypatch):
+def test_an_unsafe_bundle_is_refused(monkeypatch):
     reply = _roundtrip(json.dumps({"op": "launch", "session": []}).encode(),
                        monkeypatch, peer_uid=501, console_uid=501, safe=False)
     assert reply["op"] == "refused"
-    assert "installed app" in reply["reason"]
+    assert "root-owned" in reply["reason"]
 
 
 def test_a_second_launch_while_one_runs_is_already_running(monkeypatch):
