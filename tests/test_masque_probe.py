@@ -420,7 +420,8 @@ def test_request_once_closes_httperror(monkeypatch):
     def opener_open(url, timeout=None):
         raise FakeHTTPError(url, 500)
 
-    monkeypatch.setattr(mp.urllib.request, "build_opener",
+    # _request_once builds its opener via geo_exit.build_opener; patch that.
+    monkeypatch.setattr(mp.geo_exit, "build_opener",
                         lambda *a, **k: type("O", (), {"open": staticmethod(opener_open)})())
     ms, err = mp._request_once(12345, "https://www.google.com/generate_204", 1.0)
     assert ms is None and err == "HTTP 500"
@@ -556,11 +557,14 @@ def test_probe_no_env_proxy_bypass(monkeypatch):
     # NO_PROXY/http_proxy must not reroute the probe away from our own proxy.
     import ssl
 
+    from xrayui.core import tls
+
     port, hits, server = _start_fake_proxy()
     try:
-        # The loopback fixture serves a dummy self-signed cert; trust it.
-        monkeypatch.setattr(ssl, "_create_default_https_context",
-                            ssl._create_unverified_context)
+        # build_opener uses tls.https_context(); the loopback fixture serves a
+        # dummy self-signed cert, so trust it for this test only.
+        monkeypatch.setattr(tls, "https_context",
+                            lambda: ssl._create_unverified_context())
         monkeypatch.setenv("http_proxy", "http://127.0.0.1:1")
         monkeypatch.setenv("https_proxy", "http://127.0.0.1:1")
         monkeypatch.setenv("NO_PROXY", "www.google.com")

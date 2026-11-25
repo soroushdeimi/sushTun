@@ -19,7 +19,6 @@ import threading
 import time
 import urllib.error
 import urllib.parse
-import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
@@ -39,6 +38,9 @@ _ALLOWED_HEALTH_HOSTS = frozenset({"www.google.com"})
 
 _MAX_BODY = 4096
 _MAX_TIMEOUT = 300.0
+# The worker's socket timeout is a backstop; the whole-probe deadline is
+# authoritative, so it must fire first. This slack keeps the two from racing.
+_REQUEST_SLACK = 0.5
 _CONFIG_NAME = "masque_probe.json"
 
 _VERSIONS = ("h2", "h3")
@@ -166,8 +168,7 @@ def _status_error(status: int) -> str | None:
 def _request_once(port: int, url: str, timeout: float) -> tuple[float | None, str | None]:
     """One real HTTPS GET through the local HTTP proxy. Returns (ms, error)."""
     proxy_url = f"http://127.0.0.1:{port}"
-    opener = urllib.request.build_opener(
-        geo_exit.ExplicitProxyHandler({"http": proxy_url, "https": proxy_url}))
+    opener = geo_exit.build_opener(proxy_url)
     start = time.perf_counter()
     try:
         with opener.open(url, timeout=timeout) as resp:
@@ -198,7 +199,9 @@ def _request(port: int, url: str, timeout: float,
     box: dict = {}
 
     def worker():
-        box["res"] = _request_once(port, url, timeout)
+        # Slack keeps the worker's socket timeout behind the deadline, so a
+        # trickled connection ends as "timeout", not a raw socket error.
+        box["res"] = _request_once(port, url, timeout + _REQUEST_SLACK)
 
     t = threading.Thread(target=worker, daemon=True)
     t.start()
