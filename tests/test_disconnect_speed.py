@@ -207,9 +207,9 @@ def test_exited_bridge_is_not_killed(monkeypatch):
 
 
 def test_macos_route_deletes_stay_complete_but_parallel(monkeypatch):
-    # Fifteen deletes (six nets x two modes + two kill switch blackholes +
-    # host), one networksetup-style latency each: sequential that is 15x,
-    # parallel a fraction of it.
+    # Seventeen deletes (six nets x two modes + two v4 kill switch blackholes
+    # + two v6 kill switch blackholes + host), one networksetup-style latency
+    # each: sequential that is 17x, parallel a fraction of it.
     from xrayui.core import _net_posix as posix
 
     monkeypatch.setattr(posix, "IS_MAC", True)
@@ -227,7 +227,7 @@ def test_macos_route_deletes_stay_complete_but_parallel(monkeypatch):
     posix.remove_routes("1.2.3.4")
     wall = time.monotonic() - started
 
-    assert len(seen) == 15
+    assert len(seen) == 17
     assert ["route", "-n", "delete", "-host", "1.2.3.4"] in seen
     # The tunnel /2s and the old /1s are each deleted in both native and
     # bridge form. (The old /1s share their prefixes with the kill switch
@@ -238,6 +238,9 @@ def test_macos_route_deletes_stay_complete_but_parallel(monkeypatch):
     # one behind to keep the internet blocked.
     for dest in posix.KILLSWITCH_SPLIT:
         assert ["route", "-n", "delete", "-net", dest, "-blackhole"] in seen, dest
+    # The v6 blackholes are deleted too, so no v6 leak is left behind.
+    for dest in posix.KILLSWITCH_V6_SPLIT:
+        assert ["route", "-n", "delete", "-inet6", "-net", dest, "-blackhole"] in seen, dest
     assert wall < 0.5, f"route sweep took {wall:.2f}s: deletes ran sequentially"
 
 

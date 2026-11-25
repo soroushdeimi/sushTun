@@ -96,10 +96,13 @@ def test_linux_add_is_the_tunnel_prefix_with_a_worse_metric(monkeypatch):
 def test_linux_remove_deletes_the_blackholes(monkeypatch):
     calls = _linux(monkeypatch)
     posix.remove_killswitch_routes()
-    assert calls == [
+    # The deletes run in a thread pool, so compare as a multiset, not by order.
+    assert sorted(map(tuple, calls)) == sorted(map(tuple, [
         ["ip", "route", "del", "0.0.0.0/1", "blackhole"],
         ["ip", "route", "del", "128.0.0.0/1", "blackhole"],
-    ]
+        ["ip", "-6", "route", "del", "::/1", "blackhole"],
+        ["ip", "-6", "route", "del", "8000::/1", "blackhole"],
+    ]))
 
 
 def test_linux_remove_routes_also_deletes_the_blackholes(monkeypatch):
@@ -108,6 +111,10 @@ def test_linux_remove_routes_also_deletes_the_blackholes(monkeypatch):
     dels = {tuple(c) for c in calls if c[:3] == ["ip", "route", "del"]}
     assert ("ip", "route", "del", "0.0.0.0/1", "blackhole") in dels
     assert ("ip", "route", "del", "128.0.0.0/1", "blackhole") in dels
+    # The v6 blackholes are deleted too, so no v6 leak is left behind.
+    dels6 = {tuple(c) for c in calls if c[:4] == ["ip", "-6", "route", "del"]}
+    assert ("ip", "-6", "route", "del", "::/1", "blackhole") in dels6
+    assert ("ip", "-6", "route", "del", "8000::/1", "blackhole") in dels6
     # The tunnel routes and the pinned host route are still cleaned up.
     assert ("ip", "route", "del", "0.0.0.0/1", "dev", TUN) in dels
     assert ("ip", "route", "del", "128.0.0.0/1", "dev", TUN) in dels
@@ -120,6 +127,41 @@ def test_linux_add_failure_raises(monkeypatch):
             (1, "RTNETLINK answers: File exists")})
     with pytest.raises(RuntimeError, match="0.0.0.0/1"):
         posix.add_killswitch_routes()
+
+
+def test_linux_ipv6_blocked_reads_the_route_table(monkeypatch):
+    # Both halves blackholed -> covered.
+    _linux(monkeypatch, {
+        ("ip", "-6", "-o", "route", "show"):
+            (0, "blackhole ::/1 metric 1000\nblackhole 8000::/1 metric 1000\n")})
+    assert posix.ipv6_blocked() is True
+    # Only one half -> not covered (a partial install is a leak).
+    _linux(monkeypatch, {
+        ("ip", "-6", "-o", "route", "show"): (0, "blackhole ::/1 metric 1000\n")})
+    assert posix.ipv6_blocked() is False
+    # No v6 blackholes at all -> not covered.
+    _linux(monkeypatch, {
+        ("ip", "-6", "-o", "route", "show"): (0, "default dev eth0\n")})
+    assert posix.ipv6_blocked() is False
+
+
+def test_linux_v6_failure_is_quiet_and_keeps_v4(monkeypatch, caplog):
+    # IPv6 is disabled/unsupported: the v6 adds are refused. That must not
+    # raise, must not spam, and must not take the v4 protection down.
+    calls = _linux(monkeypatch, {
+        ("ip", "-6", "route", "add", "::/1", "blackhole", "metric", "1000"):
+            (1, "RTNETLINK answers: Network is unreachable")})
+    with caplog.at_level("DEBUG", logger="xrayui.core._net_posix"):
+        posix.add_killswitch_routes()  # must not raise
+    # The v4 blackholes were still installed.
+    v4_adds = [c for c in calls if c[:3] == ["ip", "route", "add"]]
+    assert v4_adds == [
+        ["ip", "route", "add", "0.0.0.0/1", "blackhole", "metric", "1000"],
+        ["ip", "route", "add", "128.0.0.0/1", "blackhole", "metric", "1000"],
+    ]
+    # The v6 failure is logged at debug, not warning/error.
+    assert any("IPv6" in r.message for r in caplog.records)
+    assert all(r.levelno < 30 for r in caplog.records)
 
 
 # -- macOS argv -------------------------------------------------------------
@@ -141,30 +183,54 @@ def test_mac_add_is_a_blackhole_less_specific_than_the_tunnel(monkeypatch):
     calls = _mac(monkeypatch)
     posix.add_killswitch_routes()
     adds = [c for c in calls if c[:3] == ["route", "-n", "add"]]
-    assert adds == [
+    v4 = [c for c in adds if "-inet6" not in c]
+    assert v4 == [
         ["route", "-n", "add", "-net", "0.0.0.0/1", "-blackhole"],
         ["route", "-n", "add", "-net", "128.0.0.0/1", "-blackhole"],
     ]
     # A /1 is less specific than the tunnel's /2s, so it only wins once the
     # /2s are gone; and it needs no gateway (RTF_BLACKHOLE).
     assert all("-blackhole" in c for c in adds)
-    assert all(len(c) == 6 for c in adds)
+    assert all(len(c) == 6 for c in v4)
     # Idempotent: a stale blackhole is cleared before the add.
     dels = [c for c in calls if c[:4] == ["route", "-n", "delete", "-net"]]
-    assert dels == [
+    v4_dels = [c for c in dels if "-inet6" not in c]
+    assert v4_dels == [
         ["route", "-n", "delete", "-net", "0.0.0.0/1", "-blackhole"],
         ["route", "-n", "delete", "-net", "128.0.0.0/1", "-blackhole"],
     ]
-    assert calls.index(dels[0]) < calls.index(adds[0])
+    assert calls.index(v4_dels[0]) < calls.index(v4[0])
+
+
+def test_mac_add_also_blackholes_ipv6(monkeypatch):
+    # The tunnel is IPv4-only, so v6 must be blackholed unconditionally:
+    # one /1 per half of the IPv6 space, -inet6, no gateway.
+    calls = _mac(monkeypatch)
+    posix.add_killswitch_routes()
+    v6_adds = [c for c in calls if c[:3] == ["route", "-n", "add"] and "-inet6" in c]
+    assert v6_adds == [
+        ["route", "-n", "add", "-inet6", "-net", "::/1", "-blackhole"],
+        ["route", "-n", "add", "-inet6", "-net", "8000::/1", "-blackhole"],
+    ]
+    # Idempotent: a stale v6 blackhole is cleared before the add.
+    v6_dels = [c for c in calls if c[:4] == ["route", "-n", "delete", "-inet6"]]
+    assert v6_dels == [
+        ["route", "-n", "delete", "-inet6", "-net", "::/1", "-blackhole"],
+        ["route", "-n", "delete", "-inet6", "-net", "8000::/1", "-blackhole"],
+    ]
+    assert calls.index(v6_dels[0]) < calls.index(v6_adds[0])
 
 
 def test_mac_remove_deletes_the_blackholes(monkeypatch):
     calls = _mac(monkeypatch)
     posix.remove_killswitch_routes()
-    assert calls == [
+    # The deletes run in a thread pool, so compare as a multiset, not by order.
+    assert sorted(map(tuple, calls)) == sorted(map(tuple, [
         ["route", "-n", "delete", "-net", "0.0.0.0/1", "-blackhole"],
         ["route", "-n", "delete", "-net", "128.0.0.0/1", "-blackhole"],
-    ]
+        ["route", "-n", "delete", "-inet6", "-net", "::/1", "-blackhole"],
+        ["route", "-n", "delete", "-inet6", "-net", "8000::/1", "-blackhole"],
+    ]))
 
 
 def test_mac_remove_routes_also_deletes_the_blackholes(monkeypatch):
@@ -173,6 +239,10 @@ def test_mac_remove_routes_also_deletes_the_blackholes(monkeypatch):
     dels = {tuple(c) for c in calls if c[:4] == ["route", "-n", "delete", "-net"]}
     assert ("route", "-n", "delete", "-net", "0.0.0.0/1", "-blackhole") in dels
     assert ("route", "-n", "delete", "-net", "128.0.0.0/1", "-blackhole") in dels
+    # The v6 blackholes are deleted too, so no v6 leak is left behind.
+    dels6 = {tuple(c) for c in calls if c[:4] == ["route", "-n", "delete", "-inet6"]}
+    assert ("route", "-n", "delete", "-inet6", "-net", "::/1", "-blackhole") in dels6
+    assert ("route", "-n", "delete", "-inet6", "-net", "8000::/1", "-blackhole") in dels6
     # The tunnel /2s and the pinned host route are still cleaned up.
     assert ("route", "-n", "delete", "-host", "203.0.113.10") in {tuple(c) for c in calls}
 
@@ -182,6 +252,40 @@ def test_mac_add_failure_raises(monkeypatch):
         ("route", "-n", "add", "-net", "0.0.0.0/1", "-blackhole"): (1, "File exists")})
     with pytest.raises(RuntimeError, match="0.0.0.0/1"):
         posix.add_killswitch_routes()
+
+
+def test_mac_ipv6_blocked_reads_the_route_table(monkeypatch):
+    # `route -n get <addr>` reports the route that would carry <addr>; a
+    # blackhole match shows the BLACKHOLE flag. One probe per half.
+    _mac(monkeypatch, {
+        ("route", "-n", "get", "1::"): (0, "interface: utun5\n  ... BLACKHOLE\n"),
+        ("route", "-n", "get", "8001::"): (0, "interface: utun5\n  ... BLACKHOLE\n")})
+    assert posix.ipv6_blocked() is True
+    # One half not blackholed -> not covered.
+    _mac(monkeypatch, {
+        ("route", "-n", "get", "1::"): (0, "interface: utun5\n  ... BLACKHOLE\n"),
+        ("route", "-n", "get", "8001::"): (0, "interface: en0\n  ... UGSC\n")})
+    assert posix.ipv6_blocked() is False
+
+
+def test_mac_v6_failure_is_quiet_and_keeps_v4(monkeypatch, caplog):
+    # IPv6 is disabled/unsupported: the v6 adds are refused. That must not
+    # raise, must not spam, and must not take the v4 protection down.
+    calls = _mac(monkeypatch, {
+        ("route", "-n", "add", "-inet6", "-net", "::/1", "-blackhole"):
+            (1, "route: socket: Operation not permitted")})
+    with caplog.at_level("DEBUG", logger="xrayui.core._net_posix"):
+        posix.add_killswitch_routes()  # must not raise
+    # The v4 blackholes were still installed.
+    v4_adds = [c for c in calls
+               if c[:3] == ["route", "-n", "add"] and "-inet6" not in c]
+    assert v4_adds == [
+        ["route", "-n", "add", "-net", "0.0.0.0/1", "-blackhole"],
+        ["route", "-n", "add", "-net", "128.0.0.0/1", "-blackhole"],
+    ]
+    # The v6 failure is logged at debug, not warning/error.
+    assert any("IPv6" in r.message for r in caplog.records)
+    assert all(r.levelno < 30 for r in caplog.records)
 
 
 # -- Windows argv -----------------------------------------------------------
@@ -218,10 +322,32 @@ def test_windows_add_is_a_blackhole_with_a_worse_metric(monkeypatch, win_net):
 def test_windows_remove_deletes_the_blackholes(monkeypatch, win_net):
     calls = _win_calls(monkeypatch, win_net)
     win_net.remove_killswitch_routes()
-    assert calls == [
+    # The deletes run in a thread pool, so compare as a multiset, not by order.
+    assert sorted(map(tuple, calls)) == sorted(map(tuple, [
         ["route", "delete", "0.0.0.0", "mask", "128.0.0.0", "127.0.0.1"],
         ["route", "delete", "128.0.0.0", "mask", "128.0.0.0", "127.0.0.1"],
+        ["route", "-6", "delete", "::/1", "::1"],
+        ["route", "-6", "delete", "8000::/1", "::1"],
+    ]))
+
+
+def test_windows_add_also_blackholes_ipv6(monkeypatch, win_net):
+    # The tunnel is IPv4-only, so v6 must be blackholed unconditionally:
+    # one /1 per half of the IPv6 space, to the loopback next hop.
+    calls = _win_calls(monkeypatch, win_net)
+    win_net.add_killswitch_routes()
+    v6_adds = [c for c in calls if c[:2] == ["route", "-6"] and c[2] == "add"]
+    assert v6_adds == [
+        ["route", "-6", "add", "::/1", "::1", "metric", "1000"],
+        ["route", "-6", "add", "8000::/1", "::1", "metric", "1000"],
     ]
+    # Idempotent: a stale v6 blackhole is cleared before the add.
+    v6_dels = [c for c in calls if c[:2] == ["route", "-6"] and c[2] == "delete"]
+    assert v6_dels == [
+        ["route", "-6", "delete", "::/1", "::1"],
+        ["route", "-6", "delete", "8000::/1", "::1"],
+    ]
+    assert calls.index(v6_dels[0]) < calls.index(v6_adds[0])
 
 
 def test_windows_remove_routes_also_deletes_the_blackholes(monkeypatch, win_net):
@@ -230,6 +356,10 @@ def test_windows_remove_routes_also_deletes_the_blackholes(monkeypatch, win_net)
     dels = {tuple(c) for c in calls if c[:2] == ["route", "delete"]}
     assert ("route", "delete", "0.0.0.0", "mask", "128.0.0.0", "127.0.0.1") in dels
     assert ("route", "delete", "128.0.0.0", "mask", "128.0.0.0", "127.0.0.1") in dels
+    # The v6 blackholes are deleted too, so no v6 leak is left behind.
+    dels6 = {tuple(c) for c in calls if c[:2] == ["route", "-6"]}
+    assert ("route", "-6", "delete", "::/1", "::1") in dels6
+    assert ("route", "-6", "delete", "8000::/1", "::1") in dels6
     # The tunnel routes and the pinned host route are still cleaned up.
     assert ("route", "delete", "0.0.0.0", "mask", "128.0.0.0", "0.0.0.0") in dels
     assert ("route", "delete", "128.0.0.0", "mask", "128.0.0.0", "0.0.0.0") in dels
@@ -247,6 +377,50 @@ def test_windows_add_failure_raises(monkeypatch, win_net):
     monkeypatch.setattr(win_net.proc, "run", run)
     with pytest.raises(RuntimeError, match="0.0.0.0"):
         win_net.add_killswitch_routes()
+
+
+def test_windows_ipv6_blocked_reads_the_route_table(monkeypatch, win_net):
+    # Both halves blackholed (next hop ::1) -> covered.
+    def ps_lines(script, **_k):
+        return ["1"] if "DestinationPrefix" in script else []
+    monkeypatch.setattr(win_net.proc, "ps_lines", ps_lines)
+    assert win_net.ipv6_blocked() is True
+    # One half not blackholed -> not covered.
+    def ps_lines_partial(script, **_k):
+        return ["0"] if "::/1" in script else ["1"]
+    monkeypatch.setattr(win_net.proc, "ps_lines", ps_lines_partial)
+    assert win_net.ipv6_blocked() is False
+    # No v6 blackholes at all -> not covered.
+    monkeypatch.setattr(win_net.proc, "ps_lines", lambda *a, **k: ["0"])
+    assert win_net.ipv6_blocked() is False
+
+
+def test_windows_v6_failure_is_quiet_and_keeps_v4(monkeypatch, win_net, caplog):
+    # IPv6 is disabled/unsupported: the v6 adds are refused. That must not
+    # raise, must not spam, and must not take the v4 protection down.
+    calls: list[list[str]] = []
+
+    def run(args, **_k):
+        calls.append(list(args))
+        # Only the first v6 add (::/1) is refused; everything else succeeds.
+        refused = (args[:2] == ["route", "-6"] and args[2] == "add"
+                   and args[3] == "::/1")
+        return types.SimpleNamespace(
+            returncode=int(refused), stdout="",
+            stderr="The object already exists" if refused else "")
+
+    monkeypatch.setattr(win_net.proc, "run", run)
+    with caplog.at_level("DEBUG", logger="xrayui.core._windows_test"):
+        win_net.add_killswitch_routes()  # must not raise
+    # The v4 blackholes were still installed.
+    v4_adds = [c for c in calls if c[:2] == ["route", "add"]]
+    assert v4_adds == [
+        ["route", "add", "0.0.0.0", "mask", "128.0.0.0", "127.0.0.1", "metric", "1000"],
+        ["route", "add", "128.0.0.0", "mask", "128.0.0.0", "127.0.0.1", "metric", "1000"],
+    ]
+    # The v6 failure is logged at debug, not warning/error.
+    assert any("IPv6" in r.message for r in caplog.records)
+    assert all(r.levelno < 30 for r in caplog.records)
 
 
 # -- connect / teardown flow ------------------------------------------------

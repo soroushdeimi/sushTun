@@ -1,6 +1,7 @@
 """Windows network orchestration: interface detection, DNS, routes, TUN."""
 from __future__ import annotations
 
+import logging
 import subprocess
 import sys
 import time
@@ -9,6 +10,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 from . import proc
 from ._net_common import TUN_ADDRESS, TUN_NAME, TUN_NETMASK, DnsState, Interface
+
+logger = logging.getLogger(__name__)
 
 TUN_METRIC = 1
 
@@ -32,6 +35,15 @@ KILLSWITCH_METRIC = 1000
 # refuses it, add_killswitch_routes raises and the connect continues without
 # the kill switch (logged, and reported as not active) — never broken.
 KILLSWITCH_GATEWAY = "127.0.0.1"
+# The tunnel is IPv4-only, so IPv6 is never routed into it and would leave in
+# the clear while connected. The kill switch blackholes IPv6 too: one /1 per
+# half of the IPv6 space, to the loopback next hop, at the same worse metric.
+# Unconditional (no tunnel v6 route exists to beat them), installed and removed
+# with the v4 ones. Windows `route -6` writes the destination as
+# address/prefixlen (no separate mask) and the gateway after it:
+#   route -6 add ::/1 ::1 metric 1000
+KILLSWITCH_V6_SPLIT = ("::/1", "8000::/1")
+KILLSWITCH_V6_GATEWAY = "::1"
 
 _DETECT_PS = """
 $candidate = $null
@@ -270,6 +282,28 @@ def replace_host_route(server_ip: str, gateway: str) -> None:
     add_host_route(server_ip, gateway)
 
 
+def _add_killswitch_v6() -> bool:
+    """Blackhole IPv6 too: the tunnel is IPv4-only, so v6 would otherwise
+    leave in the clear while connected. Returns True if both halves are in.
+
+    A machine with IPv6 disabled/unsupported refuses the adds; that is not an
+    error — it is logged at debug level (no error spam) and the v4 protection
+    still stands. Idempotent: a stale v6 blackhole is cleared first.
+
+    NOT VERIFIED live: `route -6 add <addr>/<len> <gw> metric <m>` was reasoned
+    from the v4 form, not run against a real Windows route table.
+    """
+    for dest in KILLSWITCH_V6_SPLIT:
+        _run_best_effort(["route", "-6", "delete", dest, KILLSWITCH_V6_GATEWAY])
+        result = proc.run(["route", "-6", "add", dest, KILLSWITCH_V6_GATEWAY,
+                           "metric", str(KILLSWITCH_METRIC)])
+        if result.returncode != 0:
+            logger.debug("kill switch IPv6 route %s not installed: %s",
+                         dest, result.stderr.strip())
+            return False
+    return True
+
+
 def add_killswitch_routes() -> None:
     """Install the blackhole routes that catch traffic once the tunnel is gone.
 
@@ -280,7 +314,9 @@ def add_killswitch_routes() -> None:
     0.0.0.0, is distinguishable from the tunnel route so removal is
     unambiguous. Idempotent: a stale blackhole a crashed session left behind
     is cleared first, so a fresh connect never fails on "already exists".
-    Raises on the first refused add, like add_default_routes.
+    Raises on the first refused IPv4 add, like add_default_routes. IPv6 is
+    blackholed too (see _add_killswitch_v6); a machine without IPv6 simply
+    skips it.
 
     NOT VERIFIED live: the exact `route` argv was reasoned from the existing
     tunnel-route form, not run against a real Windows route table.
@@ -292,18 +328,20 @@ def add_killswitch_routes() -> None:
         if result.returncode != 0:
             raise RuntimeError(f"kill switch route {dest} failed: "
                                f"{result.stderr.strip()}")
+    _add_killswitch_v6()
 
 
 def remove_killswitch_routes() -> None:
-    """Delete the kill switch blackholes. Best-effort, like every teardown
-    delete: a route whose owner is already gone fails, and that is fine.
-
-    Matched on the loopback gateway, so the tunnel route (next hop 0.0.0.0)
-    is never touched.
+    """Delete the kill switch blackholes (v4 and v6). Best-effort, like every
+    teardown delete: a route whose owner is already gone fails, and that is
+    fine. Matched on the loopback gateway, so the tunnel route (next hop
+    0.0.0.0) is never touched.
     """
     cmds = [["route", "delete", dest, "mask", mask, KILLSWITCH_GATEWAY]
             for dest, mask in DEFAULT_SPLIT]
-    with ThreadPoolExecutor(max_workers=2) as pool:
+    cmds += [["route", "-6", "delete", dest, KILLSWITCH_V6_GATEWAY]
+             for dest in KILLSWITCH_V6_SPLIT]
+    with ThreadPoolExecutor(max_workers=4) as pool:
         list(pool.map(_run_best_effort, cmds))
 
 
@@ -319,10 +357,31 @@ def remove_routes(server_ip: str | None = None) -> None:
         # The blackhole, matched on its loopback gateway so the tunnel route
         # (next hop 0.0.0.0) is never taken down by mistake.
         cmds.append(["route", "delete", dest, "mask", mask, KILLSWITCH_GATEWAY])
+    cmds += [["route", "-6", "delete", dest, KILLSWITCH_V6_GATEWAY]
+             for dest in KILLSWITCH_V6_SPLIT]
     if server_ip:
         cmds.append(["route", "delete", server_ip, "mask", "255.255.255.255"])
     with ThreadPoolExecutor(max_workers=4) as pool:
         list(pool.map(_run_best_effort, cmds))
+
+
+def ipv6_blocked() -> bool:
+    """Whether the kill switch's IPv6 blackholes are currently in the route
+    table, so the UI / a leak check can tell whether v6 is covered.
+
+    Pure inspection: it reads the route table and changes nothing. True only
+    when both halves of the IPv6 space are blackholed (next hop ::1).
+    """
+    for prefix in KILLSWITCH_V6_SPLIT:
+        script = (
+            f"(Get-NetRoute -AddressFamily IPv6 -DestinationPrefix '{prefix}' "
+            f"-ErrorAction SilentlyContinue | "
+            f"Where-Object {{ $_.NextHop -eq '{KILLSWITCH_V6_GATEWAY}' }}).Count"
+        )
+        lines = proc.ps_lines(script)
+        if not lines or not lines[0].isdigit() or int(lines[0]) < 1:
+            return False
+    return True
 
 
 def wait_for_tun(name: str = TUN_NAME, timeout: float = 30.0,
@@ -374,6 +433,7 @@ if sys.platform != "win32":
     add_default_routes = _posix.add_default_routes
     add_killswitch_routes = _posix.add_killswitch_routes
     remove_killswitch_routes = _posix.remove_killswitch_routes
+    ipv6_blocked = _posix.ipv6_blocked
     repair_tun_routes = _posix.repair_tun_routes
     remove_routes = _posix.remove_routes
     wait_for_tun = _posix.wait_for_tun
