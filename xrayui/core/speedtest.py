@@ -209,10 +209,16 @@ def _measure_warm(port: int, url: str, timeout: float) -> Measured:
     import http.client
     import urllib.parse
 
+    from . import tls
+
     parts = urllib.parse.urlsplit(url)
     https = parts.scheme == "https"
     if https:
-        conn = http.client.HTTPSConnection("127.0.0.1", port, timeout=timeout)
+        # The frozen app has no CA bundle of its own: use the same context as
+        # every other outbound HTTPS call, or the handshake with the target
+        # fails and a working server shows as Failed.
+        conn = http.client.HTTPSConnection("127.0.0.1", port, timeout=timeout,
+                                           context=tls.https_context())
         conn.set_tunnel(parts.hostname, parts.port or 443)
         target = parts.path or "/"
         if parts.query:
