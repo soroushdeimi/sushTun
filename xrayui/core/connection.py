@@ -98,6 +98,18 @@ def _bootstrap_dns(alias: str, state) -> list[str] | None:
     return found or None
 
 
+_VIRTUAL_PREFIXES = ("utun", "tun", "tap", "ppp", "ipsec", "wg", "tailscale", "xray",
+                     "docker", "veth", "br-", "bridge", "vbox", "vmnet", "awdl",
+                     "llw", "lo", "gif", "stf", "anpi")
+_VIRTUAL_WORDS = ("wintun", "wireguard", "openvpn", "tap-", "vpn", "virtual", "loopback")
+
+
+def _is_virtual_adapter(alias: str) -> bool:
+    """A VPN, bridge or other software device, not a real network card."""
+    name = alias.lower()
+    return name.startswith(_VIRTUAL_PREFIXES) or any(w in name for w in _VIRTUAL_WORDS)
+
+
 class Connection:
     def __init__(self, on_step: Callable[[str], None] | None = None) -> None:
         self._log = on_step or (lambda _m: None)
@@ -107,6 +119,10 @@ class Connection:
         self._owned = False  # did this process establish the active connection?
         self._gateway_on = False
         self._dns_warned = False
+        # Set once the network really moved to another physical adapter; the
+        # window answers by reconnecting (see repair_route_if_needed).
+        self.roamed_to: str | None = None
+        self._roam_candidate: str | None = None
         # True only once the kill switch blackholes are actually in the route
         # table. The UI uses it to say "internet is blocked" — it must never
         # claim that when the install failed.
@@ -685,10 +701,11 @@ class Connection:
         if not self.state.is_connected():
             return None
         iface = network.detect_interface()
-        if iface is None or iface.alias != self.state.alias:
-            # Offline, or roamed to a different adapter entirely — too risky
-            # to auto-migrate DNS/routes across adapters; let the user reconnect.
-            return None
+        if iface is None:
+            return None  # offline: nothing to repair yet
+        if iface.alias != self.state.alias:
+            return self._note_roam(iface.alias)
+        self._roam_candidate = None
         restored = None
         if network.repair_tun_routes():
             restored = "Missing tunnel routes restored."
@@ -704,6 +721,27 @@ class Connection:
             network.mac_ensure_scoped_default(iface.alias, iface.gateway)
         self.state.update_gateway(iface.gateway)
         msg = f"Gateway changed ({old_gateway} -> {iface.gateway}) — route to server refreshed."
+        self._log(msg)
+        return msg
+
+    def _note_roam(self, alias: str) -> str | None:
+        """The default route now leaves through another adapter than the one
+        Xray is pinned to. Migrating DNS and routes in place is too risky, but
+        doing nothing left the tunnel dead until the user reconnected by hand.
+        So: ignore other VPNs' devices, wait for a second look so a flap does
+        not trigger it, then flag a roam for the window to reconnect on.
+        """
+        if _is_virtual_adapter(alias):
+            self._roam_candidate = None
+            return None
+        if self._roam_candidate != alias:
+            self._roam_candidate = alias
+            return None
+        if self.roamed_to == alias:
+            return None
+        self.roamed_to = alias
+        msg = (f"Network moved from {self.state.alias} to {alias} — "
+               "reconnecting on the new network.")
         self._log(msg)
         return msg
 
@@ -793,6 +831,7 @@ class Connection:
 
     def _restore(self, dns_retries: int = 1) -> bool:
         self._log("Disconnecting...")
+        self.roamed_to = self._roam_candidate = None
         alias = self.state.alias
         server_ip = self.state.server_ip
         dns = self.state.dns_state()

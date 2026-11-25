@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.14.2
+
+### Fixed
+- **The VPN died after the network changed and only a manual disconnect and connect fixed it.** When the connection moves to another network adapter (a hotspot to Wi-Fi, a new router), the tunnel is pinned to the old one. The app used to give up silently. It now notices, waits for a second check so a flapping link does not trigger it, then reconnects by itself and shows a notification. Another VPN taking the default route (WireGuard and similar) does not count as a network change.
+
+<!-- fa -->
+
+### چی درست شده
+- **بعد از عوض شدن شبکه، وی‌پی‌ان می‌مرد و فقط قطع و وصل دستی درستش می‌کرد.** وقتی اتصال به یه کارت شبکه‌ی دیگه می‌رفت (مثلاً از هات‌اسپات به وای‌فای یا یه مودم جدید)، تونل به کارت قبلی بسته می‌موند و برنامه بی‌صدا ول می‌کرد. حالا متوجه می‌شه، یه بار دیگه چک می‌کنه که قطعی‌وصلی کوتاه نباشه، بعد خودش دوباره وصل می‌شه و یه اعلان نشون می‌ده. اگه یه وی‌پی‌ان دیگه (مثل WireGuard) مسیر پیش‌فرض رو بگیره، تغییر شبکه حساب نمی‌شه.
+
 ## v0.14.1
 
 ### Fixed

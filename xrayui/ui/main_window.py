@@ -78,6 +78,7 @@ _MAX_TRAY_SERVERS = 20
 _STATUS_MS = 2000
 _ROUTE_MS = 15_000
 _ROUTE_HIDDEN_MS = 60_000
+_ROAM_COOLDOWN_S = 60
 _EDGE_CURSORS = {
     Qt.LeftEdge: Qt.SizeHorCursor,
     Qt.RightEdge: Qt.SizeHorCursor,
@@ -2119,8 +2120,26 @@ class MainWindow(QMainWindow):
             self._check_security_alerts()
             if result:
                 self._refresh_status()
+            self._reconnect_after_roam()
 
         self._run_async(work, done)
+
+    def _reconnect_after_roam(self) -> None:
+        """The network moved to another adapter (hotspot to Wi-Fi, a dock, a
+        new router). Xray is pinned to the old one, so the tunnel is dead until
+        it is rebuilt: do that ourselves instead of waiting for a manual
+        disconnect and connect. Spaced out so a flapping link cannot loop."""
+        target = getattr(self.conn, "roamed_to", None)
+        if not target or self._busy or not self.conn.is_connected():
+            return
+        now = time.monotonic()
+        if now - getattr(self, "_last_roam_reconnect", -1e9) < _ROAM_COOLDOWN_S:
+            return
+        self._last_roam_reconnect = now
+        self._notify(tr("Network changed"),
+                     tr("Reconnecting on {name}.", name=target),
+                     QSystemTrayIcon.Information)
+        self._reconnect_now()
 
     def _sample_live(self, tun: int) -> None:
         self._sampling = True
