@@ -198,3 +198,16 @@ def test_strict_incompatible_with_serverless_only(caplog):
     assert _find(rules, outboundTag="proxy") is None
     # The incompatibility is surfaced, not silently ignored.
     assert any("strict" in r.message for r in caplog.records)
+
+
+def test_strict_off_serverless_only_logs_nothing(caplog):
+    # A user who never turned strict on must not see a strict warning.
+    import logging
+
+    only = Profile(name="Serverless only", protocol="serverless", address="",
+                   uid="serverless-only")
+    with caplog.at_level(logging.WARNING, logger="xrayui.core.render"):
+        render.build_text(only, "lo", include_tun=False,
+                          routing_rules=routing.build_rules(_routing()),
+                          strict_cfg=_strict(enabled=False))
+    assert not any("strict" in r.message for r in caplog.records)

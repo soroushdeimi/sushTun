@@ -154,7 +154,8 @@ def build_text(
     # real IP -- that combination is reported as incompatible (strict.problem)
     # and must not be silently rendered as if it protected anything.
     strict_on = strict_cfg is not None and not serverless_mod.is_only(profile_entry)
-    if strict_cfg is not None and serverless_mod.is_only(profile_entry):
+    if (strict_cfg is not None and strict_cfg.get("enabled") is True
+            and serverless_mod.is_only(profile_entry)):
         # Strict is on but this mode sends everything direct, so it cannot
         # protect. Log it (never claim protection that is not active) and
         # continue -- the connection itself still works.
