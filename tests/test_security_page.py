@@ -277,3 +277,39 @@ def test_page_fits_the_settings_window_width(qapp, defaults):
     finally:
         win.close()
         qapp.setStyleSheet("")
+
+
+def _mac_page(monkeypatch, *, plist_present, app_installed):
+    monkeypatch.setattr(sp.sys, "platform", "darwin")
+    monkeypatch.setattr(sp.macos_helper_mod, "_is_mac", lambda: True)
+    monkeypatch.setattr(sp.macos_helper_mod, "installed", lambda: plist_present)
+    monkeypatch.setattr(sp.app_paths, "installed", lambda: app_installed)
+    return sp.SecurityPage(copy.deepcopy(app_settings.DEFAULTS))
+
+
+def test_helper_can_be_installed_from_settings_when_not_yet_installed(qapp, monkeypatch):
+    # The row used to exist only once the helper was already installed, so
+    # anyone who dismissed the one-time offer could never turn it on.
+    page = _mac_page(monkeypatch, plist_present=False, app_installed=True)
+    try:
+        assert page.btn_helper is not None
+        assert page.btn_helper.text() == "Install helper"
+        assert "password" in page.helper_status.text()
+    finally:
+        page.close()
+
+
+def test_helper_row_offers_uninstall_once_installed(qapp, monkeypatch):
+    page = _mac_page(monkeypatch, plist_present=True, app_installed=True)
+    try:
+        assert page.btn_helper.text() == "Uninstall helper"
+    finally:
+        page.close()
+
+
+def test_helper_row_is_hidden_on_a_dev_run(qapp, monkeypatch):
+    page = _mac_page(monkeypatch, plist_present=False, app_installed=False)
+    try:
+        assert page.btn_helper is None
+    finally:
+        page.close()
