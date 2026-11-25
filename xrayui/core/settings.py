@@ -158,6 +158,11 @@ DEFAULTS: dict = {
     # is a list (replaced wholesale by _merge, like dns.hosts); the curated AI
     # list lives in core/strict.py, not here.
     "strict": {"enabled": False, "ai_protect": True, "no_direct": False, "domains": []},
+    # OS firewall lockdown (core/firewall.py). Off: no firewall rules are
+    # installed, so an untouched install behaves exactly as before. When on,
+    # the OS drops any outbound packet not on the tunnel, to a proxy server,
+    # to a DNS resolver, to loopback, or (allow_lan) to the LAN/link-local.
+    "firewall": {"enabled": False, "allow_lan": True},
     "startup": {
         "start_on_login": False,
         "start_minimized": False,
