@@ -180,15 +180,21 @@ def test_untouched_install_renders_identical_config():
     assert base == off
 
 
-def test_strict_incompatible_with_serverless_only():
+def test_strict_incompatible_with_serverless_only(caplog):
     # serverless-only makes "proxy" a fragmenting direct outbound, so strict
-    # cannot protect. render must not add the protected rule in that case.
+    # cannot protect. render must not add the protected rule in that case, and
+    # must log a WARNING (never claim protection that is not active).
+    import logging
+
     only = Profile(name="Serverless only", protocol="serverless", address="",
                    uid="serverless-only")
     assert strict.problem(only) is not None
-    rules = json.loads(render.build_text(
-        only, "lo", include_tun=False,
-        routing_rules=routing.build_rules(_routing()),
-        strict_cfg=_strict(enabled=True)))["routing"]["rules"]
+    with caplog.at_level(logging.WARNING, logger="xrayui.core.render"):
+        rules = json.loads(render.build_text(
+            only, "lo", include_tun=False,
+            routing_rules=routing.build_rules(_routing()),
+            strict_cfg=_strict(enabled=True)))["routing"]["rules"]
     # No protected "proxy" rule is rendered for the incompatible mode.
     assert _find(rules, outboundTag="proxy") is None
+    # The incompatibility is surfaced, not silently ignored.
+    assert any("strict" in r.message for r in caplog.records)

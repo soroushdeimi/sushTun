@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import logging
 from pathlib import Path
 
 from .. import paths
@@ -22,6 +23,8 @@ from . import settings as app_settings
 from . import strict as strict_mod
 from .metrics import STATS_API_PORT
 from .profiles import Profile
+
+logger = logging.getLogger(__name__)
 
 
 def _apply_iface_alias(cfg: dict, iface_alias: str) -> None:
@@ -151,6 +154,11 @@ def build_text(
     # real IP -- that combination is reported as incompatible (strict.problem)
     # and must not be silently rendered as if it protected anything.
     strict_on = strict_cfg is not None and not serverless_mod.is_only(profile_entry)
+    if strict_cfg is not None and serverless_mod.is_only(profile_entry):
+        # Strict is on but this mode sends everything direct, so it cannot
+        # protect. Log it (never claim protection that is not active) and
+        # continue -- the connection itself still works.
+        logger.warning("strict: %s", strict_mod.problem(profile_entry))
     if strict_on and strict_mod.no_direct(strict_cfg):
         # No-direct: drop every rule that sends traffic with the real IP, so
         # nothing at all can leak. DNS/own-server pins are not "direct" rules
