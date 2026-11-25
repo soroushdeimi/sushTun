@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import logging
 from pathlib import Path
 
 from .. import paths
@@ -19,8 +20,11 @@ from . import forwards as forwards_mod
 from . import routing as routing_mod
 from . import serverless as serverless_mod
 from . import settings as app_settings
+from . import strict as strict_mod
 from .metrics import STATS_API_PORT
 from .profiles import Profile
+
+logger = logging.getLogger(__name__)
 
 
 def _apply_iface_alias(cfg: dict, iface_alias: str) -> None:
@@ -138,11 +142,39 @@ def build_text(
     system_dns: list[str] | None = None,
     serverless_cfg: dict | None = None,
     serverless_bootstrap: list[str] | None = None,
+    strict_cfg: dict | None = None,
 ) -> str:
     tmpl_path = template_path or paths.config_template()
     cfg = json.loads(tmpl_path.read_text(encoding="utf-8"))
     profile_entry = profile
     plan = profile if isinstance(profile, chains.ResolvedChain) else None
+
+    # Strict mode. Serverless-only makes the "proxy" outbound a fragmenting
+    # *direct* one, so routing protected domains to "proxy" would still use the
+    # real IP -- that combination is reported as incompatible (strict.problem)
+    # and must not be silently rendered as if it protected anything.
+    strict_on = strict_cfg is not None and not serverless_mod.is_only(profile_entry)
+    if (strict_cfg is not None and strict_cfg.get("enabled") is True
+            and serverless_mod.is_only(profile_entry)):
+        # Strict is on but this mode sends everything direct, so it cannot
+        # protect. Log it (never claim protection that is not active) and
+        # continue -- the connection itself still works.
+        logger.warning("strict: %s", strict_mod.problem(profile_entry))
+    if strict_on and strict_mod.no_direct(strict_cfg):
+        # No-direct: drop every rule that sends traffic with the real IP, so
+        # nothing at all can leak. DNS/own-server pins are not "direct" rules
+        # and survive.
+        routing_rules = strict_mod.strip_direct(routing_rules)
+    if strict_on and strict_mod.build_rule(strict_cfg):
+        # The protected-domains rule must beat every user/forwards/exits rule,
+        # so it goes ahead of all of them. But it must stay AFTER the
+        # template's own dns-in / tun-in:53 rules -- those match on inboundTag
+        # and must catch DNS queries first, or a DNS lookup for a protected
+        # name would be misrouted to "proxy" instead of "dns-out". At this
+        # point the list holds only the template's rules, so appending puts it
+        # exactly there. Off by default: build_rule returns None, a no-op.
+        cfg.setdefault("routing", {}).setdefault("rules", []).append(
+            strict_mod.build_rule(strict_cfg))
     if plan:
         chains.apply(cfg, plan, core_cfg)
         profile = plan.exit
@@ -164,6 +196,14 @@ def build_text(
     dns_block: dict = {}
     if dns_cfg:
         direct_domains = routing_mod.direct_domains(routing_rules or [])
+        if strict_on and strict_mod.is_active(strict_cfg):
+            # A protected name must not be resolved by the domestic (Iranian)
+            # DNS server: that resolver would answer it via the local resolver
+            # (a leak and a poisoning risk). Dropping the matcher here makes
+            # the name fall through to the tunnel DNS instead. Guarded on
+            # is_active so an untouched install (strict off) is unchanged.
+            direct_domains = strict_mod.filter_direct_domains(
+                direct_domains, strict_mod.protected_domains(strict_cfg))
         dns_block, dns_routing_rules = dns_mod.build_dns_and_rules(
             dns_cfg, direct_domains, plan.entry.address if plan else profile.address,
             server_ip=server_ip, system_dns=system_dns)
@@ -247,6 +287,7 @@ def build(
     system_dns: list[str] | None = None,
     serverless_cfg: dict | None = None,
     serverless_bootstrap: list[str] | None = None,
+    strict_cfg: dict | None = None,
 ) -> Path:
     out = paths.runtime_config()
     # Forward by keyword: a positional forward silently mis-binds the next time
@@ -272,6 +313,7 @@ def build(
             system_dns=system_dns,
             serverless_cfg=serverless_cfg,
             serverless_bootstrap=serverless_bootstrap,
+            strict_cfg=strict_cfg,
         ),
         encoding="utf-8",
     )

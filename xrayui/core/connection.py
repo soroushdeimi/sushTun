@@ -294,7 +294,8 @@ class Connection:
                                 exits=exits, exits_cfg=cfgs.get("exits"),
                                 forwards=forwards, system_dns=system_dns,
                                 serverless_cfg=cfgs.get("serverless"),
-                                serverless_bootstrap=bootstrap)
+                                serverless_bootstrap=bootstrap,
+                                strict_cfg=cfgs.get("strict"))
 
         cfg = build(exits, forwards)
         self._log_lan_share(cfgs.get("core") or {}, iface)
@@ -530,7 +531,8 @@ class Connection:
                                 exits_cfg=cfgs.get("exits"), forwards=forwards,
                                 system_dns=system_dns,
                                 serverless_cfg=cfgs.get("serverless"),
-                                serverless_bootstrap=bootstrap)
+                                serverless_bootstrap=bootstrap,
+                                strict_cfg=cfgs.get("strict"))
 
         cfg = build(exits, forwards)
         self._log_lan_share(core_cfg, iface)

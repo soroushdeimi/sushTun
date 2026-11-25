@@ -144,6 +144,11 @@ DEFAULTS: dict = {
     # leaking to the physical default route. Off: identical behaviour to
     # before — no extra routes at all.
     "killswitch": {"enabled": False},
+    # Strict mode (core/strict.py). Off by default: an untouched install
+    # renders the same config and runs the same commands as before. `domains`
+    # is a list (replaced wholesale by _merge, like dns.hosts); the curated AI
+    # list lives in core/strict.py, not here.
+    "strict": {"enabled": False, "ai_protect": True, "no_direct": False, "domains": []},
     "startup": {
         "start_on_login": False,
         "start_minimized": False,
