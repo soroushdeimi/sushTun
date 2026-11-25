@@ -138,6 +138,11 @@ DEFAULTS: dict = {
     "forwards": [],
     # Serverless entry (core/serverless.py). Off: nothing is rendered for it.
     "serverless": {"enabled": False, "skip_only_warning": False},
+    # OS firewall lockdown (core/firewall.py). Off: no firewall rules are
+    # installed, so an untouched install behaves exactly as before. When on,
+    # the OS drops any outbound packet not on the tunnel, to a proxy server,
+    # to a DNS resolver, to loopback, or (allow_lan) to the LAN/link-local.
+    "firewall": {"enabled": False, "allow_lan": True},
     "startup": {
         "start_on_login": False,
         "start_minimized": False,
