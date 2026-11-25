@@ -820,48 +820,85 @@ def _masque_http_version(alpn: object) -> str:
     return "h2" if "h2" in alpn and "h3" not in alpn else "h3"
 
 
+def _masque_str(mapping: dict, key: str, default: str = "") -> str:
+    # A hand-edited or corrupt config can hold any JSON type in a field that
+    # must be a string; reject it here rather than let it crash downstream.
+    value = mapping.get(key, default)
+    if value is None:
+        return default
+    if not isinstance(value, str):
+        raise ValueError(f"masque {key} must be a string")
+    return value
+
+
 def _profile_from_masque_outbound(proxy: dict) -> Profile:
+    if not isinstance(proxy, dict):
+        raise ValueError("masque outbound must be an object")
     settings = proxy.get("settings") or {}
     stream = proxy.get("streamSettings") or {}
+    if not isinstance(settings, dict) or not isinstance(stream, dict):
+        raise ValueError("masque settings/streamSettings must be objects")
     masque = stream.get("masqueSettings") or {}
     tls = stream.get("tlsSettings") or {}
-    warp = masque.get("warp") or {}
+    if not isinstance(masque, dict) or not isinstance(tls, dict):
+        raise ValueError("masque masqueSettings/tlsSettings must be objects")
     # Xray accepts the transport as streamSettings.method (docs) or the
     # legacy network key; a conflicting pair is a broken config.
-    network = (stream.get("network") or "").lower()
-    method = (stream.get("method") or "").lower()
+    network = _masque_str(stream, "network").lower()
+    method = _masque_str(stream, "method").lower()
     if network and method and network != method:
         raise ValueError("masque outbound network/method conflict")
     if network != "masque" and method != "masque":
         raise ValueError("masque outbound has an incompatible network")
-    if (stream.get("security") or "").lower() != "tls":
+    if _masque_str(stream, "security").lower() != "tls":
         raise ValueError("masque outbound requires tls security")
     port = settings.get("port", 443)
     if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
         raise ValueError("masque port must be an integer 1-65535")
+    address = _masque_str(settings, "address")
     dns = settings.get("remoteDNS") or []
     if isinstance(dns, str):
         dns = [dns]
+    if not isinstance(dns, list) or not all(isinstance(d, str) for d in dns):
+        raise ValueError("masque remoteDNS must be a list of strings")
+    # An explicit warp object is a WARP identity attempt: it must be complete
+    # and well-typed, never silently dropped to anonymous generic MASQUE.
+    if "warp" in masque:
+        warp = masque["warp"]
+        if not isinstance(warp, dict):
+            raise ValueError("masque warp must be an object")
+        priv = _masque_str(warp, "privateKey")
+        pub = _masque_str(warp, "publicKey")
+        addr = warp.get("address")
+        if not isinstance(addr, list) or not addr \
+                or not all(isinstance(a, str) for a in addr):
+            raise ValueError("masque warp address must be a non-empty list of strings")
+        if not (priv and pub):
+            raise ValueError("masque warp identity is incomplete")
+        masque_private_key, masque_public_key = priv, pub
+        masque_addresses = ", ".join(addr)
+    else:
+        masque_private_key = masque_public_key = masque_addresses = ""
     return Profile(
-        name=masque.get("host") or settings.get("address", "imported"),
+        name=_masque_str(masque, "host") or address or "imported",
         protocol="masque",
-        address=settings.get("address", ""),
+        address=address,
         port=port,
         network="masque",
         security="tls",
-        username=masque.get("user", ""),
-        id=masque.get("pass", ""),
-        host=masque.get("host", ""),
-        path=masque.get("path", ""),
-        sni=tls.get("serverName", ""),
-        fp=tls.get("fingerprint", ""),
-        pcs=normalize_pcs(tls.get("pinnedPeerCertSha256", "")),
-        vcn=tls.get("verifyPeerCertByName", ""),
+        username=_masque_str(masque, "user"),
+        id=_masque_str(masque, "pass"),
+        host=_masque_str(masque, "host"),
+        path=_masque_str(masque, "path"),
+        sni=_masque_str(tls, "serverName"),
+        fp=_masque_str(tls, "fingerprint"),
+        pcs=normalize_pcs(_masque_str(tls, "pinnedPeerCertSha256")),
+        vcn=_masque_str(tls, "verifyPeerCertByName"),
         masque_http_version=_masque_http_version(tls.get("alpn")),
-        masque_remote_dns=", ".join(str(d) for d in dns),
-        masque_private_key=warp.get("privateKey", ""),
-        masque_public_key=warp.get("publicKey", ""),
-        masque_addresses=", ".join(str(a) for a in (warp.get("address") or [])),
+        masque_remote_dns=", ".join(dns),
+        masque_private_key=masque_private_key,
+        masque_public_key=masque_public_key,
+        masque_addresses=masque_addresses,
     )
 
 

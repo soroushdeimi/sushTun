@@ -389,6 +389,55 @@ def test_json_masque_missing_keys_still_imports():
     assert got.masque_private_key == ""
 
 
+def _masque_json(warp=None, **stream_over):
+    masque = {}
+    if warp is not None:
+        masque["warp"] = warp
+    stream = {"network": "masque", "security": "tls",
+              "masqueSettings": masque, "tlsSettings": {"alpn": ["h2"]}}
+    stream.update(stream_over)
+    return json.dumps({"outbounds": [
+        {"tag": "proxy", "protocol": "masque",
+         "settings": {"address": "1.2.3.4", "port": 443},
+         "streamSettings": stream},
+        {"tag": "direct", "protocol": "freedom"},
+    ]})
+
+
+@pytest.mark.parametrize("warp", [
+    {"privateKey": 123, "publicKey": "AQID", "address": ["172.16.0.2/32"]},
+    {"privateKey": "AQID", "publicKey": 7, "address": ["172.16.0.2/32"]},
+    {"privateKey": "AQID", "publicKey": "AQID", "address": "172.16.0.2/32"},
+    {"privateKey": "AQID", "publicKey": "AQID", "address": [123]},
+    {"privateKey": "AQID", "publicKey": "AQID", "address": []},
+    {"privateKey": "AQID", "publicKey": "AQID"},
+    "not-a-dict",
+])
+def test_json_masque_malformed_warp_rejected(warp):
+    # A wrong-typed or incomplete warp must raise ValueError, never crash with
+    # an AttributeError and never silently become anonymous generic MASQUE.
+    with pytest.raises(ValueError):
+        importer.parse_json(_masque_json(warp=warp))
+
+
+@pytest.mark.parametrize("field, bad", [
+    ("user", 5), ("pass", 5), ("host", 5), ("path", 5),
+    ("serverName", 5), ("fingerprint", 5),
+    ("pinnedPeerCertSha256", 5), ("verifyPeerCertByName", 5),
+])
+def test_json_masque_malformed_string_field_rejected(field, bad):
+    if field in ("user", "pass", "host", "path"):
+        cfg = _masque_json()
+        data = json.loads(cfg)
+        data["outbounds"][0]["streamSettings"]["masqueSettings"][field] = bad
+    else:
+        cfg = _masque_json()
+        data = json.loads(cfg)
+        data["outbounds"][0]["streamSettings"]["tlsSettings"][field] = bad
+    with pytest.raises(ValueError):
+        importer.parse_json(json.dumps(data))
+
+
 # -- masque:// share format ---------------------------------------------------
 def test_share_masque_generic_round_trip():
     p = _generic(username="user", id="pass", host="example.com", path="/x",
