@@ -220,6 +220,25 @@ def test_masque_builder_rejects_partial_warp_identity():
         outbounds.build(_warp(masque_addresses=""), "proxy")
 
 
+def test_masque_builder_rejects_one_sided_auth():
+    # A one-sided credential must not silently downgrade to anonymous generic.
+    with pytest.raises(ValueError):
+        outbounds.build(_generic(username="user"), "proxy")
+    with pytest.raises(ValueError):
+        outbounds.build(_generic(id="pass"), "proxy")
+
+
+def test_masque_builder_rejects_invalid_path_dns_flow():
+    with pytest.raises(ValueError):
+        outbounds.build(_generic(path="no-slash"), "proxy")
+    with pytest.raises(ValueError):
+        outbounds.build(_generic(masque_remote_dns="dns.example.com"), "proxy")
+    with pytest.raises(ValueError):
+        outbounds.build(_generic(flow="xtls-rprx-vision"), "proxy")
+    with pytest.raises(ValueError):
+        outbounds.build(_generic(security="none"), "proxy")
+
+
 def test_masque_warp_renders_warp_object():
     out = outbounds.build(_warp(), "proxy")
     assert out["streamSettings"]["masqueSettings"]["warp"] == {
@@ -237,9 +256,11 @@ def test_masque_tls_verification_keys_render():
     assert tls["verifyPeerCertByName"] == "example.com"
 
 
-def test_masque_invalid_pcs_is_dropped():
-    out = outbounds.build(_generic(pcs="garbage"), "proxy")
-    assert "pinnedPeerCertSha256" not in out["streamSettings"]["tlsSettings"]
+def test_masque_builder_rejects_invalid_pcs():
+    # An invalid pin is a security downgrade; the builder rejects the profile
+    # rather than silently dropping the pin.
+    with pytest.raises(ValueError):
+        outbounds.build(_generic(pcs="garbage"), "proxy")
 
 
 def test_masque_never_renders_allow_insecure_or_reality():

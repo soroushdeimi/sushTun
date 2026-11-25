@@ -16,6 +16,11 @@ def _split_csv(raw: str) -> list[str]:
 
 
 def apply(proxy: dict, p: Profile) -> None:
+    # Reject an invalid profile up front so a one-sided credential, a partial
+    # WARP identity or a bad path/DNS/flow never silently downgrades to an
+    # anonymous generic MASQUE outbound.
+    if not p.is_valid():
+        raise ValueError("invalid MASQUE profile")
     proxy["protocol"] = "masque"
     settings: dict = {"address": p.address, "port": p.port}
     dns = _split_csv(p.masque_remote_dns)
@@ -29,9 +34,6 @@ def apply(proxy: dict, p: Profile) -> None:
     if p.path:
         masque["path"] = p.path
     warp = (p.masque_private_key, p.masque_public_key, p.masque_addresses)
-    if any(warp) and not all(warp):
-        # A partial WARP identity must not silently become anonymous generic.
-        raise ValueError("partial WARP identity: set all of private/public/addresses")
     if all(warp):
         masque["warp"] = {
             "privateKey": p.masque_private_key,

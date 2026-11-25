@@ -1,9 +1,15 @@
-"""Opt-in native check: render MASQUE configs and validate them with the
-bundled Xray binary via `xray run -test`.
+"""Opt-in native check: render real MASQUE profiles and validate them with
+the bundled Xray binary via `xray run -test`.
 
 This is a manual command, not part of the default unit suite, so the suite
 stays portable and needs no Xray binary. It covers generic H2, generic H3
 and a WARP identity built from a freshly generated dummy P-256 keypair.
+
+Cases are produced by the real application path -- Profile + outbounds.build
+-- so this verifies what the app actually renders, not a hand-built dict.
+The only post-processing is dropping the interface placeholder from the
+sockopt block, which the renderer normally fills with a live interface name
+that a -test fixture does not have.
 
 The dummy keypair comes from `xray tls cert -json` (a real P-256 key; the
 PEM label it prints is misleading, the DER carries the id-ecPublicKey and
@@ -12,6 +18,9 @@ and is never printed. No enrollment, no live network.
 
 Usage:
     python tools/verify_masque_config.py [path/to/xray]
+
+The xray binary is taken from the argument if given, otherwise from the
+project's paths.xray_exe().
 """
 from __future__ import annotations
 
@@ -22,9 +31,12 @@ import sys
 import tempfile
 from pathlib import Path
 
-DEFAULT_XRAY = Path(
-    "/Users/soroushdeimi/Desktop/myprojects/SUSHTUN/sushTun/xray"
-)
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+from xrayui import paths  # noqa: E402
+from xrayui.core import outbounds  # noqa: E402
+from xrayui.core.profiles import Profile  # noqa: E402
 
 # OIDs: id-ecPublicKey (1.2.840.10045.2.1) and prime256v1 (1.2.840.10045.3.1.7).
 _EC_ALGID = bytes.fromhex("301306072a8648ce3d020106082a8648ce3d030107")
@@ -38,7 +50,7 @@ def _generate_dummy_p256(xray: Path) -> tuple[str, str]:
     """
     out = subprocess.run(
         [str(xray), "tls", "cert", "-json", "-domain=example.com"],
-        capture_output=True, text=True, check=True,
+        capture_output=True, text=True, check=True, timeout=30,
     ).stdout
     data = json.loads(out)
     key = "\n".join(data["key"])
@@ -53,34 +65,23 @@ def _generate_dummy_p256(xray: Path) -> tuple[str, str]:
     return base64.b64encode(pkcs8).decode(), base64.b64encode(spki).decode()
 
 
-def _masque_outbound(hv: str, *, warp: dict | None = None,
-                     user: str = "", pas: str = "",
-                     dns: list[str] | None = None) -> dict:
-    settings: dict = {"address": "162.159.198.2", "port": 443}
-    if dns:
-        settings["remoteDNS"] = dns
-    masque: dict = {}
-    if warp:
-        masque["warp"] = warp
-    if user:
-        masque["user"] = user
-        masque["pass"] = pas
-    return {
-        "tag": "proxy", "protocol": "masque", "settings": settings,
-        "streamSettings": {
-            "network": "masque", "security": "tls",
-            "masqueSettings": masque,
-            "tlsSettings": {"alpn": [hv],
-                            "serverName": "consumer-masque.cloudflareclient.com"},
-        },
-    }
+def _strip_interface(outbound: dict) -> dict:
+    """Drop the interface placeholder the renderer leaves for a live iface."""
+    stream = outbound.get("streamSettings") or {}
+    sockopt = stream.get("sockopt") or {}
+    if "interface" in sockopt:
+        del sockopt["interface"]
+        if not sockopt:
+            stream.pop("sockopt", None)
+    return outbound
 
 
 def _config(outbound: dict) -> str:
     return json.dumps({
         "log": {"loglevel": "warning"},
         "inbounds": [],
-        "outbounds": [outbound, {"tag": "direct", "protocol": "freedom"}],
+        "outbounds": [_strip_interface(outbound),
+                      {"tag": "direct", "protocol": "freedom"}],
     })
 
 
@@ -101,29 +102,44 @@ def _run_test(xray: Path, config_text: str) -> str | None:
     return lines[-1].rsplit(" > ", 1)[-1].strip() if lines else "xray -test failed"
 
 
+def _base_profile(**over) -> Profile:
+    base = dict(name="verify", protocol="masque", address="162.159.198.2",
+                port=443, network="masque", security="tls",
+                sni="consumer-masque.cloudflareclient.com")
+    base.update(over)
+    return Profile(**base)
+
+
 def main(argv: list[str]) -> int:
-    xray = Path(argv[1]) if len(argv) > 1 else DEFAULT_XRAY
+    if len(argv) > 1:
+        xray = Path(argv[1])
+    else:
+        xray = paths.xray_exe()
     if not xray.exists():
         print(f"FAIL: xray binary not found at {xray}")
         return 1
 
-    failures = 0
     cases: list[tuple[str, str]] = [
-        ("generic h2", _config(_masque_outbound("h2", user="user", pas="pass"))),
-        ("generic h3", _config(_masque_outbound(
-            "h3", dns=["1.1.1.1", "2606:4700:4700::1111"]))),
+        ("generic h2", _config(outbounds.build(
+            _base_profile(username="user", id="pass"), "proxy"))),
+        ("generic h3", _config(outbounds.build(
+            _base_profile(masque_http_version="h3",
+                          masque_remote_dns="1.1.1.1, 2606:4700:4700::1111"),
+            "proxy"))),
     ]
     try:
         priv, pub = _generate_dummy_p256(xray)
     except Exception as e:
-        print(f"SKIP: could not generate dummy P-256 key: {e}")
-        priv = pub = None
-    if priv:
-        cases.append(("warp h2", _config(_masque_outbound("h2", warp={
-            "privateKey": priv, "publicKey": pub,
-            "address": ["172.16.0.2/32", "2606:4700:110:8a36::2/128"],
-        }))))
+        # A required case cannot be skipped: without a key the WARP case is
+        # impossible, so the whole check fails rather than passing silently.
+        print(f"FAIL: could not generate dummy P-256 key: {e}")
+        return 1
+    cases.append(("warp h2", _config(outbounds.build(
+        _base_profile(masque_private_key=priv, masque_public_key=pub,
+                      masque_addresses="172.16.0.2/32, 2606:4700:110:8a36::2/128"),
+        "proxy"))))
 
+    failures = 0
     for name, cfg in cases:
         err = _run_test(xray, cfg)
         if err:
