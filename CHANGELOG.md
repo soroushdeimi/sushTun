@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.14.4
+
+### Fixed
+- **There was no way to turn on password-free start.** The Settings > Security row for it only appeared after the helper was already installed, so anyone who dismissed the one-time offer was stuck typing the password on every launch. The row now shows in the installed macOS app with an Install helper button (one password), and says plainly that it is off.
+
+<!-- fa -->
+
+### چی درست شده
+- **راهی برای روشن کردن شروع بدون پسورد نبود.** ردیفش تو تنظیمات > امنیت فقط وقتی دیده می‌شد که هلپر از قبل نصب شده بود، پس هر کی پیشنهاد یه‌باره رو بست، مجبور بود هر بار پسورد بزنه. حالا این ردیف تو برنامه‌ی نصب‌شده‌ی مک با دکمه‌ی «Install helper» (یه بار پسورد) هست و صریح می‌گه خاموشه.
+
 ## v0.14.3
 
 ### Fixed

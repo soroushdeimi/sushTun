@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .. import paths as app_paths
 from ..core import firewall as firewall_mod
 from ..core import leakcheck as leakcheck_mod
 from ..core import macos_helper as macos_helper_mod
@@ -403,9 +404,12 @@ class SecurityPage(QWidget):
 
     # -- macOS helper -------------------------------------------------------
     def _macos_helper_applicable(self) -> bool:
+        # Offered whenever this is the installed macOS app, not only once the
+        # helper exists: the one-time prompt is easy to dismiss, and this row
+        # is the only other way to turn the feature on.
         return (sys.platform == "darwin"
                 and macos_helper_mod._is_mac()
-                and macos_helper_mod.installed())
+                and (macos_helper_mod.installed() or app_paths.installed()))
 
     def _sync_helper_button(self) -> None:
         if self.btn_helper is None:
@@ -414,6 +418,9 @@ class SecurityPage(QWidget):
             self.btn_helper.setText(tr("Uninstall helper"))
         else:
             self.btn_helper.setText(tr("Install helper"))
+            if not self.helper_status.text():
+                self.helper_status.setText(
+                    tr("Off: sushTun asks for your password every time it opens."))
 
     def _toggle_helper(self) -> None:
         if self._helper_busy or self.btn_helper is None:

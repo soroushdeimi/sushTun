@@ -2135,4 +2135,5 @@ TRANSLATIONS_FA: dict[str, str] = {
     "Always protected (built-in AI list)": "همیشه محافظت‌شده (لیست آماده‌ی هوش مصنوعی)",
     "Network changed": "شبکه عوض شد",
     "Reconnecting on {name}.": "در حال اتصال دوباره از {name}.",
+    "Off: sushTun asks for your password every time it opens.": "خاموش: sushTun هر بار که باز می‌شه پسورد می‌خواد.",
 }
