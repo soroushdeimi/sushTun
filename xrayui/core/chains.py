@@ -98,7 +98,8 @@ def validate(chain: Chain, profiles: Iterable[Profile] | Mapping[str, Profile]) 
             continue
         hop = f"{index} ({_display_name(profile)})"
         protocol = str(profile.protocol or "").lower()
-        if protocol not in SUPPORTED_PROTOCOLS:
+        masque_entry = protocol == "masque" and index == 1
+        if protocol not in SUPPORTED_PROTOCOLS and not masque_entry:
             problems.append(tr("Hop {hop}: protocol {protocol} is not verified for chains.",
                                hop=hop, protocol=protocol))
         if not profile.is_valid():
@@ -106,13 +107,20 @@ def validate(chain: Chain, profiles: Iterable[Profile] | Mapping[str, Profile]) 
         network = str(profile.network or "")
         if protocol in {"http", "socks"} and network != "tcp":
             problems.append(tr("Hop {hop}: HTTP and SOCKS servers only work over TCP.", hop=hop))
+        if protocol == "masque":
+            if index != 1:
+                problems.append(tr("Hop {hop}: MASQUE is only verified as the first hop "
+                                   "(entry) of a chain.", hop=hop))
+            elif str(profile.masque_http_version or "h2").strip().lower() != "h2":
+                problems.append(tr("Hop {hop}: MASQUE H3 (QUIC) chains are not verified yet; "
+                                   "use H2.", hop=hop))
         # v26.3.27 transport/internet/splithttp/dialer.go:403-438 builds a
         # separate download stream with independent socket settings. Until
         # both paths are verified, accepting XHTTP could bypass earlier hops.
         if network == "ws":
             problems.append(tr("Hop {hop}: WebSocket (ws) chains can lose responses when "
                                "a connection closes and are not supported yet.", hop=hop))
-        elif network not in SUPPORTED_TRANSPORTS:
+        elif network not in SUPPORTED_TRANSPORTS and protocol != "masque":
             problems.append(tr("Hop {hop}: transport {transport} is not verified for chains "
                                "(including separate XHTTP downloads).", hop=hop, transport=network))
         # v26.3.27 proxy/vless/outbound/outbound.go:249-295 inspects the

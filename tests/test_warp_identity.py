@@ -230,6 +230,100 @@ def test_parse_rejects_empty_address_list():
         parse_identity(text)
 
 
+def test_parse_rejects_whitespace_only_key():
+    ident = _identity()
+    text = json.dumps({
+        "privateKey": "   \n\t  ",
+        "publicKey": ident.public_key,
+        "address": list(ident.addresses),
+    })
+    with pytest.raises(ValueError):
+        parse_identity(text)
+
+
+def test_parse_rejects_pem_with_empty_body():
+    ident = _identity()
+    bad = "-----BEGIN PRIVATE KEY-----\n\n-----END PRIVATE KEY-----"
+    text = json.dumps({
+        "privateKey": bad,
+        "publicKey": ident.public_key,
+        "address": list(ident.addresses),
+    })
+    with pytest.raises(ValueError):
+        parse_identity(text)
+
+
+def test_parse_rejects_pem_with_whitespace_only_body():
+    ident = _identity()
+    bad = "-----BEGIN PRIVATE KEY-----\n   \n  \n-----END PRIVATE KEY-----"
+    text = json.dumps({
+        "privateKey": bad,
+        "publicKey": ident.public_key,
+        "address": list(ident.addresses),
+    })
+    with pytest.raises(ValueError):
+        parse_identity(text)
+
+
+def test_parse_rejects_pem_with_padding_only_body():
+    # "====" is base64 padding that decodes to zero bytes.
+    ident = _identity()
+    bad = "-----BEGIN PRIVATE KEY-----\n====\n-----END PRIVATE KEY-----"
+    text = json.dumps({
+        "privateKey": bad,
+        "publicKey": ident.public_key,
+        "address": list(ident.addresses),
+    })
+    with pytest.raises(ValueError):
+        parse_identity(text)
+
+
+def test_parse_rejects_pem_with_wrong_label_for_role():
+    ident = _identity()
+    text = json.dumps({
+        "privateKey": "-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----",
+        "publicKey": "-----BEGIN PRIVATE KEY-----\nBBBB\n-----END PRIVATE KEY-----",
+        "address": list(ident.addresses),
+    })
+    with pytest.raises(ValueError):
+        parse_identity(text)
+
+
+def test_parse_accepts_ec_private_key_pem_label():
+    ident = _identity()
+    priv = "-----BEGIN EC PRIVATE KEY-----\n" + "A" * 64 + "\n-----END EC PRIVATE KEY-----"
+    text = json.dumps({
+        "privateKey": priv,
+        "publicKey": ident.public_key,
+        "address": list(ident.addresses),
+    })
+    assert parse_identity(text) == _identity(priv=priv, pub=ident.public_key)
+
+
+def test_parse_rejects_oversized_key_input():
+    ident = _identity()
+    text = json.dumps({
+        "privateKey": "A" * (2 * 1024 * 1024),
+        "publicKey": ident.public_key,
+        "address": list(ident.addresses),
+    })
+    with pytest.raises(ValueError):
+        parse_identity(text)
+
+
+def test_parse_rejects_non_ascii_key_without_leaking_it():
+    ident = _identity()
+    secret = "AAAAéBBBB"
+    text = json.dumps({
+        "privateKey": secret,
+        "publicKey": ident.public_key,
+        "address": list(ident.addresses),
+    })
+    with pytest.raises(ValueError) as exc:
+        parse_identity(text)
+    assert secret not in str(exc.value)
+
+
 def test_parse_error_does_not_reflect_secret():
     secret = "SUPERSECRETKEY"
     text = json.dumps({
@@ -361,3 +455,22 @@ def test_save_overwrites_existing_regular_file(tmp_path):
     ident = _identity()
     save_identity(target, ident)
     assert load_identity(target) == ident
+
+
+def test_save_elevated_delegates_to_private_writer(tmp_path, monkeypatch):
+    from xrayui.core import userfs
+
+    calls = []
+    monkeypatch.setattr(os, "geteuid", lambda: 0)
+    monkeypatch.setattr(userfs, "invoking_user_ids", lambda: (1234, 5678))
+    monkeypatch.setattr(userfs, "write_private_as_user",
+                        lambda path, data, uid, gid: calls.append(
+                            (path, data, uid, gid)))
+    ident = _identity()
+    target = tmp_path / "identity.json"
+    save_identity(target, ident)
+    assert len(calls) == 1
+    path, data, uid, gid = calls[0]
+    assert path == target
+    assert (uid, gid) == (1234, 5678)
+    assert json.loads(data.decode("utf-8"))["privateKey"] == ident.private_key

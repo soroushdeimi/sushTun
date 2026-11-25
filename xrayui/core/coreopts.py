@@ -32,11 +32,20 @@ DEFAULT_FP_CHOICES = ("chrome", "firefox", "safari", "edge", "ios", "android",
 DEFAULT_SOCKS_PORT = 10808
 
 
+def _masque_is_h2(profile: Profile) -> bool:
+    # MASQUE h2 rides TCP+TLS; h3 rides QUIC. masque_http_version is the
+    # authoritative carrier; alpn may be empty or contradictory on
+    # imported/share-created profiles, so it must not decide.
+    return (profile.masque_http_version or "h2").strip().lower() == "h2"
+
+
 # -- TLS fragment -------------------------------------------------------------
 def fragment_eligible(profile: Profile) -> bool:
     protocol = (profile.protocol or "").lower()
     if protocol in ("wireguard", "hysteria2"):
         return False
+    if protocol == "masque":
+        return _masque_is_h2(profile)
     return profile.security in ("tls", "reality")
 
 
@@ -94,6 +103,8 @@ def apply_fragment(cfg: dict, core_cfg: dict, profile: Profile) -> None:
 # -- Mux ------------------------------------------------------------------
 def mux_eligible(profile: Profile) -> bool:
     protocol = (profile.protocol or "").lower()
+    if protocol == "masque":
+        return False  # the MASQUE outbound does not support Mux
     if protocol in _MUX_ELIGIBLE_PROTOCOLS:
         return True
     # vless is mux-eligible only without a flow: XTLS Vision (the only flow
@@ -186,7 +197,12 @@ def available_tcp_congestion() -> list[str]:
 
 def sockopt_eligible(profile: Profile) -> bool:
     # TCP options mean nothing to the UDP-based protocols.
-    return (profile.protocol or "").lower() not in ("hysteria2", "wireguard")
+    protocol = (profile.protocol or "").lower()
+    if protocol in ("hysteria2", "wireguard"):
+        return False
+    if protocol == "masque":
+        return _masque_is_h2(profile)  # h3 is QUIC, not TCP
+    return True
 
 
 def apply_sockopt(cfg: dict, core_cfg: dict, profile: Profile) -> None:

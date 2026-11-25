@@ -63,7 +63,7 @@ def _tool(name: str) -> str:
 
 
 def _run_as_user(argv: list[str], uid: int, gid: int, *,
-                 input: bytes | None = None, timeout: float = 10) -> None:
+                 input: bytes | None = None, timeout: float = 10) -> bytes:
     kwargs: dict = {}
     if os.geteuid() == 0:
         # A non-root caller can't setgroups()/setgid()/setuid() at all, and
@@ -88,6 +88,7 @@ def _run_as_user(argv: list[str], uid: int, gid: int, *,
     if result.returncode != 0:
         lines = result.stderr.decode("utf-8", "replace").strip().splitlines()
         raise UserFsError(lines[-1] if lines else f"exit code {result.returncode}")
+    return result.stdout
 
 
 def write_as_user(path: Path, data: bytes, uid: int, gid: int, mode: int = 0o644) -> None:
@@ -119,6 +120,48 @@ def write_as_user(path: Path, data: bytes, uid: int, gid: int, mode: int = 0o644
         _run_as_user([_tool("chmod"), "--", f"{mode:03o}", str(path)], uid, gid)
     else:
         _run_as_user([_tool("chmod"), f"{mode:03o}", "--", str(path)], uid, gid)
+
+
+def write_private_as_user(path: Path, data: bytes, uid: int, gid: int) -> None:
+    """Atomically write `data` to `path` as uid/gid, mode 0600.
+
+    A temp file is created at 0600 *before* any bytes are written, so the
+    secret is never exposed at a wider mode; the destination is replaced
+    with rename(2), which never follows a symlink at `path`. On any
+    failure the old destination is left untouched and the temp is removed.
+    """
+    _require_supported()
+    path = Path(path)
+    # Best-effort pre-check (not race-free for parents): refuse a directory
+    # destination and a symlink at the destination or any parent. The final
+    # component is re-checked as the user below, and mv(1) never follows it.
+    for part in (path, *path.parents):
+        if part.is_symlink():
+            raise UserFsError(f"refusing to follow a symlink at {part}")
+    if path.is_dir():
+        raise UserFsError(f"refusing to write a private file to a directory: {path}")
+    _run_as_user([_tool("mkdir"), "-p", "--", str(path.parent)], uid, gid)
+    try:
+        _run_as_user([_tool("test"), "!", "-L", str(path)], uid, gid)
+    except UserFsError as e:
+        raise UserFsError(f"refusing to write through a symlink at {path}") from e
+    # mktemp creates the file 0600 before any data is written to it.
+    tmp = _run_as_user(
+        [_tool("mktemp"), f"{path.parent}/.private.XXXXXX"], uid, gid
+    ).decode("utf-8", "replace").strip()
+    if not tmp:
+        raise UserFsError("could not create a private temp file")
+    try:
+        _run_as_user([_tool("dd"), f"of={tmp}", "status=none"], uid, gid, input=data)
+        # mv(1) is rename(2): it replaces a symlink at the destination
+        # rather than following it, and keeps the temp's 0600 mode.
+        _run_as_user([_tool("mv"), "-f", "--", tmp, str(path)], uid, gid)
+    except BaseException:
+        try:
+            _run_as_user([_tool("rm"), "-f", "--", tmp], uid, gid)
+        except UserFsError:
+            pass
+        raise
 
 
 def unlink_as_user(path: Path, uid: int, gid: int, missing_ok: bool = True) -> None:
