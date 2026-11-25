@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.14.3
+
+### Fixed
+- **The Security page was cut off on the left and scrolled sideways.** The long built-in AI list made the page wider than the Settings window, so labels and switches were clipped. The list now has its own full-width row and wraps. The status dots in the top box also no longer sit on dark patches.
+
+<!-- fa -->
+
+### چی درست شده
+- **صفحه‌ی امنیت از سمت چپ بریده می‌شد و به کنار اسکرول می‌خورد.** لیست بلند هوش مصنوعی صفحه رو از پنجره‌ی تنظیمات پهن‌تر می‌کرد و برچسب‌ها و کلیدها بریده می‌شدن. حالا لیست ردیف کامل خودش رو داره و خط می‌شکنه. نقطه‌های وضعیت بالای صفحه هم دیگه روی لکه‌ی تیره نیستن.
+
 ## v0.14.2
 
 ### Fixed
