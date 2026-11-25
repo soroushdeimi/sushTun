@@ -260,3 +260,20 @@ def test_default_ai_list_is_not_shown_as_if_the_user_typed_it(qapp, defaults):
         assert "openai.com" not in page.strict_domains.placeholderText()
     finally:
         page.close()
+
+
+def test_page_fits_the_settings_window_width(qapp, defaults):
+    # The built-in AI list is long. It used to set the page's minimum width, so
+    # in the 820 px window the page scrolled sideways and clipped its labels.
+    from xrayui.ui import theme
+
+    qapp.setStyleSheet(theme.STYLESHEET)
+    win = SettingsWindow(copy.deepcopy(defaults), topic="security")
+    try:
+        win.show()
+        qapp.processEvents()
+        page = win._pages["security"]
+        assert page.minimumSizeHint().width() <= win.width() - 300
+    finally:
+        win.close()
+        qapp.setStyleSheet("")

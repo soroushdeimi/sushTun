@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QPlainTextEdit,
     QPushButton,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -99,6 +100,7 @@ class SecurityPage(QWidget):
             state = QLabel("")
             state.setObjectName("Muted")
             state.setWordWrap(True)
+            state.setStyleSheet("background: transparent;")
             name = QLabel(label)
             name.setStyleSheet("background: transparent;")
             row.addWidget(name, 0)
@@ -174,12 +176,28 @@ class SecurityPage(QWidget):
         dr.addWidget(self.strict_domains, 1)
         dr.addWidget(reset_btn, 0, Qt.AlignTop)
         strict_group.add_row(tr("Extra protected domains (one per line)"), domains_row)
+        # Its own full-width row. add_row pins a trailing widget to its natural
+        # width, and a list this long made the whole page wider than the window.
+        sep = QFrame(strict_group)
+        sep.setObjectName("InsetGroupSeparator")
+        sep.setFixedHeight(1)
+        strict_group._rows.addWidget(sep)
+        builtin_row = QWidget(strict_group)
+        builtin_row.setObjectName("InsetGroupRow")
+        br = QVBoxLayout(builtin_row)
+        br.setContentsMargins(12, 8, 12, 8)
+        br.setSpacing(2)
+        builtin_title = QLabel(tr("Always protected (built-in AI list)"))
+        builtin_title.setObjectName("GroupRowLabel")
         builtin = QLabel(", ".join(strict_mod.DEFAULT_AI_DOMAINS))
-        builtin.setObjectName("Muted")
+        builtin.setObjectName("GroupRowFootnote")
         builtin.setWordWrap(True)
         builtin.setLayoutDirection(Qt.LeftToRight)
-        builtin.setStyleSheet("background: transparent;")
-        strict_group.add_row(tr("Always protected (built-in AI list)"), builtin)
+        builtin.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        builtin.setMinimumWidth(0)
+        br.addWidget(builtin_title)
+        br.addWidget(builtin)
+        strict_group._rows.addWidget(builtin_row)
         set_help(self.strict_domains,
                  tr("Your own names to always send through the tunnel, one per line. "
                     "The default AI list is shown when this is empty."),
