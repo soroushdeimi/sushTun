@@ -16,8 +16,8 @@ PEM label it prints is misleading, the DER carries the id-ecPublicKey and
 prime256v1 OIDs). The private key is used only in a throwaway config file
 and is never printed. No enrollment, no live network.
 
-Usage:
-    python tools/verify_masque_config.py [path/to/xray]
+Usage (from the repo root):
+    python -m tools.verify_masque_config [path/to/xray]
 
 The xray binary is taken from the argument if given, otherwise from the
 project's paths.xray_exe().
@@ -31,12 +31,9 @@ import sys
 import tempfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
-
-from xrayui import paths  # noqa: E402
-from xrayui.core import outbounds  # noqa: E402
-from xrayui.core.profiles import Profile  # noqa: E402
+from xrayui import paths
+from xrayui.core import outbounds
+from xrayui.core.profiles import Profile
 
 # OIDs: id-ecPublicKey (1.2.840.10045.2.1) and prime256v1 (1.2.840.10045.3.1.7).
 _EC_ALGID = bytes.fromhex("301306072a8648ce3d020106082a8648ce3d030107")
