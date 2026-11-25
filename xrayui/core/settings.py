@@ -168,6 +168,10 @@ DEFAULTS: dict = {
         "start_minimized": False,
         "auto_connect": False,
     },
+    # macOS password-free helper (core/macos_helper.py). Once the user has
+    # been asked "skip the password next time?" (and answered No/Later), the
+    # offer is never repeated. macOS installed apps only; a no-op elsewhere.
+    "helper_offer_seen": False,
     "updates": {
         "check": True,
         "last_check": 0,  # epoch seconds; 0 = never

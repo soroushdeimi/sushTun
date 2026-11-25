@@ -2036,4 +2036,30 @@ TRANSLATIONS_FA: dict[str, str] = {
     "Serverless only connects with no server behind it. Your IP stays Iranian, so:\n\n• services that block Iran (some AI tools, Google Play, …) still won't open;\n• sites whose IP addresses are blocked outright still won't open.\n\nIt only gets past name and DNS filtering. For the rest, connect to a server, and turn the Serverless button on if the server itself gets filtered.": "«فقط سرورلس» بدون هیچ سروری وصل می‌شود. IP تو ایرانی می‌ماند، پس:\n\n• سرویس‌هایی که ایران را تحریم کرده‌اند (مثل بعضی ابزارهای هوش مصنوعی و گوگل‌پلی) باز نمی‌شوند؛\n• سایت‌هایی که IPشان کامل بسته شده باز نمی‌شوند.\n\nفقط از فیلترینگ اسم سایت و DNS رد می‌شود. برای بقیه به یک سرور وصل شو، و اگر خود سرور فیلتر می‌شود دکمهٔ سرورلس را هم روشن کن.",
     "Don't show this again": "دیگر نشان نده",
     "Serverless only": "فقط سرورلس",
+
+    # -- F2: security notifications + education + macOS helper offer --------
+    "Protect your real IP": "حفظ IP واقعی‌ات",
+    "sushTun can stop your real IP from leaking to AI sites. Recommended for AI accounts: the kill switch, strict mode and the leak check, in Settings → Security. The OS firewall is the strongest layer, but it can cut your internet if something goes wrong. Nothing is protected before you connect or after you disconnect, and Serverless-only always uses your real IP.":
+        "sushTun می‌تواند جلوی نشت IP واقعی‌ات به سایت‌های هوش مصنوعی را بگیرد. برای حساب‌های هوش مصنوعی پیشنهاد می‌شود: کیل‌سوئیچ، حالت سخت‌گیرانه و بررسی نشت، در تنظیمات ← امنیت. فایروالِ سیستم قوی‌ترین لایه است، ولی اگر چیزی خراب شود ممکن است اینترنتت را قطع کند. قبل از وصل شدن و بعد از قطع شدن هیچ‌چیز محافظت نمی‌شود، و حالت «فقط سرورلس» همیشه از IP واقعی‌ات استفاده می‌کند.",
+    "Skip the password next time?": "بار بعدی گذرواژه را رد کنی؟",
+    "Install a small background helper (one password) so sushTun opens without asking again. You can remove it any time.":
+        "یک کمکی کوچک در پس‌زمینه نصب کن (یک‌بار گذرواژه) تا sushTun دیگر بدون پرسیدن باز شود. هر وقت خواستی می‌توانی حذفش کنی.",
+    "Yes": "بله",
+    "No": "نه",
+    "Could not install the password-free helper.": "کمک‌کنندهٔ بدون گذرواژه نصب نشد.",
+    "Password-free start is on: sushTun will open without asking for the password.":
+        "شروع بدون گذرواژه روشن شد: sushTun دیگر بدون پرسیدن گذرواژه باز می‌شود.",
+    "sushTun": "sushTun",
+    # Security alert templates (core/alerts.py + core/leakcheck.py), passed to
+    # tr() via Alert.template, so the coverage test derives them as dynamic.
+    "VPN dropped: the tunnel is down but the app still shows connected.":
+        "تونل VPN قطع شد: تونل از کار افتاده اما برنامه هنوز «وصل» نشان می‌دهد.",
+    "The tunnel exit is in Iran — your real location is exposed.":
+        "خروجی تونل در ایران است — موقعیت واقعی‌ات فاش شده.",
+    "The tunnel exit matches your real IP — traffic is not going through the tunnel.":
+        "خروجی تونل با IP واقعی‌ات یکی است — ترافیک از تونل رد نمی‌شود.",
+    "DNS may leak: some resolvers are still outside the tunnel.":
+        "DNS ممکن است نشت کند: بعضی از ریزولورها هنوز بیرون از تونل هستند.",
+    "IPv6 may leak: an IPv6 default route is outside the tunnel.":
+        "IPv6 ممکن است نشت کند: یک مسیر پیش‌فرض IPv6 بیرون از تونل است.",
 }

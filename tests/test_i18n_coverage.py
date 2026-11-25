@@ -17,6 +17,7 @@ from pathlib import Path
 from xrayui import i18n_fa
 from xrayui.core import alerts as alerts_mod
 from xrayui.core import dns as dns_mod
+from xrayui.core import leakcheck as leakcheck_mod
 from xrayui.core.subscription import Subscription, Usage
 
 UI_DIR = Path(__file__).resolve().parent.parent / "xrayui" / "ui"
@@ -133,13 +134,37 @@ def _alert_template_keys() -> set[str]:
     return templates
 
 
+def _security_alert_template_keys() -> set[str]:
+    """The safety-alert templates (tunnel drop + leak findings) that
+    ui/main_window._check_security_alerts passes to tr() via Alert.template.
+    Derived by triggering every branch of current_alerts, not hand-copied."""
+    templates = set()
+    # Tunnel drop.
+    for a in alerts_mod.current_alerts(state_connected=True, xray_running=False):
+        templates.add(a.template)
+    # Leak verdicts: exit in Iran, exit matches the real IP.
+    for status in (leakcheck_mod.EXIT_IS_IRAN, leakcheck_mod.IP_MATCHES_REAL):
+        verdict = leakcheck_mod.Verdict(status)
+        for a in alerts_mod.current_alerts(state_connected=True,
+                                           xray_running=True, verdict=verdict):
+            templates.add(a.template)
+    # DNS and IPv6 audits that leak.
+    dns = leakcheck_mod.DnsAudit((), (leakcheck_mod.ResolverEntry("eth0", ("1.1.1.1",)),))
+    ipv6 = leakcheck_mod.Ipv6Audit(("eth0",), ("eth0",))
+    for a in alerts_mod.current_alerts(state_connected=True, xray_running=True,
+                                       dns_audit=dns, ipv6_audit=ipv6):
+        templates.add(a.template)
+    return templates
+
+
 # server_table.COLUMNS / routing_dialog._RULE_COLS are module-level lists
 # indexed dynamically (tr(COLUMNS[section]) in headerData()), not literal
 # tr() calls -- the AST scan can't see these column headers used either.
 _COLUMN_HEADER_KEYS = {"Delay", "Transport", "Subscription", "Type", "Match"}
 
 _DYNAMIC_KEYS = (_DNS_REASON_KEYS | _AUTOSTART_REASON_KEYS | _ON_STEP_KEYS
-                | _alert_template_keys() | _COLUMN_HEADER_KEYS)
+                | _alert_template_keys() | _security_alert_template_keys()
+                | _COLUMN_HEADER_KEYS)
 
 
 def test_every_tr_literal_has_a_persian_translation():
@@ -173,7 +198,8 @@ def test_dynamic_key_allowlists_are_still_accurate():
     for name, keys in (("dns reasons", _DNS_REASON_KEYS),
                        ("autostart reasons", _AUTOSTART_REASON_KEYS),
                        ("on_step strings", _ON_STEP_KEYS),
-                       ("alert templates", _alert_template_keys())):
+                       ("alert templates", _alert_template_keys()),
+                       ("security alert templates", _security_alert_template_keys())):
         missing = keys - set(i18n_fa.TRANSLATIONS_FA)
         assert not missing, f"{name}: missing fa entries for {missing}"
 
