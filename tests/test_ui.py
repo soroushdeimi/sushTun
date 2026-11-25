@@ -2132,3 +2132,31 @@ def test_changing_the_kill_switch_asks_for_a_reconnect(window, monkeypatch):
     window._open_settings()
 
     assert reconnects and "Kill switch" in reconnects[0]
+
+
+def test_a_network_move_reconnects_once_and_says_so(window, monkeypatch):
+    # The tunnel is pinned to the old adapter, so after a hotspot-to-Wi-Fi move
+    # it is dead until rebuilt. The window must do that itself, once, and tell
+    # the user, not wait for a manual disconnect and connect.
+    window.conn.roamed_to = "en1"
+    monkeypatch.setattr(window.conn, "is_connected", lambda: True)
+    window._busy = False
+    window._last_roam_reconnect = -1e9
+    seen, notes = [], []
+    monkeypatch.setattr(window, "_reconnect_now", lambda: seen.append(1))
+    monkeypatch.setattr(window, "_notify", lambda *a: notes.append(a))
+
+    window._reconnect_after_roam()
+    window._reconnect_after_roam()      # inside the cooldown: no second one
+
+    assert seen == [1]
+    assert notes and "en1" in notes[0][1]
+
+
+def test_no_roam_means_no_reconnect(window, monkeypatch):
+    window.conn.roamed_to = None
+    monkeypatch.setattr(window.conn, "is_connected", lambda: True)
+    seen = []
+    monkeypatch.setattr(window, "_reconnect_now", lambda: seen.append(1))
+    window._reconnect_after_roam()
+    assert seen == []

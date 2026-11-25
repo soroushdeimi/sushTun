@@ -135,6 +135,7 @@ def test_route_health_errors_reach_ui_and_allow_retry():
                              xray=SimpleNamespace(is_running=lambda: True)),
         _orphan_running=False,
         _check_security_alerts=lambda: None,
+        _reconnect_after_roam=lambda: None,
         _on_step=messages.append)
     window._run_async = lambda work, done: done(error="RTNETLINK: denied")
     MainWindow._check_route_health(window)

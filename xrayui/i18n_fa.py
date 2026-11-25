@@ -2133,4 +2133,6 @@ TRANSLATIONS_FA: dict[str, str] = {
     "Expand to turn it on.": "برای روشن کردن باز کن.",
     "Your own names, one per line": "اسم‌های خودت، هر خط یکی",
     "Always protected (built-in AI list)": "همیشه محافظت‌شده (لیست آماده‌ی هوش مصنوعی)",
+    "Network changed": "شبکه عوض شد",
+    "Reconnecting on {name}.": "در حال اتصال دوباره از {name}.",
 }
