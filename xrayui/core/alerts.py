@@ -6,6 +6,7 @@ import time
 from dataclasses import dataclass, field
 
 from .. import paths
+from . import leakcheck
 from .subscription import Subscription
 
 
@@ -65,6 +66,60 @@ def evaluate(sub: Subscription, cfg: dict) -> list[Alert]:
             alerts.append(Alert("warning", f"Subscription expires in {n} days",
                                 f"exp:warn:{sub.uid}",
                                 template="Subscription expires in {n} days", params={"n": n}))
+    return alerts
+
+
+def tunnel_lost(state_connected: bool, xray_running: bool) -> bool:
+    """True if the app believes it is connected but the xray process is gone.
+
+    A dead xray under a "connected" flag means traffic is no longer in the
+    tunnel, so this is a safety alert, not a leak check.
+    """
+    return bool(state_connected) and not bool(xray_running)
+
+
+def current_alerts(
+    *,
+    state_connected: bool,
+    xray_running: bool,
+    verdict: leakcheck.Verdict | None = None,
+    dns_audit: leakcheck.DnsAudit | None = None,
+    ipv6_audit: leakcheck.Ipv6Audit | None = None,
+) -> list[Alert]:
+    """The alerts whose conditions currently hold. Pure: inputs -> list.
+
+    The UI shows these every tick (so they clear the moment the condition is
+    fixed) and uses Throttle.allow(alert.key) to decide whether to push a
+    fresh OS notification, so each fires once per incident rather than every
+    15 s. The caller controls what is passed: a disabled leak check simply
+    passes no verdict, an unrun diagnostic passes no audit.
+    """
+    alerts: list[Alert] = []
+    if tunnel_lost(state_connected, xray_running):
+        alerts.append(Alert(
+            "critical",
+            "VPN dropped: the tunnel is down but the app still shows connected.",
+            "vpn:dropped",
+            template="VPN dropped: the tunnel is down but the app still shows connected."))
+    if verdict is not None:
+        if verdict.status == leakcheck.EXIT_IS_IRAN:
+            alerts.append(Alert("critical", leakcheck.MSG_EXIT_IRAN,
+                                "leak:ip:iran", template=leakcheck.MSG_EXIT_IRAN))
+        elif verdict.status == leakcheck.IP_MATCHES_REAL:
+            alerts.append(Alert("critical", leakcheck.MSG_IP_REAL,
+                                "leak:ip:real", template=leakcheck.MSG_IP_REAL))
+    if dns_audit is not None and dns_audit.leaks:
+        alerts.append(Alert(
+            "warning",
+            "DNS may leak: some resolvers are still outside the tunnel.",
+            "leak:dns",
+            template="DNS may leak: some resolvers are still outside the tunnel."))
+    if ipv6_audit is not None and ipv6_audit.leaks:
+        alerts.append(Alert(
+            "warning",
+            "IPv6 may leak: an IPv6 default route is outside the tunnel.",
+            "leak:ipv6",
+            template="IPv6 may leak: an IPv6 default route is outside the tunnel."))
     return alerts
 
 

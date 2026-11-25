@@ -90,6 +90,15 @@ DEFAULTS: dict = {
         "expiry_days": 3,
         "auto_refresh_hours": 6,
     },
+    # Leak check (core/leakcheck.py). Off by default: an untouched install
+    # never runs the probe and renders exactly what it always has. `notify`
+    # only controls whether a finding also pushes an OS notification; the
+    # in-app status is shown whenever `enabled` is on.
+    "leakcheck": {
+        "enabled": False,
+        "notify": True,
+        "interval_s": 120,
+    },
     "speedtest": {
         "download_url": "https://speed.cloudflare.com/__down?bytes=25000000",
         "url": "https://www.google.com/generate_204",
