@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.13.0
+
+### New
+- **MASQUE servers.** You can now add a MASQUE server (CONNECT-IP over HTTP/2 or HTTP/3): by hand in the server editor, from an Xray JSON outbound, or from a share link. It signs in with a username and password or with a WARP identity (private key, public key, addresses), and **Import identity…** fills the identity in from pasted JSON. TLS name, host, path, pinned certificate and the h2/h3 choice are all in the form.
+- **Test MASQUE endpoint.** A probe in the editor starts a throwaway local Xray and makes one real request through it, so you see whether the endpoint answers before you connect. It can be cancelled, has a time limit, and never shows the pasted key in an error.
+- **MASQUE as the first link of a chain.** Over HTTP/2 only; HTTP/3 and MASQUE further down the chain are refused with a message until they are proven.
+
+### Notes
+- Tested against the bundled Xray on a local loopback server and with dummy keys. It has not yet been tried against a real WARP or MASQUE service, so treat it as new.
+- An elevated save of the identity file is written as your own user at mode 0600 from the first byte.
+
+<!-- fa -->
+
+### چی اضافه شده
+- **سرور MASQUE.** حالا می‌تونی سرور MASQUE (CONNECT-IP روی HTTP/2 یا HTTP/3) اضافه کنی: دستی تو ویرایشگر سرور، از outbound جیسون Xray، یا از لینک اشتراک. با نام‌کاربری و رمز یا با هویت WARP (کلید خصوصی، کلید عمومی، آدرس‌ها) وصل می‌شه، و دکمه‌ی **Import identity…** هویت رو از جیسونی که پیست می‌کنی پر می‌کنه. اسم TLS، host، path، گواهی پین‌شده و انتخاب h2/h3 همه تو فرم هستن.
+- **تست اندپوینت MASQUE.** یه تست تو ویرایشگر یه Xray موقت محلی بالا میاره و یه درخواست واقعی ازش رد می‌کنه، تا قبل از وصل شدن ببینی اندپوینت جواب می‌ده یا نه. قابل لغوه، سقف زمان داره و کلیدی که پیست کردی هیچ‌وقت تو پیام خطا نمی‌آد.
+- **MASQUE به‌عنوان حلقه‌ی اول زنجیره.** فقط روی HTTP/2؛ HTTP/3 و MASQUE تو حلقه‌های بعدی تا وقتی ثابت نشده با پیام رد می‌شن.
+
+### نکته
+- با Xray همراه برنامه روی یه سرور لوکال و با کلیدهای ساختگی تست شده. هنوز روی سرویس واقعی WARP یا MASQUE امتحان نشده، پس جدید حسابش کن.
+- ذخیره‌ی فایل هویت با دسترسی بالا (elevated) به اسم خود کاربر و با mode 0600 از همون بایت اول نوشته می‌شه.
+
 ## v0.12.1
 
 ### Fixed
