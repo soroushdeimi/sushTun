@@ -14,8 +14,9 @@ File-safety guarantees (POSIX):
   following it, so the final step never writes through a link.
 - A symlinked *parent* directory is only caught by a best-effort pre-check
   (is_symlink), which is NOT race-free. When the app runs elevated, writes
-  are delegated to core.userfs, which drops to the invoking user so the
-  kernel's own permission checks apply.
+  are delegated to core.userfs.write_private_as_user, which drops to the
+  invoking user (kernel-enforced), creates a 0600 temp file before any
+  bytes are written, and atomically replaces the destination.
 """
 from __future__ import annotations
 
@@ -40,6 +41,12 @@ MAX_ADDRESSES = 2
 _PEM_RE = re.compile(
     r"^-----BEGIN ([A-Z0-9 ]+)-----\n(.*?)\n-----END \1-----$", re.S)
 
+# Expected PEM label per role; a bare base64 body is accepted for both.
+_PEM_LABELS = {
+    "privateKey": ("PRIVATE KEY", "EC PRIVATE KEY"),
+    "publicKey": ("PUBLIC KEY",),
+}
+
 
 class WarpIdentityError(ValueError):
     """Malformed or incomplete identity data. Never carries key material."""
@@ -59,20 +66,30 @@ def _check_key(value: object, field: str) -> str:
     if not isinstance(value, str) or not value:
         raise WarpIdentityError(f"{field} must be a non-empty string")
     v = value.strip()
+    if not v:
+        raise WarpIdentityError(f"{field} must not be blank")
     if v.startswith("-----BEGIN "):
         m = _PEM_RE.match(v)
         if not m:
             raise WarpIdentityError(f"{field} is not a well-formed PEM block")
+        if m.group(1) not in _PEM_LABELS[field]:
+            raise WarpIdentityError(f"{field} has an unexpected PEM label")
         body = re.sub(r"\s+", "", m.group(2))
+        if not body:
+            raise WarpIdentityError(f"{field} PEM body is empty")
         try:
-            base64.b64decode(body, validate=True)
-        except binascii.Error:
+            decoded = base64.b64decode(body, validate=True)
+        except (binascii.Error, ValueError):
             raise WarpIdentityError(f"{field} PEM body is not base64") from None
+        if not decoded:
+            raise WarpIdentityError(f"{field} PEM body decodes to no bytes")
         return value
     try:
-        base64.b64decode(v, validate=True)
-    except binascii.Error:
+        decoded = base64.b64decode(v, validate=True)
+    except (binascii.Error, ValueError):
         raise WarpIdentityError(f"{field} is not valid base64") from None
+    if not decoded:
+        raise WarpIdentityError(f"{field} decodes to no bytes")
     return value
 
 
@@ -201,7 +218,7 @@ def save_identity(path: Path, identity: WarpIdentity) -> None:
         from . import userfs
         ids = userfs.invoking_user_ids()
         if ids is not None:
-            userfs.write_as_user(path, data, *ids, mode=0o600)
+            userfs.write_private_as_user(path, data, *ids)
             return
     _write_private(path, data)
 

@@ -15,6 +15,9 @@ What this module implements, and what it does not.
   `masque_addresses`).
 - `load_identity(path)` / `save_identity(path, identity)` — safe private
   file I/O (0600 on POSIX, no symlink following, atomic replace).
+  Elevated writes go through `core.userfs.write_private_as_user`, which
+  creates a 0600 temp file *before* any bytes are written and atomically
+  replaces the destination as the invoking user.
 
 ### What "accepts PEM/base64" means here
 
@@ -35,7 +38,10 @@ runtime, not by this module.
 - A symlinked *parent* directory is only caught by a best-effort
   `is_symlink()` pre-check, which is **not** race-free. When the app runs
   elevated, writes are delegated to `core.userfs`, which drops to the
-  invoking user so the kernel's own permission checks apply.
+  invoking user so the kernel's own permission checks apply. The elevated
+  private writer creates its temp file at 0600 before writing any bytes,
+  so the secret is never exposed at a wider mode, and it atomically
+  replaces the destination as that user.
 
 ## Not implemented: registration / key generation
 
@@ -52,7 +58,7 @@ device keypair **plus** the assigned tunnel addresses and reserved bytes.
 That is a live network protocol against Cloudflare, not something this
 module can or should fake.
 
-### P-256 key generation without new dependencies — research status
+### P-256 key generation without new dependencies — verified status
 
 Xray's own WARP client (`transport/internet/masque/warp.go` at
 v26.10.31) parses the private key with
@@ -61,25 +67,28 @@ public key is a SPKI blob compared byte-for-byte against the endpoint
 leaf's `RawSubjectPublicKeyInfo`. So the on-wire shape is a P-256
 ECDSA key in PKCS8 (private) / SPKI (public) form.
 
-Investigated options for producing such a key with **no new runtime
-dependency**:
+**`xray tls cert --json` (installed binary, v26.10.31) is a verified
+P-256 key-generation path.** Reproduced by running it and decoding the
+output with the installed `openssl`:
 
-- **Python stdlib**: no EC/P-256 key-generation API. `ssl`, `hashlib` and
-  `hmac` expose no `ecdsa` keygen; the third-party `ecdsa` and
-  `cryptography` packages are not installed. NOT a viable path.
-- **`xray tls cert --json`** (installed binary, v26.10.31): generates a
-  TLS certificate and key. **Verified by running it**: the certificate is
-  EC, but the emitted private key is `-----BEGIN RSA PRIVATE KEY-----`
-  (PKCS1 RSA), which does **not** match the EC certificate and is not the
-  PKCS8 P-256 form `warp.go` requires. So this is **NOT** a verified
-  P-256 generation path. (The manager's note that `main/commands/all/tls/
-  cert.go` calls `cert.Generate` / `ecdsa.GenerateKey(elliptic.P256())`
-  was not confirmed against the installed binary's actual output; the
-  observed output is RSA. Recorded as NOT VERIFIED for P-256.)
+- The emitted private key PEM is labeled `-----BEGIN RSA PRIVATE KEY-----`,
+  but that label is **wrong**: the decoded DER is a PKCS8
+  `PrivateKeyInfo` whose algorithm is `id-ecPublicKey` + `prime256v1`
+  (P-256). The label does not describe the contents.
+- The certificate's `subjectPublicKeyInfo` (extracted from the DER with
+  `openssl asn1parse`) is `id-ecPublicKey` + `prime256v1`, and its
+  public key point is byte-for-byte identical to the public point inside
+  the private key.
+- A dummy WARP config built from such a keypair (PKCS8 private key,
+  base64 SPKI public key, two host-prefix addresses) passes
+  `xray run -test` with `Configuration OK.`
 
-**Conclusion:** no dependency-free P-256 generation path is verified.
-Registration therefore stays research-only. A future implementation would
-need either a verified P-256 keygen source (e.g. a confirmed Xray
-subcommand that emits PKCS8 P-256) or an explicit, user-approved new
-dependency — and the full Cloudflare enrollment protocol, which has not
-been reproduced here.
+**Endpoint public key:** the `publicKey` field is the *server* (endpoint)
+leaf certificate's SPKI, not the device's own public key. A locally
+generated keypair is therefore only a placeholder until the real
+endpoint's SPKI is known.
+
+**Conclusion:** key generation exists via the installed Xray binary
+(`xray tls cert --json`, PKCS8 P-256 despite the RSA PEM label). Actual
+enrollment against Cloudflare is still **NOT implemented and NOT
+verified** — no registrar, no placeholder button, no fake endpoint.
