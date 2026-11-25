@@ -1,5 +1,41 @@
 # Changelog
 
+## v0.14.0
+
+### New
+- **Security page in Settings.** One place to stop your real IP from reaching the wrong place, for example an AI account that bans foreign or Iranian IPs. Everything is off by default, and a banner at the top shows only what is really active.
+- **Kill switch.** If the VPN drops (Xray stops or the app crashes), the internet is blocked instead of going out with your real IP. It also blocks IPv6, which the tunnel does not carry and which used to leave outside it. Applies from the next connect.
+- **Strict mode.** AI sites (ChatGPT, Claude, Gemini and more, you can edit the list) always go through the tunnel, ahead of every "direct" rule such as Iran-direct or your bypass lists, and their names are resolved through the tunnel too. **No direct at all** turns every direct rule off; Iranian sites will be slower or may not open.
+- **Leak check.** After connecting, and every couple of minutes, it checks that the exit really is the tunnel, and warns if it is Iran or your real IP. It also looks for DNS and IPv6 leaks. Your full IP is never saved or shown, only a masked form.
+- **Alerts.** A notification when the VPN drops or a leak is found, once per incident, plus a new step in the first-run tour that explains all of this.
+- **OS firewall (advanced).** The system itself drops anything outside the tunnel, even if the app crashes. Off by default; if something goes wrong you can lose internet until you restart the app, and it protects only while the app runs.
+- **macOS: open without the password (optional).** After one password, a small background helper starts the app without asking again. It runs only a root-owned copy of the app, and you can remove it in Settings.
+
+### Fixed
+- **Speed test showed every server as Failed on the macOS app,** even though they worked. The test could not verify the server's certificate because the app ships no CA bundle. It now uses the same certificate source as the rest of the app. The chain test had the same problem.
+
+### Notes
+- Serverless-only mode always uses your real IP, and nothing is protected before you connect or after you disconnect.
+- The kill switch, the firewall and the macOS helper were tested with simulated routes and rules, not yet on a real Linux, Windows or macOS system end to end. They are off by default; try them before relying on them.
+
+<!-- fa -->
+
+### چی اضافه شده
+- **صفحه‌ی امنیت تو تنظیمات.** یه جا که جلوی رفتن IP واقعیت به جای اشتباه رو می‌گیره، مثلاً اکانت‌های هوش مصنوعی که IP خارجی یا ایرانی رو بن می‌کنن. همه‌ش پیش‌فرض خاموشه و نوار بالای صفحه فقط چیزی رو نشون می‌ده که واقعاً فعاله.
+- **کیل‌سوییچ.** اگه VPN قطع شد (Xray ایستاد یا برنامه کرش کرد)، اینترنت بسته می‌شه، نه اینکه با IP واقعیت بره. IPv6 رو هم می‌بنده، چون تانل اون رو نمی‌بره و قبلاً بیرون از تانل می‌رفت. از اتصال بعدی اعمال می‌شه.
+- **حالت سخت‌گیرانه.** سایت‌های هوش مصنوعی (ChatGPT و Claude و Gemini و بقیه، لیستش قابل ویرایشه) همیشه از تانل می‌رن، جلوتر از هر قانون «مستقیم» مثل ایران مستقیم یا لیست‌های بای‌پس خودت، و اسمشون هم از تانل حل می‌شه. **اصلاً مستقیم نباشه** همه‌ی قانون‌های مستقیم رو خاموش می‌کنه؛ سایت‌های ایرانی کندتر می‌شن یا شاید باز نشن.
+- **بررسی نشت.** بعد از اتصال و هر چند دقیقه یه بار چک می‌کنه خروجی واقعاً تانله، و اگه ایران بود یا IP واقعیت، خبرت می‌کنه. نشت DNS و IPv6 رو هم می‌گرده. IP کاملت هیچ‌وقت ذخیره یا نشون داده نمی‌شه، فقط یه شکل پوشیده‌ش.
+- **هشدار.** وقتی VPN قطع شد یا نشتی پیدا شد، یه اعلان می‌آد، برای هر اتفاق یه بار، و یه قدم جدید تو تور اول‌بار همه‌ی اینا رو توضیح می‌ده.
+- **فایروال سیستم‌عامل (پیشرفته).** خود سیستم هر چیزی رو که بیرون از تانل بره می‌اندازه، حتی اگه برنامه کرش کنه. پیش‌فرض خاموشه؛ اگه یه جا اشتباه بشه ممکنه اینترنتت قطع بشه تا برنامه رو دوباره بزنی، و فقط تا وقتی برنامه بازه محافظت می‌کنه.
+- **مک: بدون پسورد باز بشه (اختیاری).** بعد از یه بار پسورد، یه کمک‌کننده‌ی کوچیک پس‌زمینه برنامه رو بدون پرسیدن باز می‌کنه. فقط یه کپی از برنامه رو اجرا می‌کنه که مال root باشه، و از تنظیمات می‌تونی حذفش کنی.
+
+### چی درست شده
+- **تست سرعت تو برنامه‌ی مک همه‌ی سرورها رو Failed نشون می‌داد،** با اینکه کار می‌کردن. تست نمی‌تونست گواهی سرور رو چک کنه چون برنامه خودش CA همراه نداره. حالا از همون منبع گواهی بقیه‌ی برنامه استفاده می‌کنه. تست زنجیره هم همین مشکل رو داشت.
+
+### نکته
+- حالت «فقط سرورلس» همیشه از IP واقعیت می‌ره، و قبل از وصل شدن و بعد از قطع، چیزی محافظت نمی‌شه.
+- کیل‌سوییچ، فایروال و کمک‌کننده‌ی مک با روت و قانون‌های شبیه‌سازی‌شده تست شدن، نه هنوز سرتاسری روی یه لینوکس، ویندوز یا مک واقعی. پیش‌فرض خاموشن؛ قبل از اینکه بهشون تکیه کنی خودت امتحانشون کن.
+
 ## v0.13.0
 
 ### New
