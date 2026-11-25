@@ -463,6 +463,47 @@ def parse_hysteria2(url: str) -> Profile:
     )
 
 
+def parse_masque(url: str) -> Profile:
+    """masque://[user:pass@]host:port?hv=h2&host=..&path=..&sni=..&fp=..
+    &pcs=..&vcn=..&dns=..&pk=..&pub=..&addr=..#name
+
+    The query keys are the reverse of share._masque_query. hv is the single
+    h2/h3 carrier and must be one of the two; pk/pub/addr are the WARP
+    identity (all-or-nothing, checked by Profile.is_valid)."""
+    s = urlsplit(url.strip())
+    if s.scheme != "masque" or not s.hostname:
+        raise ValueError("not a masque:// link")
+    q = {k: v[0] for k, v in parse_qs(s.query).items()}
+    hv = (q.get("hv") or "h2").strip().lower()
+    if hv not in ("h2", "h3"):
+        raise ValueError("masque link has an invalid http version")
+    # An explicit port 0 is a broken link, not a "use the default" signal.
+    if s.port == 0:
+        raise ValueError("masque link has an invalid port")
+    name = unquote(s.fragment) if s.fragment else (s.hostname or "")
+    return Profile(
+        name=name or s.hostname,
+        protocol="masque",
+        address=s.hostname,
+        port=s.port or 443,
+        network="masque",
+        security="tls",
+        username=unquote(s.username or ""),
+        id=unquote(s.password or ""),
+        masque_http_version=hv,
+        host=q.get("host", ""),
+        path=q.get("path", ""),
+        sni=q.get("sni", ""),
+        fp=q.get("fp", ""),
+        pcs=normalize_pcs(q.get("pcs", "")),
+        vcn=q.get("vcn", ""),
+        masque_remote_dns=q.get("dns", ""),
+        masque_private_key=q.get("pk", ""),
+        masque_public_key=q.get("pub", ""),
+        masque_addresses=q.get("addr", ""),
+    )
+
+
 def parse_wireguard(url: str) -> Profile:
     s = urlsplit(url.strip())
     if s.scheme not in ("wireguard", "wg") or not s.hostname:
@@ -570,6 +611,8 @@ def parse_share_text(text: str) -> list[Profile]:
                 p = parse_hysteria2(line)
             elif line.startswith("wireguard://") or line.startswith("wg://"):
                 p = parse_wireguard(line)
+            elif line.startswith("masque://"):
+                p = parse_masque(line)
             elif line.startswith(("socks://", "socks5://", "socks5h://")):
                 p = parse_socks(line)
             elif line.startswith(("http://", "https://")) and is_proxy_url(line):
@@ -805,7 +848,100 @@ def _profile_from_hysteria2_outbound(proxy: dict) -> Profile:
     )
 
 
-_KNOWN_PROTOCOLS = ("vless", "vmess", "trojan", "shadowsocks", "hysteria", "wireguard")
+def _masque_http_version(alpn: object) -> str:
+    # Xray picks the h2 carrier only when h2 is advertised and h3 is not;
+    # anything else (including omitted/empty) is h3.
+    if alpn is None:
+        return "h3"
+    if not isinstance(alpn, list) or not all(isinstance(a, str) for a in alpn):
+        raise ValueError("masque alpn must be a list of strings")
+    return "h2" if "h2" in alpn and "h3" not in alpn else "h3"
+
+
+def _masque_str(mapping: dict, key: str, default: str = "") -> str:
+    # A hand-edited or corrupt config can hold any JSON type in a field that
+    # must be a string; reject it here rather than let it crash downstream.
+    value = mapping.get(key, default)
+    if value is None:
+        return default
+    if not isinstance(value, str):
+        raise ValueError(f"masque {key} must be a string")
+    return value
+
+
+def _profile_from_masque_outbound(proxy: dict) -> Profile:
+    if not isinstance(proxy, dict):
+        raise ValueError("masque outbound must be an object")
+    settings = proxy.get("settings") or {}
+    stream = proxy.get("streamSettings") or {}
+    if not isinstance(settings, dict) or not isinstance(stream, dict):
+        raise ValueError("masque settings/streamSettings must be objects")
+    masque = stream.get("masqueSettings") or {}
+    tls = stream.get("tlsSettings") or {}
+    if not isinstance(masque, dict) or not isinstance(tls, dict):
+        raise ValueError("masque masqueSettings/tlsSettings must be objects")
+    # Xray accepts the transport as streamSettings.method (docs) or the
+    # legacy network key; a conflicting pair is a broken config.
+    network = _masque_str(stream, "network").lower()
+    method = _masque_str(stream, "method").lower()
+    if network and method and network != method:
+        raise ValueError("masque outbound network/method conflict")
+    if network != "masque" and method != "masque":
+        raise ValueError("masque outbound has an incompatible network")
+    if _masque_str(stream, "security").lower() != "tls":
+        raise ValueError("masque outbound requires tls security")
+    port = settings.get("port", 443)
+    if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
+        raise ValueError("masque port must be an integer 1-65535")
+    address = _masque_str(settings, "address")
+    dns = settings.get("remoteDNS") or []
+    if isinstance(dns, str):
+        dns = [dns]
+    if not isinstance(dns, list) or not all(isinstance(d, str) for d in dns):
+        raise ValueError("masque remoteDNS must be a list of strings")
+    # An explicit warp object is a WARP identity attempt: it must be complete
+    # and well-typed, never silently dropped to anonymous generic MASQUE.
+    if "warp" in masque:
+        warp = masque["warp"]
+        if not isinstance(warp, dict):
+            raise ValueError("masque warp must be an object")
+        priv = _masque_str(warp, "privateKey")
+        pub = _masque_str(warp, "publicKey")
+        addr = warp.get("address")
+        if not isinstance(addr, list) or not addr \
+                or not all(isinstance(a, str) for a in addr):
+            raise ValueError("masque warp address must be a non-empty list of strings")
+        if not (priv and pub):
+            raise ValueError("masque warp identity is incomplete")
+        masque_private_key, masque_public_key = priv, pub
+        masque_addresses = ", ".join(addr)
+    else:
+        masque_private_key = masque_public_key = masque_addresses = ""
+    return Profile(
+        name=_masque_str(masque, "host") or address or "imported",
+        protocol="masque",
+        address=address,
+        port=port,
+        network="masque",
+        security="tls",
+        username=_masque_str(masque, "user"),
+        id=_masque_str(masque, "pass"),
+        host=_masque_str(masque, "host"),
+        path=_masque_str(masque, "path"),
+        sni=_masque_str(tls, "serverName"),
+        fp=_masque_str(tls, "fingerprint"),
+        pcs=normalize_pcs(_masque_str(tls, "pinnedPeerCertSha256")),
+        vcn=_masque_str(tls, "verifyPeerCertByName"),
+        masque_http_version=_masque_http_version(tls.get("alpn")),
+        masque_remote_dns=", ".join(dns),
+        masque_private_key=masque_private_key,
+        masque_public_key=masque_public_key,
+        masque_addresses=masque_addresses,
+    )
+
+
+_KNOWN_PROTOCOLS = ("vless", "vmess", "trojan", "shadowsocks", "hysteria",
+                    "wireguard", "masque")
 
 
 def _profile_from_config(cfg: dict) -> Profile:
@@ -831,6 +967,8 @@ def _profile_from_config(cfg: dict) -> Profile:
         return _profile_from_vmess_outbound(proxy)
     if protocol == "hysteria":
         return _profile_from_hysteria2_outbound(proxy)
+    if protocol == "masque":
+        return _profile_from_masque_outbound(proxy)
     return _profile_from_vless_outbound(proxy)
 
 

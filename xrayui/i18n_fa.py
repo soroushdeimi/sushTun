@@ -305,6 +305,63 @@ TRANSLATIONS_FA: dict[str, str] = {
     "Leave 0 to let the congestion control pick (BBR).":
         "برای انتخاب خودکار توسط کنترل ازدحام (BBR) روی 0 بگذارید.",
 
+    # -- masque_dialog.py -----------------------------------------------------
+    "MASQUE": "ماسک",
+    "HTTP version": "نسخه HTTP",
+    "The MASQUE carrier: h2 (HTTP/2) or h3 (HTTP/3).":
+        "ناقل ماسک: h2 (HTTP/2) یا h3 (HTTP/3).",
+    "Pick the one your endpoint answers on.":
+        "آن را انتخاب کنید که سرور شما روی آن پاسخ می‌دهد.",
+    "Public key": "کلید عمومی",
+    "The endpoint's P-256 public key.":
+        "کلید عمومی P-256 سرور مقصد.",
+    "Your P-256 device private key. Masked; never shown in errors or logs.":
+        "کلید خصوصی P-256 دستگاه شما. مخفی است و هرگز در خطاها یا لاگ‌ها نمایش داده نمی‌شود.",
+    "Paste it from your WARP identity.":
+        "آن را از هویت WARP خود بچسبانید.",
+    "Tunnel addresses": "آدرس‌های تونل",
+    "The tunnel's IP addresses, comma or newline separated.":
+        "آدرس‌های IP تونل، جداشده با ویرگول یا خط جدید.",
+    "162.158.74.187/32, 2606:4700::1/128": "162.158.74.187/32, 2606:4700::1/128",
+    "Remote DNS": "DNS از راه دور",
+    "Literal IP addresses to resolve through the tunnel.":
+        "آدرس‌های IP صریح برای حل از طریق تونل.",
+    "1.1.1.1": "1.1.1.1",
+    "Import identity…": "وارد کردن هویت…",
+    "Paste a WARP identity JSON to fill the keys and addresses.":
+        "JSON هویت WARP را بچسبانید تا کلیدها و آدرس‌ها پر شوند.",
+    "Copy the identity block your provider exported.":
+        "بلوک هویتی که ارائه‌دهنده‌تان خروجی داده را کپی کنید.",
+    "Import identity": "وارد کردن هویت",
+    "Paste the WARP identity JSON:": "JSON هویت WARP را بچسبانید:",
+    "That identity could not be read.": "این هویت قابل خواندن نبود.",
+    "Test endpoint": "تست سرور",
+    "Checks whether this endpoint answers through a real "
+    "tunnel. Runs in the background; the button becomes "
+    "Cancel while it works.":
+        "بررسی می‌کند که سرور از طریق تونل واقعی پاسخ می‌دهد یا نه. در پس‌زمینه اجرا "
+        "می‌شود؛ تا پایان کار دکمه به «انصراف» تبدیل می‌شود.",
+    "A few seconds, at most about 8.": "چند ثانیه، حداکثر حدود ۸.",
+    "Endpoint answered over {v} in {ms} ms.": "سرور از طریق {v} در {ms} میلی‌ثانیه پاسخ داد.",
+    "The endpoint test could not be run.": "تست سرور قابل اجرا نبود.",
+    "Cancelled.": "لغو شد.",
+    "The tunnel process stopped.": "فرآیند تونل متوقف شد.",
+    "The tunnel did not start in time.": "تونل به‌موقع راه‌اندازی نشد.",
+    "The endpoint could not be reached.": "به سرور دسترسی ممکن نبود.",
+    "The HTTP version is not supported.": "نسخه HTTP پشتیبانی نمی‌شود.",
+    "The health check URL is not allowed.": "آدرس بررسی سلامت مجاز نیست.",
+    "The endpoint answered with an error status.": "سرور با کد خطا پاسخ داد.",
+    "Remote DNS must be literal IP addresses.": "DNS از راه دور باید آدرس‌های IP صریح باشد.",
+    "This MASQUE profile is incomplete.": "این پروفایل ماسک کامل نیست.",
+    "Hop {hop}: MASQUE is only verified as the first hop (entry) of a chain.":
+        "پرش {hop}: ماسک فقط به‌عنوان اولین پرش (ورودی) زنجیره تأیید شده است.",
+    "Hop {hop}: MASQUE H3 (QUIC) chains are not verified yet; use H2.":
+        "پرش {hop}: زنجیره‌های ماسک H3 (QUIC) هنوز تأیید نشده‌اند؛ از H2 استفاده کنید.",
+    "A WARP identity needs the private key, public key and addresses together.":
+        "هویت WARP به کلید خصوصی، کلید عمومی و آدرس‌ها به‌صورت هم‌زمان نیاز دارد.",
+    "A WARP identity and a username/password are two different auth modes; keep only one.":
+        "هویت WARP و نام کاربری/رمز عبور دو روش احراز هویت متفاوت‌اند؛ فقط یکی را نگه دارید.",
+
     # -- dialogs.py: SettingsDialog ------------------------------------------
     "Settings": "تنظیمات",
     "Ping target": "مقصد پینگ",

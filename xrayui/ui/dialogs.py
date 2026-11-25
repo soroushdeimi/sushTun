@@ -1,12 +1,15 @@
 """Import, profile editor and settings dialogs."""
 from __future__ import annotations
 
+import ipaddress
 import json
 import re
+import threading
 import time
 import urllib.parse
 from pathlib import Path
 
+import shiboken6
 from PySide6.QtCore import Qt, QThreadPool
 from PySide6.QtWidgets import (
     QApplication,
@@ -30,7 +33,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..core import autostart, coreopts, importer, render, xraycheck
+from .. import paths
+from ..core import autostart, coreopts, importer, masque_probe, network, render, xraycheck
 from ..core import backup as backup_mod
 from ..core import geo as geo_mod
 from ..core import settings as app_settings
@@ -41,12 +45,14 @@ from ..core.subscription import DEFAULT_USER_AGENT, Subscription
 from ..i18n import tr
 from .help import help_html, set_help
 from .mac import InsetGroup, Switch
+from .masque_dialog import MasquePanel
 from .rule_editor import CollapsibleSection
 from .workers import Worker
 
-_NETWORKS = ["tcp", "ws", "grpc", "h2", "kcp", "quic", "xhttp", "httpupgrade"]
+_NETWORKS = ["tcp", "ws", "grpc", "h2", "kcp", "quic", "xhttp", "httpupgrade", "masque"]
 _SECURITIES = ["none", "tls", "reality"]
-_PROTOCOLS = ["vless", "vmess", "trojan", "shadowsocks", "hysteria2", "wireguard", "http", "socks"]
+_PROTOCOLS = ["vless", "vmess", "trojan", "shadowsocks", "hysteria2", "wireguard",
+              "http", "socks", "masque"]
 _VMESS_SECURITIES = ["auto", "aes-128-gcm", "chacha20-poly1305", "none", "zero"]
 _SS_METHODS = [
     "aes-128-gcm", "aes-256-gcm", "chacha20-ietf-poly1305", "xchacha20-ietf-poly1305",
@@ -200,6 +206,10 @@ class ProfileEditDialog(QDialog):
         self.resize(520, 620)
         self._profile = profile
         self._field_labels: dict[QWidget, QLabel] = {}
+        self._pool = QThreadPool.globalInstance()
+        self._masque_cleared = profile.protocol == "masque"
+        self._closing = False
+        self._probe_worker = None
 
         self.tabs = QTabWidget()
         # The form is taller than a small screen once Advanced opens; scroll
@@ -573,6 +583,15 @@ class ProfileEditDialog(QDialog):
         if p.allow_insecure:
             self._advanced.set_expanded(True)
 
+        # MASQUE has its own rows (carrier, keys, addresses); the generic
+        # network/security/reality controls are hidden for it.
+        self._masque = MasquePanel()
+        self._masque.load(p)
+        outer.addWidget(self._masque)
+        self._probe_cancel: threading.Event | None = None
+        self._masque.btn_test.clicked.connect(self._test_endpoint)
+        self._masque.identity_imported.connect(self._on_identity_imported)
+
         def wg() -> bool:
             return self.f_protocol.currentText() == "wireguard"
 
@@ -591,11 +610,15 @@ class ProfileEditDialog(QDialog):
         def is_http() -> bool:
             return self.f_protocol.currentText() == "http"
 
+        def masque() -> bool:
+            return self.f_protocol.currentText() == "masque"
+
         def is_socks() -> bool:
             return self.f_protocol.currentText() == "socks"
 
         def stream() -> bool:
-            return not wg() and not hysteria2() and not is_http() and not is_socks()
+            return (not wg() and not hysteria2() and not is_http() and not is_socks()
+                    and self.f_protocol.currentText() != "masque")
 
         def is_reality() -> bool:
             return stream() and self.f_security.currentText() == "reality"
@@ -604,7 +627,7 @@ class ProfileEditDialog(QDialog):
             return (stream() or is_http()) and self.f_security.currentText() in ("tls", "reality")
 
         def sni_visible() -> bool:
-            return is_tls_or_reality() or hysteria2()
+            return is_tls_or_reality() or hysteria2() or masque()
 
         def is_tls() -> bool:
             return (stream() or is_http()) and self.f_security.currentText() == "tls"
@@ -622,6 +645,8 @@ class ProfileEditDialog(QDialog):
             return stream() and self.f_network.currentText() == "tcp"
 
         def has_path_host() -> bool:
+            if masque():
+                return True
             if not stream():
                 return False
             if self.f_network.currentText() in ("ws", "httpupgrade", "xhttp", "h2"):
@@ -638,7 +663,7 @@ class ProfileEditDialog(QDialog):
             (lab_network, self.f_network, stream),
             (lab_security, self.f_security, security_visible),
             (lab_sni, self.f_sni, sni_visible),
-            (lab_fp, self.f_fp, is_tls_or_reality),
+            (lab_fp, self.f_fp, lambda: is_tls_or_reality() or masque()),
             (lab_alpn, self.f_alpn, is_tls),
             (lab_sid, self.f_sid, is_reality),
             (lab_spx, self.f_spx, is_reality),
@@ -650,8 +675,8 @@ class ProfileEditDialog(QDialog):
             (lab_xhttp_mode, self.f_xhttp_mode, is_xhttp),
             (lab_xhttp_extra, self.f_xhttp_extra, is_xhttp),
             (lab_ech, self.f_ech, is_tls),
-            (lab_pcs, self.f_pcs, is_tls),
-            (lab_vcn, self.f_vcn, is_tls),
+            (lab_pcs, self.f_pcs, lambda: is_tls() or masque()),
+            (lab_vcn, self.f_vcn, lambda: is_tls() or masque()),
             (lab_hy2_pcs, self.f_hy2_pcs, hysteria2),
             (lab_hy2_obfs, self.f_hy2_obfs_password, hysteria2),
             (lab_hy2_ports, self.f_hy2_ports, hysteria2),
@@ -670,11 +695,24 @@ class ProfileEditDialog(QDialog):
         protocol = self.f_protocol.currentText()
         wg = protocol == "wireguard"
         is_http_socks = protocol in ("http", "socks")
+        masque = protocol == "masque"
 
         self._lab_id.setText(tr("Private key") if wg else tr("Password") if protocol in
-                             ("trojan", "shadowsocks", "hysteria2", "http", "socks") else "UUID")
-        self._lab_username.setVisible(is_http_socks)
-        self.f_username.setVisible(is_http_socks)
+                             ("trojan", "shadowsocks", "hysteria2", "http", "socks",
+                              "masque") else "UUID")
+        self._lab_username.setVisible(is_http_socks or masque)
+        self.f_username.setVisible(is_http_socks or masque)
+        # Switching to MASQUE must not silently keep the previous protocol's
+        # credentials. Cleared once on the first switch, so the user's own
+        # entries survive later protocol toggles.
+        if masque and not self._masque_cleared:
+            self.f_username.clear()
+            self.f_id.clear()
+            self._masque_cleared = True
+        # The generic credential is a password for these protocols, not a UUID.
+        self.f_id.setEchoMode(QLineEdit.Normal if protocol in
+                              ("vless", "vmess", "wireguard") else QLineEdit.Password)
+        self._masque.setVisible(masque)
 
         securities = (["none", "tls"] if protocol == "http" else
                       ["none"] if protocol == "socks" else _SECURITIES)
@@ -697,6 +735,8 @@ class ProfileEditDialog(QDialog):
         for lab, field in zip(self._wg_labs, self._wg_fields, strict=True):
             lab.setVisible(wg)
             field.setVisible(wg)
+        # MASQUE keeps Advanced (pin cert / verify name are TLS options);
+        # the irrelevant rows inside stay hidden by their own rules.
         self._advanced.setVisible(not wg and not is_http_socks)
 
     def result_profile(self) -> Profile:
@@ -802,19 +842,184 @@ class ProfileEditDialog(QDialog):
             p.wg_reserved = self.f_wg_reserved.text().strip()
             p.wg_mtu = self.f_wg_mtu.value()
             p.wg_keepalive = self.f_wg_keepalive.value()
+            if p.protocol == "masque":
+                self._masque.apply(p)
+                if not p.address:
+                    QMessageBox.warning(self, tr("Missing fields"),
+                                        tr("Address is required."))
+                    return
+                # MASQUE is a single carrier: force the transport and TLS, and
+                # mirror the chosen HTTP version into alpn.
+                p.network = "masque"
+                p.security = "tls"
+                p.alpn = p.masque_http_version
+                # MASQUE is TLS-only: Reality/Vision settings have no meaning.
+                p.flow = ""
+                p.sid = ""
+                p.spx = ""
+                p.pqv = ""
+        if self._profile.protocol == "masque":
+            # The Raw JSON tab skips the form checks above, so the model
+            # invariants are enforced once here for both tabs.
+            err = self._masque_validation_error(self._profile)
+            if err:
+                QMessageBox.warning(self, tr("Missing fields"), err)
+                return
         if self._profile.protocol in ("http", "socks") and not self._profile.address:
             QMessageBox.warning(self, tr("Missing fields"), tr("Address is required."))
             return
-        if (self._profile.protocol not in ("http", "socks")
+        if (self._profile.protocol not in ("http", "socks", "masque")
                 and (not self._profile.address or not self._profile.id)):
             QMessageBox.warning(self, tr("Missing fields"),
                                 tr("Address and UUID / private key are required."))
+            return
+        if self._profile.protocol == "masque" and not self._profile.address:
+            QMessageBox.warning(self, tr("Missing fields"), tr("Address is required."))
             return
         if self._profile.protocol == "wireguard" and not self._profile.pbk:
             QMessageBox.warning(self, tr("Missing fields"),
                                 tr("WireGuard peer public key is required."))
             return
         self.accept()
+
+    def _masque_validation_error(self, p) -> str:
+        """The MASQUE model invariants, shared by the form and Raw JSON tabs.
+        Returns a translated message, or "" when the profile is consistent."""
+        priv = p.masque_private_key
+        pub = p.masque_public_key
+        addrs = p.masque_addresses
+        if bool(priv) != bool(pub) or bool(priv) != bool(addrs):
+            return tr("A WARP identity needs the private key, "
+                      "public key and addresses together.")
+        if priv and (p.username or p.id):
+            # WARP and basic auth are exclusive; a successful import clears
+            # the generic pair, so this is manual typing.
+            return tr("A WARP identity and a username/password "
+                      "are two different auth modes; keep only one.")
+        # Newline- or comma-separated, like the shared model's renderer.
+        for ip in (x.strip() for x in p.masque_remote_dns.replace("\n", ",")
+                   .split(",") if x.strip()):
+            try:
+                ipaddress.ip_address(ip)
+            except ValueError:
+                return tr("Remote DNS must be literal IP addresses.")
+        if not p.is_valid():
+            return tr("This MASQUE profile is incomplete.")
+        return ""
+
+    def _on_identity_imported(self) -> None:
+        # A WARP identity and generic basic auth are two exclusive auth
+        # modes: a successful import switches to WARP, so the stale
+        # username/password must not be saved alongside it.
+        self.f_username.clear()
+        self.f_id.clear()
+
+    def _test_endpoint(self) -> None:
+        # The probe runs off the GUI thread; the button doubles as Cancel.
+        if self._probe_cancel is not None:
+            self._probe_cancel.set()
+            return
+        if not self.f_address.text().strip():
+            QMessageBox.warning(self, tr("Missing fields"), tr("Address is required."))
+            return
+        # Snapshot on the GUI thread: the worker only sees plain data.
+        p = Profile.from_dict(self._profile.to_dict())
+        p.protocol = "masque"
+        p.network = "masque"
+        p.security = "tls"
+        p.address = self.f_address.text().strip()
+        p.port = self.f_port.value()
+        p.username = self.f_username.text().strip()
+        p.id = self.f_id.text().strip()
+        p.sni = self.f_sni.text().strip()
+        p.fp = self.f_fp.text().strip()
+        p.host = self.f_host.text().strip()
+        p.path = self.f_path.text().strip()
+        p.pcs = normalize_pcs(self.f_pcs.text().strip())
+        p.vcn = self.f_vcn.text().strip()
+        # MASQUE is TLS-only: drop Reality/Vision values, as Save would.
+        p.flow = ""
+        p.sid = ""
+        p.spx = ""
+        p.pqv = ""
+        self._masque.apply(p)
+        cancel = threading.Event()
+        self._probe_cancel = cancel
+        self._masque.btn_test.setText(tr("Cancel"))
+
+        def run():
+            # Read-only interface lookup, off the GUI thread; the probe needs
+            # the physical interface to bind the tunnel to.
+            iface = network.detect_interface()
+            if iface is None:
+                return masque_probe.ProbeResult(
+                    p.address, p.masque_http_version, False, None,
+                    tr("no active internet interface"))
+            return masque_probe.probe_endpoint(
+                p, xray_path=paths.xray_exe(), cancel_event=cancel,
+                iface_alias=iface.alias)
+
+        def finish(result=None, error=None):
+            # The worker's signal is queued; the dialog may already be closed
+            # or destroyed, so a late result must not touch it or pop up.
+            if self._closing or not shiboken6.isValid(self):
+                return
+            self._probe_cancel = None
+            self._masque.btn_test.setText(tr("Test endpoint"))
+            if error is not None:
+                # A worker exception may carry internal detail; show a fixed
+                # translated message instead of the raw text.
+                QMessageBox.warning(self, tr("Test endpoint"),
+                                    tr("The endpoint test could not be run."))
+                return
+            if result.ok:
+                QMessageBox.information(
+                    self, tr("Test endpoint"),
+                    tr("Endpoint answered over {v} in {ms} ms.",
+                       v=result.http_version, ms=round(result.latency_ms)))
+            else:
+                QMessageBox.warning(self, tr("Test endpoint"),
+                                    self._probe_error_text(result.error))
+
+        worker = Worker(run)
+        worker.signals.finished.connect(lambda r: finish(result=r))
+        worker.signals.error.connect(lambda e: finish(error=e))
+        self._probe_worker = worker  # keep it alive until the signal lands
+        self._pool.start(worker)
+
+    def _probe_error_text(self, error: str) -> str:
+        # Translate the probe's fixed failure categories; anything else is a
+        # generic message so raw backend detail is never shown.
+        known = {
+            "cancelled": tr("Cancelled."),
+            "xray exited": tr("The tunnel process stopped."),
+            "startup timeout": tr("The tunnel did not start in time."),
+            "connection failed": tr("The endpoint could not be reached."),
+            "invalid http version": tr("The HTTP version is not supported."),
+            "disallowed health url": tr("The health check URL is not allowed."),
+            "no active internet interface": tr("no active internet interface"),
+        }
+        if error in known:
+            return known[error]
+        if error.startswith("HTTP "):
+            return tr("The endpoint answered with an error status.")
+        return tr("The endpoint could not be reached.")
+
+    def done(self, result: int) -> None:
+        # Save and Cancel funnel through done(): stop any probe and mark the
+        # dialog closed so a late worker result is dropped.
+        self._stop_probe()
+        super().done(result)
+
+    def closeEvent(self, event) -> None:
+        # The window X button closes without going through done().
+        self._stop_probe()
+        super().closeEvent(event)
+
+    def _stop_probe(self) -> None:
+        if self._probe_cancel is not None:
+            self._probe_cancel.set()
+        self._closing = True
 
 
 class SettingsDialog(QDialog):

@@ -98,6 +98,11 @@ class Profile:
     hy2_hop_interval: str = ""
     hy2_up_mbps: int = 0
     hy2_down_mbps: int = 0
+    masque_http_version: str = "h2"
+    masque_private_key: str = ""
+    masque_public_key: str = ""
+    masque_addresses: str = ""
+    masque_remote_dns: str = ""
     wg_local_address: str = ""
     wg_preshared: str = ""
     wg_reserved: str = ""
@@ -145,6 +150,58 @@ class Profile:
             if self.protocol == "http" and self.security not in ("", "none", "tls"):
                 return False
             return True
+
+        if self.protocol == "masque":
+            # MASQUE is TLS-only over a single h2/h3 carrier; never plaintext.
+            if self.network != "masque" or self.security != "tls":
+                return False
+            if self.masque_http_version not in ("h2", "h3"):
+                return False
+            if self.flow:
+                return False
+            if self.path and not self.path.startswith("/"):
+                return False
+            if self.pcs and not valid_pcs(self.pcs):
+                return False
+            if self.masque_remote_dns:
+                from ipaddress import ip_address
+                for d in (x.strip() for x in self.masque_remote_dns
+                          .replace("\n", ",").split(",")):
+                    if not d:
+                        continue
+                    try:
+                        ip_address(d)
+                    except ValueError:
+                        return False
+            if self.username and ":" in self.username:
+                return False
+            warp = (self.masque_private_key, self.masque_public_key,
+                    self.masque_addresses)
+            if any(warp):
+                # A WARP identity is all-or-nothing; basic auth is forbidden.
+                # Syntax (base64/PEM, host prefixes) via the identity parser;
+                # curve validity is deliberately not claimed here.
+                if not all(warp) or self.username or self.id:
+                    return False
+                # Whitespace-only keys are not a real identity.
+                if not self.masque_private_key.strip() \
+                        or not self.masque_public_key.strip():
+                    return False
+                from . import warp_identity
+                try:
+                    warp_identity.parse_identity(json.dumps({
+                        "privateKey": self.masque_private_key,
+                        "publicKey": self.masque_public_key,
+                        "address": [a.strip() for a in
+                                    self.masque_addresses
+                                    .replace("\n", ",").split(",")
+                                    if a.strip()],
+                    }))
+                except warp_identity.WarpIdentityError:
+                    return False
+                return True
+            # Generic MASQUE: optional basic auth, both credentials or neither.
+            return bool(self.username) == bool(self.id)
 
         if not self.id:
             return False

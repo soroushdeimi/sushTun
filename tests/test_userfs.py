@@ -185,3 +185,155 @@ def test_unicode_paths_and_symlinked_parents_stay_with_the_user(tmp_path):
     assert target.read_bytes() == b"content"
     assert target.stat().st_uid == os.getuid()
     assert target.stat().st_gid == os.getgid()
+
+
+# --- write_private_as_user --------------------------------------------------
+
+def test_write_private_as_user_writes_0600_file(tmp_path):
+    dest = tmp_path / "secret.json"
+    userfs.write_private_as_user(dest, b"top secret", os.getuid(), os.getgid())
+    assert dest.read_bytes() == b"top secret"
+    assert oct(dest.stat().st_mode & 0o777) == "0o600"
+
+
+def test_write_private_as_user_overwrites_existing_longer_file(tmp_path):
+    dest = tmp_path / "secret.json"
+    dest.write_text("much longer old content", encoding="utf-8")
+    userfs.write_private_as_user(dest, b"new", os.getuid(), os.getgid())
+    assert dest.read_bytes() == b"new"
+    assert oct(dest.stat().st_mode & 0o777) == "0o600"
+
+
+def test_write_private_as_user_creates_missing_parent_directories(tmp_path):
+    dest = tmp_path / "a" / "b" / "secret.json"
+    userfs.write_private_as_user(dest, b"x", os.getuid(), os.getgid())
+    assert dest.read_bytes() == b"x"
+    assert oct(dest.stat().st_mode & 0o777) == "0o600"
+
+
+def test_write_private_as_user_refuses_symlinked_destination(tmp_path):
+    real_target = tmp_path / "real_secret.txt"
+    real_target.write_text("original", encoding="utf-8")
+    link = tmp_path / "link.txt"
+    link.symlink_to(real_target)
+
+    with pytest.raises(userfs.UserFsError):
+        userfs.write_private_as_user(link, b"attacker data",
+                                     os.getuid(), os.getgid())
+
+    assert real_target.read_text(encoding="utf-8") == "original"
+    assert link.is_symlink()
+
+
+def test_write_private_as_user_refuses_symlinked_parent(tmp_path):
+    real_dir = tmp_path / "realdir"
+    real_dir.mkdir()
+    (real_dir / "victim.json").write_text("{}", encoding="utf-8")
+    link_dir = tmp_path / "linkdir"
+    link_dir.symlink_to(real_dir, target_is_directory=True)
+
+    with pytest.raises(userfs.UserFsError):
+        userfs.write_private_as_user(link_dir / "victim.json", b"x",
+                                     os.getuid(), os.getgid())
+    assert (real_dir / "victim.json").read_text(encoding="utf-8") == "{}"
+
+
+def test_write_private_as_user_refuses_directory_destination(tmp_path):
+    directory = tmp_path / "adir"
+    directory.mkdir()
+    with pytest.raises(userfs.UserFsError):
+        userfs.write_private_as_user(directory, b"x", os.getuid(), os.getgid())
+
+
+def test_write_private_as_user_failure_preserves_old_file_and_cleans_temp(
+        tmp_path, monkeypatch):
+    dest = tmp_path / "secret.json"
+    dest.write_text("keep me", encoding="utf-8")
+
+    real_run = userfs._run_as_user
+
+    def flaky(argv, uid, gid, **kwargs):
+        if argv[0].endswith("dd"):
+            raise userfs.UserFsError("disk full")
+        return real_run(argv, uid, gid, **kwargs)
+
+    monkeypatch.setattr(userfs, "_run_as_user", flaky)
+    with pytest.raises(userfs.UserFsError):
+        userfs.write_private_as_user(dest, b"new secret",
+                                     os.getuid(), os.getgid())
+    # Old destination untouched, no temp file left behind.
+    assert dest.read_text(encoding="utf-8") == "keep me"
+    assert [p.name for p in tmp_path.iterdir()] == ["secret.json"]
+
+
+def test_write_private_as_user_never_exposes_0644(tmp_path, monkeypatch):
+    # Record the mode of every file that exists in the directory at each
+    # step; the secret must never be present at a mode wider than 0600.
+    dest = tmp_path / "secret.json"
+    observed = []
+    real_run = userfs._run_as_user
+
+    def spy(argv, uid, gid, **kwargs):
+        result = real_run(argv, uid, gid, **kwargs)
+        for p in tmp_path.iterdir():
+            observed.append((p.name, p.stat().st_mode & 0o777))
+        return result
+
+    monkeypatch.setattr(userfs, "_run_as_user", spy)
+    userfs.write_private_as_user(dest, b"secret bytes",
+                                 os.getuid(), os.getgid())
+    # Every temp file that appeared must have been 0600 the whole time.
+    for name, mode in observed:
+        if name.startswith(".private."):
+            assert mode == 0o600, f"temp {name} was 0{mode:o}"
+    assert oct(dest.stat().st_mode & 0o777) == "0o600"
+
+
+def test_write_private_as_user_order_and_mode(tmp_path, monkeypatch):
+    # Mock the runner to assert the exact call order and that the temp is
+    # created (0600) before dd writes any bytes.
+    calls = []
+    dest = tmp_path / "secret.json"
+
+    def fake_run(argv, uid, gid, **kwargs):
+        calls.append(argv)
+        if argv[0].endswith("mktemp"):
+            return b"/private/tmp/fake/.private.ABC123\n"
+        return b""
+
+    monkeypatch.setattr(userfs, "_run_as_user", fake_run)
+    monkeypatch.setattr(userfs.shutil, "which",
+                        lambda name, path=None: f"/usr/bin/{name}")
+    userfs.write_private_as_user(dest, b"data", 1234, 5678)
+    tools = [Path(argv[0]).name for argv in calls]
+    assert tools == ["mkdir", "test", "mktemp", "dd", "mv"]
+    # dd must target the private temp, not the destination.
+    dd_argv = calls[3]
+    assert any("of=/private/tmp/fake/.private.ABC123" in a for a in dd_argv)
+    # mv must move the temp onto the destination.
+    mv_argv = calls[4]
+    assert "/private/tmp/fake/.private.ABC123" in mv_argv
+    assert str(dest) in mv_argv
+
+
+def test_write_private_as_user_no_shell_interpolation(tmp_path, monkeypatch):
+    # A path with shell metacharacters must be passed as a single argv
+    # element, never through a shell.
+    calls = []
+
+    def fake_run(argv, uid, gid, **kwargs):
+        calls.append(argv)
+        if argv[0].endswith("mktemp"):
+            return b"/private/tmp/fake/.private.ABC123\n"
+        return b""
+
+    monkeypatch.setattr(userfs, "_run_as_user", fake_run)
+    monkeypatch.setattr(userfs.shutil, "which",
+                        lambda name, path=None: f"/usr/bin/{name}")
+    dest = tmp_path / "$(rm -rf ~)" / "secret.json"
+    userfs.write_private_as_user(dest, b"data", 1234, 5678)
+    # No call may invoke a shell.
+    for argv in calls:
+        assert Path(argv[0]).name not in ("sh", "bash", "zsh")
+    # The destination path appears verbatim as one argv element.
+    assert str(dest) in calls[4]
