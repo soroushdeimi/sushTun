@@ -287,6 +287,39 @@ TRANSLATIONS_FA: dict[str, str] = {
     "Leave 0 to let the congestion control pick (BBR).":
         "برای انتخاب خودکار توسط کنترل ازدحام (BBR) روی 0 بگذارید.",
 
+    # -- masque_dialog.py -----------------------------------------------------
+    "MASQUE": "ماسک",
+    "HTTP version": "نسخه HTTP",
+    "The MASQUE carrier: h2 (HTTP/2) or h3 (HTTP/3).":
+        "ناقل ماسک: h2 (HTTP/2) یا h3 (HTTP/3).",
+    "Pick the one your endpoint answers on.":
+        "آن را انتخاب کنید که سرور شما روی آن پاسخ می‌دهد.",
+    "Public key": "کلید عمومی",
+    "The endpoint's P-256 public key.":
+        "کلید عمومی P-256 سرور مقصد.",
+    "Your P-256 device private key. Masked; never shown in errors or logs.":
+        "کلید خصوصی P-256 دستگاه شما. مخفی است و هرگز در خطاها یا لاگ‌ها نمایش داده نمی‌شود.",
+    "Paste it from your WARP identity.":
+        "آن را از هویت WARP خود بچسبانید.",
+    "Tunnel addresses": "آدرس‌های تونل",
+    "The tunnel's IP addresses, comma or newline separated.":
+        "آدرس‌های IP تونل، جداشده با ویرگول یا خط جدید.",
+    "162.158.74.187/32, 2606:4700::/48": "162.158.74.187/32, 2606:4700::/48",
+    "Remote DNS": "DNS از راه دور",
+    "Literal IP addresses to resolve through the tunnel.":
+        "آدرس‌های IP صریح برای حل از طریق تونل.",
+    "1.1.1.1": "1.1.1.1",
+    "Import identity…": "وارد کردن هویت…",
+    "Paste a WARP identity JSON to fill the keys and addresses.":
+        "JSON هویت WARP را بچسبانید تا کلیدها و آدرس‌ها پر شوند.",
+    "Copy the identity block your provider exported.":
+        "بلوک هویتی که ارائه‌دهنده‌تان خروجی داده را کپی کنید.",
+    "Import identity": "وارد کردن هویت",
+    "Paste the WARP identity JSON:": "JSON هویت WARP را بچسبانید:",
+    "That identity could not be read.": "این هویت قابل خواندن نبود.",
+    "A WARP identity needs the private key, public key and addresses together.":
+        "هویت WARP به کلید خصوصی، کلید عمومی و آدرس‌ها به‌صورت هم‌زمان نیاز دارد.",
+
     # -- dialogs.py: SettingsDialog ------------------------------------------
     "Settings": "تنظیمات",
     "Ping target": "مقصد پینگ",

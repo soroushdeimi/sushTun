@@ -40,12 +40,14 @@ from ..core.subscription import DEFAULT_USER_AGENT, Subscription
 from ..i18n import tr
 from .help import help_html, set_help
 from .mac import InsetGroup, Switch
+from .masque_dialog import MasquePanel
 from .rule_editor import CollapsibleSection
 from .workers import Worker
 
-_NETWORKS = ["tcp", "ws", "grpc", "h2", "kcp", "quic", "xhttp", "httpupgrade"]
+_NETWORKS = ["tcp", "ws", "grpc", "h2", "kcp", "quic", "xhttp", "httpupgrade", "masque"]
 _SECURITIES = ["none", "tls", "reality"]
-_PROTOCOLS = ["vless", "vmess", "trojan", "shadowsocks", "hysteria2", "wireguard", "http", "socks"]
+_PROTOCOLS = ["vless", "vmess", "trojan", "shadowsocks", "hysteria2", "wireguard",
+              "http", "socks", "masque"]
 _VMESS_SECURITIES = ["auto", "aes-128-gcm", "chacha20-poly1305", "none", "zero"]
 _SS_METHODS = [
     "aes-128-gcm", "aes-256-gcm", "chacha20-ietf-poly1305", "xchacha20-ietf-poly1305",
@@ -572,6 +574,12 @@ class ProfileEditDialog(QDialog):
         if p.allow_insecure:
             self._advanced.set_expanded(True)
 
+        # MASQUE has its own rows (carrier, keys, addresses); the generic
+        # network/security/reality controls are hidden for it.
+        self._masque = MasquePanel()
+        self._masque.load(p)
+        outer.addWidget(self._masque)
+
         def wg() -> bool:
             return self.f_protocol.currentText() == "wireguard"
 
@@ -594,7 +602,8 @@ class ProfileEditDialog(QDialog):
             return self.f_protocol.currentText() == "socks"
 
         def stream() -> bool:
-            return not wg() and not hysteria2() and not is_http() and not is_socks()
+            return (not wg() and not hysteria2() and not is_http() and not is_socks()
+                    and self.f_protocol.currentText() != "masque")
 
         def is_reality() -> bool:
             return stream() and self.f_security.currentText() == "reality"
@@ -669,11 +678,13 @@ class ProfileEditDialog(QDialog):
         protocol = self.f_protocol.currentText()
         wg = protocol == "wireguard"
         is_http_socks = protocol in ("http", "socks")
+        masque = protocol == "masque"
 
         self._lab_id.setText(tr("Private key") if wg else tr("Password") if protocol in
                              ("trojan", "shadowsocks", "hysteria2", "http", "socks") else "UUID")
         self._lab_username.setVisible(is_http_socks)
         self.f_username.setVisible(is_http_socks)
+        self._masque.setVisible(masque)
 
         securities = (["none", "tls"] if protocol == "http" else
                       ["none"] if protocol == "socks" else _SECURITIES)
@@ -696,7 +707,7 @@ class ProfileEditDialog(QDialog):
         for lab, field in zip(self._wg_labs, self._wg_fields, strict=True):
             lab.setVisible(wg)
             field.setVisible(wg)
-        self._advanced.setVisible(not wg and not is_http_socks)
+        self._advanced.setVisible(not wg and not is_http_socks and not masque)
 
     def result_profile(self) -> Profile:
         return self._profile
@@ -801,13 +812,31 @@ class ProfileEditDialog(QDialog):
             p.wg_reserved = self.f_wg_reserved.text().strip()
             p.wg_mtu = self.f_wg_mtu.value()
             p.wg_keepalive = self.f_wg_keepalive.value()
+            if p.protocol == "masque":
+                self._masque.apply(p)
+                # MASQUE is a single carrier: force the transport and TLS, and
+                # mirror the chosen HTTP version into alpn.
+                p.network = "masque"
+                p.security = "tls"
+                p.alpn = p.masque_http_version
+                priv = p.masque_private_key
+                pub = p.masque_public_key
+                addrs = p.masque_addresses
+                if bool(priv) != bool(pub) or bool(priv) != bool(addrs):
+                    QMessageBox.warning(self, tr("Missing fields"),
+                                        tr("A WARP identity needs the private key, "
+                                           "public key and addresses together."))
+                    return
         if self._profile.protocol in ("http", "socks") and not self._profile.address:
             QMessageBox.warning(self, tr("Missing fields"), tr("Address is required."))
             return
-        if (self._profile.protocol not in ("http", "socks")
+        if (self._profile.protocol not in ("http", "socks", "masque")
                 and (not self._profile.address or not self._profile.id)):
             QMessageBox.warning(self, tr("Missing fields"),
                                 tr("Address and UUID / private key are required."))
+            return
+        if self._profile.protocol == "masque" and not self._profile.address:
+            QMessageBox.warning(self, tr("Missing fields"), tr("Address is required."))
             return
         if self._profile.protocol == "wireguard" and not self._profile.pbk:
             QMessageBox.warning(self, tr("Missing fields"),
