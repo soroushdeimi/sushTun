@@ -452,6 +452,9 @@ def parse_masque(url: str) -> Profile:
     hv = (q.get("hv") or "h2").strip().lower()
     if hv not in ("h2", "h3"):
         raise ValueError("masque link has an invalid http version")
+    # An explicit port 0 is a broken link, not a "use the default" signal.
+    if s.port == 0:
+        raise ValueError("masque link has an invalid port")
     name = unquote(s.fragment) if s.fragment else (s.hostname or "")
     return Profile(
         name=name or s.hostname,
@@ -807,12 +810,35 @@ def _profile_from_hysteria2_outbound(proxy: dict) -> Profile:
     )
 
 
+def _masque_http_version(alpn: object) -> str:
+    # Xray picks the h2 carrier only when h2 is advertised and h3 is not;
+    # anything else (including omitted/empty) is h3.
+    if alpn is None:
+        return "h3"
+    if not isinstance(alpn, list) or not all(isinstance(a, str) for a in alpn):
+        raise ValueError("masque alpn must be a list of strings")
+    return "h2" if "h2" in alpn and "h3" not in alpn else "h3"
+
+
 def _profile_from_masque_outbound(proxy: dict) -> Profile:
     settings = proxy.get("settings") or {}
     stream = proxy.get("streamSettings") or {}
     masque = stream.get("masqueSettings") or {}
     tls = stream.get("tlsSettings") or {}
     warp = masque.get("warp") or {}
+    # Xray accepts the transport as streamSettings.method (docs) or the
+    # legacy network key; a conflicting pair is a broken config.
+    network = (stream.get("network") or "").lower()
+    method = (stream.get("method") or "").lower()
+    if network and method and network != method:
+        raise ValueError("masque outbound network/method conflict")
+    if network != "masque" and method != "masque":
+        raise ValueError("masque outbound has an incompatible network")
+    if (stream.get("security") or "").lower() != "tls":
+        raise ValueError("masque outbound requires tls security")
+    port = settings.get("port", 443)
+    if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
+        raise ValueError("masque port must be an integer 1-65535")
     dns = settings.get("remoteDNS") or []
     if isinstance(dns, str):
         dns = [dns]
@@ -820,7 +846,7 @@ def _profile_from_masque_outbound(proxy: dict) -> Profile:
         name=masque.get("host") or settings.get("address", "imported"),
         protocol="masque",
         address=settings.get("address", ""),
-        port=int(settings.get("port", 443)),
+        port=port,
         network="masque",
         security="tls",
         username=masque.get("user", ""),
@@ -831,7 +857,7 @@ def _profile_from_masque_outbound(proxy: dict) -> Profile:
         fp=tls.get("fingerprint", ""),
         pcs=normalize_pcs(tls.get("pinnedPeerCertSha256", "")),
         vcn=tls.get("verifyPeerCertByName", ""),
-        masque_http_version=(tls.get("alpn") or ["h2"])[0],
+        masque_http_version=_masque_http_version(tls.get("alpn")),
         masque_remote_dns=", ".join(str(d) for d in dns),
         masque_private_key=warp.get("privateKey", ""),
         masque_public_key=warp.get("publicKey", ""),

@@ -29,6 +29,9 @@ def apply(proxy: dict, p: Profile) -> None:
     if p.path:
         masque["path"] = p.path
     warp = (p.masque_private_key, p.masque_public_key, p.masque_addresses)
+    if any(warp) and not all(warp):
+        # A partial WARP identity must not silently become anonymous generic.
+        raise ValueError("partial WARP identity: set all of private/public/addresses")
     if all(warp):
         masque["warp"] = {
             "privateKey": p.masque_private_key,

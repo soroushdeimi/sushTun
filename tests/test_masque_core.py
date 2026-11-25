@@ -1,8 +1,9 @@
-"""MASQUE core: Profile fields/validation, outbound builder, JSON import,
-masque:// share format, and xray -test on rendered configs.
+"""MASQUE core: Profile fields/validation, outbound builder, JSON import and
+masque:// share format.
 
-Wire shape verified against the bundled Xray 26.10.31 binary (see DONE.md).
-Only dummy generic credentials are used; no real WARP keys, no live network.
+Portable unit suite: no Xray binary dependency. Native `xray run -test`
+checks live in tools/verify_masque_config.py (opt-in). Only dummy generic
+credentials are used; no real WARP keys, no live network.
 """
 from __future__ import annotations
 
@@ -11,24 +12,10 @@ from pathlib import Path
 
 import pytest
 
-from xrayui import paths
-from xrayui.core import importer, outbounds, render, share, xraycheck
+from xrayui.core import importer, outbounds, render, share
 from xrayui.core.profiles import Profile
 
 TEMPLATE = Path(__file__).resolve().parent.parent / "config.template.json"
-
-
-_BASELINE_XRAY = Path(
-    "/Users/soroushdeimi/Desktop/myprojects/SUSHTUN/sushTun/xray"
-)
-
-
-def _skip_if_no_binary(monkeypatch):
-    if not paths.xray_exe().exists():
-        if _BASELINE_XRAY.exists():
-            monkeypatch.setattr(paths, "xray_exe", lambda: _BASELINE_XRAY)
-        else:
-            pytest.skip("bundled xray binary not present")
 
 
 def _generic(**over) -> Profile:
@@ -42,8 +29,8 @@ def _warp(**over) -> Profile:
     base = dict(name="w", protocol="masque", address="162.159.198.2", port=443,
                 network="masque", security="tls",
                 sni="consumer-masque.cloudflareclient.com",
-                masque_private_key="MHcCAQEE-dummy",
-                masque_public_key="MFkwEwYH-dummy",
+                masque_private_key="MHcCAQEEAAAA",
+                masque_public_key="MFkwEwYHAAAA",
                 masque_addresses="172.16.0.2/32, 2606:4700:110:8a36::2/128")
     base.update(over)
     return Profile(**base)
@@ -126,11 +113,57 @@ def test_incomplete_warp_identity_is_rejected():
     assert not _warp(masque_public_key="").is_valid()
     assert not _warp(masque_addresses="").is_valid()
     # only one of the three set
-    assert not _generic(masque_private_key="MHcCAQEE-dummy").is_valid()
+    assert not _generic(masque_private_key="MHcCAQEEAAAA").is_valid()
 
 
 def test_warp_identity_rejects_basic_auth():
     assert not _warp(username="user", id="pass").is_valid()
+
+
+def test_masque_requires_masque_network():
+    assert not _generic(network="tcp").is_valid()
+    assert not _generic(network="").is_valid()
+
+
+def test_masque_rejects_flow():
+    assert not _generic(flow="xtls-rprx-vision").is_valid()
+
+
+def test_masque_rejects_non_literal_remote_dns():
+    assert not _generic(masque_remote_dns="1.1.1.1, dns.example.com").is_valid()
+    assert _generic(masque_remote_dns="1.1.1.1, 2606:4700:4700::1111").is_valid()
+
+
+def test_masque_rejects_colon_in_basic_username():
+    assert not _generic(username="user:extra", id="pass").is_valid()
+
+
+def test_masque_rejects_bad_pcs_and_bad_path():
+    assert not _generic(pcs="garbage").is_valid()
+    assert not _generic(path="no-slash").is_valid()
+    assert _generic(path="/x").is_valid()
+
+
+def test_warp_identity_rejects_whitespace_only_keys():
+    assert not _warp(masque_private_key="   ").is_valid()
+    assert not _warp(masque_public_key="\n").is_valid()
+
+
+def test_warp_identity_rejects_bad_base64_keys():
+    assert not _warp(masque_private_key="not base64!!").is_valid()
+    assert not _warp(masque_public_key="!!!").is_valid()
+
+
+def test_warp_identity_rejects_bad_address_prefixes():
+    assert not _warp(masque_addresses="172.16.0.2/24").is_valid()
+    assert not _warp(masque_addresses="172.16.0.2").is_valid()
+    assert not _warp(masque_addresses="not-an-ip/32").is_valid()
+    assert not _warp(masque_addresses="172.16.0.2/32, 172.16.0.3/32").is_valid()
+    assert not _warp(masque_addresses="172.16.0.2/32, 2606:4700::1/128, 10.0.0.1/32").is_valid()
+
+
+def test_warp_identity_rejects_malformed_pem():
+    assert not _warp(masque_private_key="-----BEGIN EC PRIVATE KEY-----\nnot-base64!!\n-----END EC PRIVATE KEY-----").is_valid()
 
 
 # -- builder shape ------------------------------------------------------------
@@ -179,11 +212,19 @@ def test_masque_no_remote_dns_omits_key():
     assert "remoteDNS" not in out["settings"]
 
 
+def test_masque_builder_rejects_partial_warp_identity():
+    # A partial WARP identity must not silently become anonymous generic MASQUE.
+    with pytest.raises(ValueError):
+        outbounds.build(_warp(masque_public_key=""), "proxy")
+    with pytest.raises(ValueError):
+        outbounds.build(_warp(masque_addresses=""), "proxy")
+
+
 def test_masque_warp_renders_warp_object():
     out = outbounds.build(_warp(), "proxy")
     assert out["streamSettings"]["masqueSettings"]["warp"] == {
-        "privateKey": "MHcCAQEE-dummy",
-        "publicKey": "MFkwEwYH-dummy",
+        "privateKey": "MHcCAQEEAAAA",
+        "publicKey": "MFkwEwYHAAAA",
         "address": ["172.16.0.2/32", "2606:4700:110:8a36::2/128"],
     }
 
@@ -233,10 +274,83 @@ def test_json_masque_outbound_import_warp():
     p = _warp()
     got = importer.parse_json(_masque_config(p))
     assert got.protocol == "masque"
-    assert got.masque_private_key == "MHcCAQEE-dummy"
-    assert got.masque_public_key == "MFkwEwYH-dummy"
+    assert got.masque_private_key == "MHcCAQEEAAAA"
+    assert got.masque_public_key == "MFkwEwYHAAAA"
     assert "172.16.0.2/32" in got.masque_addresses
     assert "2606:4700:110:8a36::2/128" in got.masque_addresses
+
+
+def _masque_proxy(alpn=None, port=443, network="masque", security="tls"):
+    tls: dict = {}
+    if alpn is not None:
+        tls["alpn"] = alpn
+    return {
+        "tag": "proxy", "protocol": "masque",
+        "settings": {"address": "1.2.3.4", "port": port},
+        "streamSettings": {"network": network, "security": security,
+                           "masqueSettings": {}, "tlsSettings": tls},
+    }
+
+
+def test_import_alpn_mixed_h2_h3_selects_h3():
+    # Xray rule: h2 only when h2 present AND h3 absent.
+    p = importer._profile_from_masque_outbound(_masque_proxy(alpn=["h2", "h3"]))
+    assert p.masque_http_version == "h3"
+
+
+def test_import_alpn_h2_only_selects_h2():
+    p = importer._profile_from_masque_outbound(_masque_proxy(alpn=["h2"]))
+    assert p.masque_http_version == "h2"
+
+
+def test_import_alpn_h3_only_selects_h3():
+    p = importer._profile_from_masque_outbound(_masque_proxy(alpn=["h3"]))
+    assert p.masque_http_version == "h3"
+
+
+def test_import_alpn_omitted_defaults_to_h3():
+    p = importer._profile_from_masque_outbound(_masque_proxy())
+    assert p.masque_http_version == "h3"
+
+
+def test_import_alpn_empty_list_defaults_to_h3():
+    p = importer._profile_from_masque_outbound(_masque_proxy(alpn=[]))
+    assert p.masque_http_version == "h3"
+
+
+def test_import_alpn_wrong_types_rejected():
+    for bad in ("h2", ["h2", 3], [None]):
+        with pytest.raises(ValueError):
+            importer._profile_from_masque_outbound(_masque_proxy(alpn=bad))
+
+
+def test_import_port_bool_or_non_integer_rejected():
+    for bad in (True, "443", 443.0, 0, 70000):
+        with pytest.raises(ValueError):
+            importer._profile_from_masque_outbound(_masque_proxy(port=bad))
+
+
+def test_import_incompatible_network_or_security_rejected():
+    with pytest.raises(ValueError):
+        importer._profile_from_masque_outbound(_masque_proxy(network="tcp"))
+    with pytest.raises(ValueError):
+        importer._profile_from_masque_outbound(_masque_proxy(security="none"))
+
+
+def test_import_method_alias_accepted_when_network_absent():
+    proxy = _masque_proxy(alpn=["h2"])
+    del proxy["streamSettings"]["network"]
+    proxy["streamSettings"]["method"] = "masque"
+    p = importer._profile_from_masque_outbound(proxy)
+    assert p.protocol == "masque"
+    assert p.masque_http_version == "h2"
+
+
+def test_import_conflicting_network_method_rejected():
+    proxy = _masque_proxy()
+    proxy["streamSettings"]["method"] = "tcp"
+    with pytest.raises(ValueError):
+        importer._profile_from_masque_outbound(proxy)
 
 
 def test_json_masque_missing_keys_still_imports():
@@ -279,18 +393,18 @@ def test_share_masque_warp_round_trip():
     link = share.share_link(p)
     assert link.startswith("masque://")
     got = importer.parse_share_text(link)[0]
-    assert got.masque_private_key == "MHcCAQEE-dummy"
-    assert got.masque_public_key == "MFkwEwYH-dummy"
+    assert got.masque_private_key == "MHcCAQEEAAAA"
+    assert got.masque_public_key == "MFkwEwYHAAAA"
     assert "172.16.0.2/32" in got.masque_addresses
 
 
 def test_share_masque_escapes_special_characters():
     # base64 keys carry + / = and must survive a URL round-trip intact.
-    p = _warp(masque_private_key="a+b/c=d+", masque_public_key="x/y=z")
+    p = _warp(masque_private_key="a+b/AA==", masque_public_key="x/y=")
     link = share.share_link(p)
     got = importer.parse_share_text(link)[0]
-    assert got.masque_private_key == "a+b/c=d+"
-    assert got.masque_public_key == "x/y=z"
+    assert got.masque_private_key == "a+b/AA=="
+    assert got.masque_public_key == "x/y="
 
 
 def test_share_masque_ipv6_address():
@@ -311,6 +425,12 @@ def test_share_masque_missing_hostname_rejected():
         importer.parse_masque("masque://:443")
 
 
+def test_share_masque_port_zero_rejected():
+    # An explicit :0 must not silently become the 443 default.
+    with pytest.raises(ValueError):
+        importer.parse_masque("masque://1.2.3.4:0")
+
+
 def test_share_masque_empty_auth_is_generic():
     p = _generic()
     link = share.share_link(p)
@@ -329,18 +449,6 @@ def test_subscription_dispatch_reaches_masque_parser():
     assert got[0].protocol == "masque"
 
 
-# -- xray -test on rendered configs -------------------------------------------
-def test_xray_test_accepts_generic_masque(tmp_path, monkeypatch):
-    _skip_if_no_binary(monkeypatch)
-    monkeypatch.setattr(xraycheck.paths, "state_dir", lambda: tmp_path)
-    p = _generic(username="user", id="pass")
-    text = render.build_text(p, "lo", TEMPLATE, include_tun=False)
-    assert xraycheck.check_config(text) is None
-
-
-def test_xray_test_accepts_h3_masque(tmp_path, monkeypatch):
-    _skip_if_no_binary(monkeypatch)
-    monkeypatch.setattr(xraycheck.paths, "state_dir", lambda: tmp_path)
-    p = _generic(masque_http_version="h3", masque_remote_dns="1.1.1.1, 2606:4700:4700::1111")
-    text = render.build_text(p, "lo", TEMPLATE, include_tun=False)
-    assert xraycheck.check_config(text) is None
+# Native `xray run -test` checks are opt-in and live in
+# tools/verify_masque_config.py so the default unit suite stays portable and
+# needs no Xray binary.
