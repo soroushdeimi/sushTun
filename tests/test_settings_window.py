@@ -111,11 +111,15 @@ def test_done_is_the_default_button(qapp, defaults):
 
 def test_values_exposes_the_settings_dialog_schema(qapp, defaults):
     win = SettingsWindow(defaults)
-    assert set(win.values()) == {
-        "ping_target", "sample_seconds", "tun_mtu", "log_level",
+    keys = set(win.values())
+    assert {
+        "ping_target", "sample_seconds", "tun_mtu", "log_level", "killswitch",
         "language", "geo", "core", "startup", "updates", "exits", "gateway", "forwards",
-        "speedtest",
-    }
+        "speedtest", "strict", "leakcheck",
+    } <= keys
+    # The firewall key is only emitted on a platform that supports it.
+    from xrayui.core import firewall as firewall_mod
+    assert ("firewall" in keys) == firewall_mod.supported()
 
 
 def _problems(widget, where: str) -> list[str]:

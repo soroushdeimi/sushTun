@@ -372,6 +372,22 @@ TRANSLATIONS_FA: dict[str, str] = {
         "MTU تونل. مقدار کمتر فضای بیشتری برای کپسوله‌سازی می‌گذارد؛ "
         "مقدار بیشتر سربار هر بسته را کاهش می‌دهد. 1420 مقداری امن و پیش‌فرض است.",
     "Xray log level": "سطح لاگ Xray",
+    "Block the internet if the VPN drops (kill switch)":
+        "مسدود کردن اینترنت وقتی VPN قطع می‌شود (کلید قطع)",
+    "Applies from the next connect.": "از اتصال بعدی اعمال می‌شود.",
+    "If the tunnel dies while you are connected, your traffic is "
+    "blocked instead of falling back to your normal connection and "
+    "leaking your real IP. Turn it off and disconnect to get your "
+    "internet back.":
+        "اگر تونل در حین اتصال از کار بیفتد، ترافیک شما به‌جای برگشت به "
+        "اتصال معمولی و نشت آدرس واقعی‌تان، مسدود می‌شود. برای بازگشت "
+        "اینترنت، آن را خاموش کنید و قطع شوید.",
+    "Protects an account that bans your real IP if the VPN drops.":
+        "حسابی را که در صورت قطع VPN، آدرس واقعی شما را مسدود می‌کند، محافظت می‌کند.",
+    "VPN dropped: internet is blocked. Reconnect, or press "
+    "Disconnect to restore normal internet.":
+        "VPN قطع شد: اینترنت مسدود است. دوباره وصل شوید، یا برای بازگشت "
+        "به اینترنت معمولی «قطع اتصال» را بزنید.",
     "Check for updates": "بررسی به‌روزرسانی",
     "Geo data": "داده‌های جغرافیایی",
     "Source": "منبع",
@@ -2020,4 +2036,99 @@ TRANSLATIONS_FA: dict[str, str] = {
     "Serverless only connects with no server behind it. Your IP stays Iranian, so:\n\n• services that block Iran (some AI tools, Google Play, …) still won't open;\n• sites whose IP addresses are blocked outright still won't open.\n\nIt only gets past name and DNS filtering. For the rest, connect to a server, and turn the Serverless button on if the server itself gets filtered.": "«فقط سرورلس» بدون هیچ سروری وصل می‌شود. IP تو ایرانی می‌ماند، پس:\n\n• سرویس‌هایی که ایران را تحریم کرده‌اند (مثل بعضی ابزارهای هوش مصنوعی و گوگل‌پلی) باز نمی‌شوند؛\n• سایت‌هایی که IPشان کامل بسته شده باز نمی‌شوند.\n\nفقط از فیلترینگ اسم سایت و DNS رد می‌شود. برای بقیه به یک سرور وصل شو، و اگر خود سرور فیلتر می‌شود دکمهٔ سرورلس را هم روشن کن.",
     "Don't show this again": "دیگر نشان نده",
     "Serverless only": "فقط سرورلس",
+
+    # -- F2: security notifications + education + macOS helper offer --------
+    "Protect your real IP": "حفظ IP واقعی‌ات",
+    "sushTun can stop your real IP from leaking to AI sites. Recommended for AI accounts: the kill switch, strict mode and the leak check, in Settings → Security. The OS firewall is the strongest layer, but it can cut your internet if something goes wrong. Nothing is protected before you connect or after you disconnect, and Serverless-only always uses your real IP.":
+        "sushTun می‌تواند جلوی نشت IP واقعی‌ات به سایت‌های هوش مصنوعی را بگیرد. برای حساب‌های هوش مصنوعی پیشنهاد می‌شود: کیل‌سوئیچ، حالت سخت‌گیرانه و بررسی نشت، در تنظیمات ← امنیت. فایروالِ سیستم قوی‌ترین لایه است، ولی اگر چیزی خراب شود ممکن است اینترنتت را قطع کند. قبل از وصل شدن و بعد از قطع شدن هیچ‌چیز محافظت نمی‌شود، و حالت «فقط سرورلس» همیشه از IP واقعی‌ات استفاده می‌کند.",
+    "Skip the password next time?": "بار بعدی گذرواژه را رد کنی؟",
+    "Install a small background helper (one password) so sushTun opens without asking again. You can remove it any time.":
+        "یک کمکی کوچک در پس‌زمینه نصب کن (یک‌بار گذرواژه) تا sushTun دیگر بدون پرسیدن باز شود. هر وقت خواستی می‌توانی حذفش کنی.",
+    "Yes": "بله",
+    "No": "نه",
+    "Could not install the password-free helper.": "کمک‌کنندهٔ بدون گذرواژه نصب نشد.",
+    "Password-free start is on: sushTun will open without asking for the password.":
+        "شروع بدون گذرواژه روشن شد: sushTun دیگر بدون پرسیدن گذرواژه باز می‌شود.",
+    "sushTun": "sushTun",
+    # Security alert templates (core/alerts.py + core/leakcheck.py), passed to
+    # tr() via Alert.template, so the coverage test derives them as dynamic.
+    "VPN dropped: the tunnel is down but the app still shows connected.":
+        "تونل VPN قطع شد: تونل از کار افتاده اما برنامه هنوز «وصل» نشان می‌دهد.",
+    "The tunnel exit is in Iran — your real location is exposed.":
+        "خروجی تونل در ایران است — موقعیت واقعی‌ات فاش شده.",
+    "The tunnel exit matches your real IP — traffic is not going through the tunnel.":
+        "خروجی تونل با IP واقعی‌ات یکی است — ترافیک از تونل رد نمی‌شود.",
+    "DNS may leak: some resolvers are still outside the tunnel.":
+        "DNS ممکن است نشت کند: بعضی از ریزولورها هنوز بیرون از تونل هستند.",
+    "IPv6 may leak: an IPv6 default route is outside the tunnel.":
+        "IPv6 ممکن است نشت کند: یک مسیر پیش‌فرض IPv6 بیرون از تونل است.",
+
+    # -- F1: Security settings page -----------------------------------------
+    "Kill switch": "کیل‌سوئیچ",
+    "IPv6": "IPv6",
+    "Blocked": "مسدود",
+    "Not blocked": "مسدود نیست",
+    "OS firewall": "فایروالِ سیستم",
+    "Not supported": "پشتیبانی نمی‌شود",
+    "Inactive": "غیرفعال",
+    "Leak check": "بررسی نشت",
+    "Not run": "اجرا نشده",
+    "Strict mode": "حالت سخت‌گیرانه",
+    "Protect the default AI list": "حفظ فهرست پیش‌فرض هوش مصنوعی",
+    "No direct at all": "اصلاً مستقیم نباشد",
+    "No-direct mode routes every site through the tunnel, including Iranian sites. Iranian sites will be slower and some may be blocked.":
+        "حالت بدون مستقیم، همهٔ سایت‌ها را از تونل رد می‌کند، از جمله سایت‌های ایرانی. سایت‌های ایرانی کندتر می‌شوند و بعضی ممکن است بسته شوند.",
+    "Extra protected domains (one per line)": "دامنه‌های محافظت‌شدهٔ اضافه (هر خط یک مورد)",
+    "Reset": "بازنشانی",
+    "Notify me of a finding": "اگر چیزی پیدا شد خبرم کن",
+    "Run check now": "همین حالا بررسی کن",
+    "Check the tunnel exit": "بررسی خروجی تونل",
+    "OS firewall lockdown": "قفل فایروالِ سیستم",
+    "Allow the local network": "اجازه به شبکهٔ محلی",
+    "Password-free start": "شروع بدون گذرواژه",
+    "Connect first to run the leak check.": "برای اجرای بررسی نشت اول وصل شو.",
+    "Could not verify the tunnel exit.": "نمی‌توانم خروجی تونل را تأیید کنم.",
+    "Uninstall helper": "حذف کمک‌کننده",
+    "Install helper": "نصب کمک‌کننده",
+    "Helper removed.": "کمک‌کننده حذف شد.",
+    "Could not remove the helper.": "کمک‌کننده حذف نشد.",
+    "Keep your real IP away from AI sites: the kill switch, strict mode, the leak check and the OS firewall.":
+        "IP واقعی‌ات را از سایت‌های هوش مصنوعی دور نگه می‌دارد: کیل‌سوئیچ، حالت سخت‌گیرانه، بررسی نشت و فایروالِ سیستم.",
+    "Worried your real IP is leaking? Start here.": "نگران نشت IP واقعی‌ات هستی؟ از اینجا شروع کن.",
+    "Sends AI sites (ChatGPT, Claude, Gemini and more) always through the tunnel, ahead of every 'direct' rule such as Iran-direct or your bypass lists, and resolves their names through the tunnel. Edit the list below.":
+        "سایت‌های هوش مصنوعی (ChatGPT، Claude، Gemini و بقیه) را همیشه از تونل رد می‌کند، جلوتر از هر قانون «مستقیم» مثل ایران-مستقیم یا فهرست‌های دور‌زدنت، و اسم‌هایشان را هم از تونل حل می‌کند. فهرست را پایین‌تر ویرایش کن.",
+    "Keep your AI accounts from ever seeing your real IP.": "حساب‌های هوش مصنوعی‌ات هرگز IP واقعی‌ات را نبینند.",
+    "Always include the built-in list of AI services (ChatGPT, Claude, Gemini and more) in the protected names.":
+        "فهرست داخلی سرویس‌های هوش مصنوعی (ChatGPT، Claude، Gemini و بقیه) همیشه در فهرست محافظت‌شده‌ها باشد.",
+    "Turn off only if you manage the list yourself.": "فقط اگر خودت فهرست را مدیریت می‌کنی خاموشش کن.",
+    "Turns every 'direct' rule off so nothing can leave with your real IP. Iranian sites become slower or may not open.":
+        "همهٔ قوانین «مستقیم» را خاموش می‌کند تا هیچ‌چیز با IP واقعی‌ات بیرون نرود. سایت‌های ایرانی کندتر می‌شوند یا ممکن است باز نشوند.",
+    "The strongest strict setting — use it only when you need it.": "سخت‌گیرانه‌ترین حالت — فقط وقتی لازم داری روشنش کن.",
+    "Your own names to always send through the tunnel, one per line. The default AI list is shown when this is empty.":
+        "اسم‌های خودت که همیشه از تونل رد شوند، هر خط یک مورد. وقتی این خالی است، فهرست پیش‌فرض هوش مصنوعی نشان داده می‌شود.",
+    "Add a service the built-in list does not cover yet.": "سرویسی که هنوز در فهرست داخلی نیست را اضافه کن.",
+    "Clears your extra list so only the default AI list is protected.": "فهرست اضافه‌ات را پاک می‌کند تا فقط فهرست پیش‌فرض هوش مصنوعی محافظت شود.",
+    "Back to the built-in list.": "بازگشت به فهرست داخلی.",
+    "After connecting, checks that the exit really is the tunnel and warns if it is Iran or your real IP. Your full IP is never saved or shown, only a masked form.":
+        "بعد از وصل شدن، بررسی می‌کند که خروجی واقعاً تونل است و اگر ایران یا IP واقعی‌ات باشد هشدار می‌دهد. IP کاملت هرگز ذخیره یا نشان داده نمی‌شود، فقط شکل ماسک‌خورده‌اش.",
+    "Catches a tunnel that quietly stops working.": "تونلی که بی‌سروصدا از کار می‌افتد را می‌گیرد.",
+    "Also sends an OS notification when the leak check finds a problem, on top of the in-app status.":
+        "وقتی بررسی نشت مشکلی پیدا کند، علاوه بر وضعیت داخل برنامه، یک اعلان هم می‌فرستد.",
+    "Get pinged the moment something leaks.": "همان لحظه‌ای که چیزی نشت می‌کند خبرت کنم.",
+    "Runs the leak check right now and shows the result here.": "همین حالا بررسی نشت را اجرا می‌کند و نتیجه را اینجا نشان می‌دهد.",
+    "Want to be sure before you trust a new server?": "قبل از اعتماد به یک سرور جدید مطمئن می‌خواهی شوی؟",
+    "The system itself drops anything outside the tunnel, even if the app crashes or Xray dies. Strongest, but if something goes wrong you can lose internet until you restart the app. Protection while the app is closed lasts only until the next launch.":
+        "خودِ سیستم هر چیزی که بیرون از تونل باشد را رها می‌کند، حتی اگر برنامه کرش کند یا Xray بمیرد. قوی‌ترین لایه است، ولی اگر چیزی خراب شود تا دوباره برنامه را باز کنی اینترنتت قطع می‌ماند. محافظت در حالتی که برنامه بسته است فقط تا راه‌اندازی بعدی دوام دارد.",
+    "The strongest layer — and the one that can cut you off.": "قوی‌ترین لایه — و همانی که ممکن است تو را قطع کند.",
+    "Lets traffic to your own LAN and link-local addresses through the lockdown, so printers and home devices keep working.":
+        "ترافیک به شبکهٔ محلی و آدرس‌های link-local خودت را از قفل عبور می‌دهد تا پرینتر و دستگاه‌های خانه کار کنند.",
+    "Keep it on unless you have a reason to block the LAN.": "مگر اینکه دلیلی برای مسدود کردن شبکهٔ محلی داشته باشی، روشن بگذار.",
+    "Installs a small background helper once (one password) so the app opens without asking again. Uninstall any time here.":
+        "یک‌بار یک کمک‌کنندهٔ کوچک در پس‌زمینه نصب می‌کند (یک‌بار گذرواژه) تا برنامه دیگر بدون پرسیدن باز شود. هر وقت خواستی همین‌جا حذفش کن.",
+    "Stop being asked for your password on every launch.": "دیگر هر بار که باز می‌کنی گذرواژه‌ات را نپرسند.",
+    "What this does not cover: Serverless-only mode always uses your real IP; nothing is protected before you connect or after you disconnect; apps with their own tunnels are out of scope.":
+        "چه چیزهایی را نمی‌پوشاند: حالت «فقط سرورلس» همیشه از IP واقعی‌ات استفاده می‌کند؛ قبل از وصل شدن و بعد از قطع شدن هیچ‌چیز محافظت نمی‌شود؛ برنامه‌هایی که تونلِ خودشان را دارند خارج از محدوده‌اند.",
+    "The OS firewall lockdown, the strongest layer. It is off by default because it can cut your internet if something goes wrong.":
+        "قفل فایروالِ سیستم، قوی‌ترین لایه. پیش‌فرض خاموش است چون اگر چیزی خراب شود ممکن است اینترنتت را قطع کند.",
+    "Expand to turn it on.": "برای روشن کردن باز کن.",
 }

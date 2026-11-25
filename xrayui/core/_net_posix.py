@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import logging
 import re
 import shutil
 import subprocess
@@ -21,6 +22,8 @@ from pathlib import Path
 from . import proc
 from . import tun2socks as t2s
 from ._net_common import TUN_ADDRESS, TUN_NAME, TUN_NETMASK, DnsState, Interface
+
+logger = logging.getLogger(__name__)
 
 IS_MAC = sys.platform == "darwin"
 TUN_PREFIX_LEN = 30
@@ -569,6 +572,22 @@ MAC_SPLIT = ("0.0.0.0/2", "64.0.0.0/2", "128.0.0.0/2", "192.0.0.0/2")
 # Earlier builds used these; still removed so an old session cannot strand them.
 _MAC_OLD_SPLIT = ("0.0.0.0/1", "128.0.0.0/1")
 
+# Kill switch: blackhole routes that take over the moment the tunnel routes
+# vanish (Xray dies, the app crashes), so traffic is dropped instead of
+# leaking to the physical default route. One per half of the IPv4 space, the
+# same split the tunnel uses. On Linux they are the tunnel's own /1 prefixes
+# with a worse metric; on macOS they are /1s, less specific than the tunnel's
+# /2s, so they only win once the /2s are gone.
+KILLSWITCH_SPLIT = ("0.0.0.0/1", "128.0.0.0/1")
+# The tunnel is IPv4-only, so IPv6 is never routed into it and would leave in
+# the clear while connected. The kill switch blackholes IPv6 too: one per half
+# of the IPv6 space. These are unconditional (no tunnel v6 route exists to beat
+# them), so they are installed together with the v4 ones and removed by the
+# same teardown paths.
+KILLSWITCH_V6_SPLIT = ("::/1", "8000::/1")
+# Higher than the tunnel route's metric (0), so the tunnel wins while it is up.
+KILLSWITCH_METRIC = 1000
+
 
 def _mac_via(native: bool) -> list[str]:
     # Xray's own utun is reached by interface. The tun2socks device only
@@ -616,6 +635,111 @@ def repair_tun_routes() -> bool | None:
     return True if missing else None
 
 
+def _add_killswitch_v6() -> bool:
+    """Blackhole IPv6 too: the tunnel is IPv4-only, so v6 would otherwise
+    leave in the clear while connected. Returns True if both halves are in.
+
+    A machine with IPv6 disabled/unsupported refuses the adds; that is not an
+    error — it is logged at debug level (no error spam) and the v4 protection
+    still stands. Idempotent: a stale v6 blackhole is cleared first.
+    """
+    if IS_MAC:
+        for dest in KILLSWITCH_V6_SPLIT:
+            _run_best_effort(["route", "-n", "delete", "-inet6", "-net", dest,
+                              "-blackhole"])
+            result = proc.run(["route", "-n", "add", "-inet6", "-net", dest,
+                               "-blackhole"])
+            if result.returncode != 0:
+                logger.debug("kill switch IPv6 route %s not installed: %s",
+                             dest, result.stderr.strip())
+                return False
+        return True
+    for dest in KILLSWITCH_V6_SPLIT:
+        _run_best_effort(["ip", "-6", "route", "del", dest, "blackhole"])
+        result = proc.run(["ip", "-6", "route", "add", dest, "blackhole",
+                           "metric", str(KILLSWITCH_METRIC)])
+        if result.returncode != 0:
+            logger.debug("kill switch IPv6 route %s not installed: %s",
+                         dest, result.stderr.strip())
+            return False
+    return True
+
+
+def add_killswitch_routes() -> None:
+    """Install the blackhole routes that catch traffic once the tunnel is gone.
+
+    Idempotent: a stale blackhole a crashed session left behind is cleared
+    first (best-effort), so a fresh connect never fails on "File exists".
+    Raises on the first refused IPv4 add, exactly like add_default_routes: the
+    caller treats a failed kill switch as "not active" and keeps the
+    connection, rather than claiming protection it does not have. IPv6 is
+    blackholed too (see _add_killswitch_v6); a machine without IPv6 simply
+    skips it.
+    """
+    if IS_MAC:
+        # -blackhole is a route type (RTF_BLACKHOLE): it needs no gateway, and
+        # the kernel silently drops matching packets. A /1 is less specific
+        # than the tunnel's /2s, so it only wins once those are gone.
+        for dest in KILLSWITCH_SPLIT:
+            _run_best_effort(["route", "-n", "delete", "-net", dest, "-blackhole"])
+            result = proc.run(["route", "-n", "add", "-net", dest, "-blackhole"])
+            if result.returncode != 0:
+                raise RuntimeError(f"kill switch route {dest} failed: "
+                                   f"{result.stderr.strip()}")
+        _add_killswitch_v6()
+        return
+    for dest in KILLSWITCH_SPLIT:
+        # Same prefix as the tunnel's /1 routes, but a worse metric: while the
+        # tunnel route (metric 0) is present it wins, and the blackhole takes
+        # over the instant it disappears.
+        _run_best_effort(["ip", "route", "del", dest, "blackhole"])
+        _ip_route("route", "add", dest, "blackhole", "metric", str(KILLSWITCH_METRIC))
+    _add_killswitch_v6()
+
+
+def remove_killswitch_routes() -> None:
+    """Delete the kill switch blackholes (v4 and v6). Best-effort, like every
+    teardown delete: a route whose owner is already gone fails, and that is
+    fine."""
+    if IS_MAC:
+        cmds = [["route", "-n", "delete", "-net", dest, "-blackhole"]
+                for dest in KILLSWITCH_SPLIT]
+        cmds += [["route", "-n", "delete", "-inet6", "-net", dest, "-blackhole"]
+                 for dest in KILLSWITCH_V6_SPLIT]
+    else:
+        cmds = [["ip", "route", "del", dest, "blackhole"]
+                for dest in KILLSWITCH_SPLIT]
+        cmds += [["ip", "-6", "route", "del", dest, "blackhole"]
+                 for dest in KILLSWITCH_V6_SPLIT]
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        list(pool.map(_run_best_effort, cmds))
+
+
+def ipv6_blocked() -> bool:
+    """Whether the kill switch's IPv6 blackholes are currently in the route
+    table, so the UI / a leak check can tell whether v6 is covered.
+
+    Pure inspection: it reads the route table and changes nothing. True only
+    when both halves of the IPv6 space are blackholed.
+    """
+    if IS_MAC:
+        # `route -n get <addr>` reports the route that would carry <addr>; a
+        # blackhole match shows the BLACKHOLE flag. One probe per half.
+        for probe in ("1::", "8001::"):
+            out = proc.run(["route", "-n", "get", probe]).stdout
+            if "BLACKHOLE" not in out:
+                return False
+        return True
+    out = proc.run(["ip", "-6", "-o", "route", "show"]).stdout
+    found = set()
+    for line in out.splitlines():
+        parts = line.split()
+        # "blackhole ::/1 metric 1000" — the destination follows the type.
+        if parts and parts[0] == "blackhole" and len(parts) >= 2:
+            found.add(parts[1])
+    return set(KILLSWITCH_V6_SPLIT) <= found
+
+
 def remove_routes(server_ip: str | None = None) -> None:
     # Every delete is independent and best-effort, so they all run side by
     # side: on macOS this used to be thirteen sequential `route` calls, which
@@ -627,12 +751,20 @@ def remove_routes(server_ip: str | None = None) -> None:
         for dest in (*MAC_SPLIT, *_MAC_OLD_SPLIT):
             for native in (True, False):
                 cmds.append(["route", "-n", "delete", "-net", dest, *_mac_via(native)])
+        cmds.extend(["route", "-n", "delete", "-net", dest, "-blackhole"]
+                    for dest in KILLSWITCH_SPLIT)
+        cmds.extend(["route", "-n", "delete", "-inet6", "-net", dest, "-blackhole"]
+                    for dest in KILLSWITCH_V6_SPLIT)
         if server_ip:
             cmds.append(["route", "-n", "delete", "-host", server_ip])
     else:
         cmds.append(["ip", "route", "del", "default", "dev", TUN_NAME])
         for dest in ("0.0.0.0/1", "128.0.0.0/1"):
             cmds.append(["ip", "route", "del", dest, "dev", TUN_NAME])
+        cmds.extend(["ip", "route", "del", dest, "blackhole"]
+                    for dest in KILLSWITCH_SPLIT)
+        cmds.extend(["ip", "-6", "route", "del", dest, "blackhole"]
+                    for dest in KILLSWITCH_V6_SPLIT)
         if server_ip:
             cmds.append(["ip", "route", "del", server_ip])
     with ThreadPoolExecutor(max_workers=6) as pool:

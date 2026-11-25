@@ -90,6 +90,15 @@ DEFAULTS: dict = {
         "expiry_days": 3,
         "auto_refresh_hours": 6,
     },
+    # Leak check (core/leakcheck.py). Off by default: an untouched install
+    # never runs the probe and renders exactly what it always has. `notify`
+    # only controls whether a finding also pushes an OS notification; the
+    # in-app status is shown whenever `enabled` is on.
+    "leakcheck": {
+        "enabled": False,
+        "notify": True,
+        "interval_s": 120,
+    },
     "speedtest": {
         "download_url": "https://speed.cloudflare.com/__down?bytes=25000000",
         "url": "https://www.google.com/generate_204",
@@ -138,11 +147,31 @@ DEFAULTS: dict = {
     "forwards": [],
     # Serverless entry (core/serverless.py). Off: nothing is rendered for it.
     "serverless": {"enabled": False, "skip_only_warning": False},
+    # Kill switch: when on, a connect also installs blackhole routes that are
+    # less preferred than the tunnel routes, so the moment the tunnel routes
+    # vanish (Xray dies, the app crashes) traffic is dropped instead of
+    # leaking to the physical default route. Off: identical behaviour to
+    # before — no extra routes at all.
+    "killswitch": {"enabled": False},
+    # Strict mode (core/strict.py). Off by default: an untouched install
+    # renders the same config and runs the same commands as before. `domains`
+    # is a list (replaced wholesale by _merge, like dns.hosts); the curated AI
+    # list lives in core/strict.py, not here.
+    "strict": {"enabled": False, "ai_protect": True, "no_direct": False, "domains": []},
+    # OS firewall lockdown (core/firewall.py). Off: no firewall rules are
+    # installed, so an untouched install behaves exactly as before. When on,
+    # the OS drops any outbound packet not on the tunnel, to a proxy server,
+    # to a DNS resolver, to loopback, or (allow_lan) to the LAN/link-local.
+    "firewall": {"enabled": False, "allow_lan": True},
     "startup": {
         "start_on_login": False,
         "start_minimized": False,
         "auto_connect": False,
     },
+    # macOS password-free helper (core/macos_helper.py). Once the user has
+    # been asked "skip the password next time?" (and answered No/Later), the
+    # offer is never repeated. macOS installed apps only; a no-op elsewhere.
+    "helper_offer_seen": False,
     "updates": {
         "check": True,
         "last_check": 0,  # epoch seconds; 0 = never

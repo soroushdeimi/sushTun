@@ -13,7 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from .. import paths
-from . import bootrestore, chains, coreopts, hotspot, network, render, routing, serverless
+from . import bootrestore, chains, coreopts, firewall, hotspot, network, render, routing, serverless
 from . import exits as exits_mod
 from . import forwards as forwards_mod
 from . import settings as app_settings
@@ -107,10 +107,23 @@ class Connection:
         self._owned = False  # did this process establish the active connection?
         self._gateway_on = False
         self._dns_warned = False
+        # True only once the kill switch blackholes are actually in the route
+        # table. The UI uses it to say "internet is blocked" — it must never
+        # claim that when the install failed.
+        self._killswitch_active = False
         atexit.register(self._atexit)
 
     def is_connected(self) -> bool:
         return self.state.is_connected()
+
+    @property
+    def killswitch_active(self) -> bool:
+        """True only while the kill switch blackholes are actually installed.
+
+        The UI shows "internet is blocked" from this; it must never claim that
+        when the install failed or the connection is down.
+        """
+        return self._killswitch_active
 
     def connect(self, profile: Profile | chains.Chain | chains.ResolvedChain) -> None:
         plan = None
@@ -187,12 +200,15 @@ class Connection:
                 step()
             except Exception as exc:
                 self._log(f"WARNING: teardown operation failed: {exc}")
+        # Lift the OS lockdown too (a no-op when it was never installed).
+        self._remove_firewall()
         try:
             paths.runtime_config().unlink(missing_ok=True)
         except OSError as exc:
             self._log(f"WARNING: teardown operation failed: {exc}")
         # A failure after state.save() must not leave a stale "connected".
         self.state.clear()
+        self._killswitch_active = False
         raise ConnectError(reason)
 
     def _dns_rollback(self, alias: str, dns) -> None:
@@ -253,6 +269,49 @@ class Connection:
             self._log(f"WARNING: {warning}")
         return forwards
 
+    def _tun_alias(self) -> str:
+        # The device the tunnel routes through: Xray's own TUN on Linux/Windows,
+        # the fixed utun on macOS (native or tun2socks bridge both use it).
+        return t2s.DEVICE if IS_MAC else network.TUN_NAME
+
+    def _firewall_server_ips(self, server_ip: str, exits, dns_cfg) -> list[str]:
+        # Every IP Xray dials directly out the physical NIC (not through the
+        # tunnel): the proxy server, each multi-exit server, and the DNS
+        # resolvers (the dns-out outbound is bound to the uplink). The firewall
+        # must allow all of them or it would break the connection itself.
+        ips = [server_ip] if server_ip else []
+        for e in exits or []:
+            if e.profile.address:
+                ips.append(e.profile.address)
+        ips += firewall.resolver_ips(dns_cfg)
+        return ips
+
+    def _install_firewall(self, server_ip: str, exits, dns_cfg) -> None:
+        """Turn the OS firewall on once the tunnel is up. Never fails the
+        connect: a failure logs a WARNING and continues unprotected."""
+        cfg = app_settings.load().get("firewall") or {}
+        if not cfg.get("enabled"):
+            return
+        if not firewall.supported():
+            self._log("WARNING: OS firewall is not supported on this system; "
+                      "continuing without it.")
+            return
+        try:
+            firewall.install(self._tun_alias(),
+                             self._firewall_server_ips(server_ip, exits, dns_cfg),
+                             cfg.get("allow_lan", True))
+            self._log("OS firewall is on: traffic outside the tunnel is blocked.")
+        except Exception as exc:
+            self._log(f"WARNING: OS firewall could not be enabled: {exc}")
+
+    def _remove_firewall(self) -> None:
+        """Idempotent firewall teardown; a failure only logs a WARNING."""
+        try:
+            for warning in firewall.remove():
+                self._log(f"WARNING: {warning}")
+        except Exception as exc:
+            self._log(f"WARNING: OS firewall teardown failed: {exc}")
+
     def _log_lan_share(self, core_cfg: dict, iface) -> None:
         if not core_cfg.get("allow_lan"):
             return
@@ -280,7 +339,8 @@ class Connection:
                                 exits=exits, exits_cfg=cfgs.get("exits"),
                                 forwards=forwards, system_dns=system_dns,
                                 serverless_cfg=cfgs.get("serverless"),
-                                serverless_bootstrap=bootstrap)
+                                serverless_bootstrap=bootstrap,
+                                strict_cfg=cfgs.get("strict"))
 
         cfg = build(exits, forwards)
         self._log_lan_share(cfgs.get("core") or {}, iface)
@@ -320,6 +380,14 @@ class Connection:
         except (OSError, RuntimeError) as exc:
             self._fail_connect(server_ip, f"Could not install tunnel routes: {exc}")
 
+        # After the tunnel routes are in: the blackholes only win once those
+        # are gone, so they must exist by the time the connection is live.
+        self._install_killswitch()
+        # Lock the OS down now that the tunnel routes are up: from here on,
+        # anything that is not on the tunnel, to a server, to DNS, or loopback
+        # is dropped by the OS itself.
+        self._install_firewall(server_ip, exits, dns_cfg)
+
         # Persist backup + a boot restore task BEFORE hijacking DNS. Static
         # 127.0.0.1 survives a power-off; the task puts the adapter back.
         self.state.save(iface, server_ip, tun, dns,
@@ -344,6 +412,26 @@ class Connection:
         self._owned = True
         self._setup_gateway()
         self._log("Connected.")
+
+    def _install_killswitch(self) -> None:
+        """Install the kill switch blackholes when the setting is on.
+
+        Read at connect time: the flag applies to this connection only, so a
+        change made while connected takes effect on the next connect. An
+        optional feature must never break the main connection — a failed
+        install is logged and the connection continues, with the kill switch
+        reported as not active rather than claimed.
+        """
+        self._killswitch_active = False
+        if not (app_settings.load().get("killswitch") or {}).get("enabled"):
+            return
+        try:
+            network.add_killswitch_routes()
+        except (OSError, RuntimeError) as exc:
+            self._log(f"WARNING: kill switch could not be installed: {exc}")
+            return
+        self._killswitch_active = True
+        self._log("Kill switch on: the internet is blocked if the tunnel drops.")
 
     def _setup_gateway(self) -> None:
         """Optionally share the tunnel with hotspot clients. Never fails the connect."""
@@ -492,7 +580,8 @@ class Connection:
                                 exits_cfg=cfgs.get("exits"), forwards=forwards,
                                 system_dns=system_dns,
                                 serverless_cfg=cfgs.get("serverless"),
-                                serverless_bootstrap=bootstrap)
+                                serverless_bootstrap=bootstrap,
+                                strict_cfg=cfgs.get("strict"))
 
         cfg = build(exits, forwards)
         self._log_lan_share(core_cfg, iface)
@@ -546,6 +635,11 @@ class Connection:
             raise ConnectError(f"traffic is still routed through {routed or 'nothing'}, "
                                f"not the tunnel ({t2s.DEVICE}) — another VPN is holding "
                                "more specific routes; disconnect it first")
+        # The tunnel is confirmed carrying traffic: install the blackholes
+        # that take over if it dies.
+        self._install_killswitch()
+        # Lock the OS down now that the tunnel is verified to carry traffic.
+        self._install_firewall(server_ip, exits, dns_cfg)
         self._owned = True
         self._log("Connected.")
 
@@ -645,6 +739,10 @@ class Connection:
         """
         if xray_mod.is_xray_running():
             return False
+        # A crashed run can leave the OS firewall up with no connection state;
+        # remove it unconditionally so the user is never bricked. Idempotent.
+        for warning in firewall.recover_stale():
+            self._log(f"WARNING: {warning}")
         if not self.state.is_connected():
             return self._drain_pending_dns(retries=dns_retries)
         self._log("Previous session left DNS pointing at 127.0.0.1. Restoring...")
@@ -730,6 +828,9 @@ class Connection:
                 if warning is not None:
                     cleanup_ok = False
                     self._log(warning)
+        # The tunnel is gone now, so lift the OS lockdown before DNS is put
+        # back: while it is on, the DHCP servers on the LAN would be blocked.
+        self._remove_firewall()
         restored = True
         try:
             if alias:
@@ -756,6 +857,7 @@ class Connection:
                 self.state.clear()
             finally:
                 self._owned = False
+                self._killswitch_active = False
                 paths.runtime_config().unlink(missing_ok=True)
         if restored and cleanup_ok and not self.state.pending():
             self._log("Network restored.")

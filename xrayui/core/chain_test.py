@@ -116,8 +116,14 @@ def _download(port, url, timeout, cancel):
 
     parts = urllib.parse.urlsplit(url)
     secure = parts.scheme == 'https'
-    cls = http.client.HTTPSConnection if secure else http.client.HTTPConnection
-    conn = cls('127.0.0.1', port, timeout=min(timeout, 1.0))
+    if secure:
+        from . import tls
+
+        # Same CA handling as the speed test: the frozen app ships no bundle.
+        conn = http.client.HTTPSConnection('127.0.0.1', port, timeout=min(timeout, 1.0),
+                                           context=tls.https_context())
+    else:
+        conn = http.client.HTTPConnection('127.0.0.1', port, timeout=min(timeout, 1.0))
     target = url
     if secure:
         conn.set_tunnel(parts.hostname, parts.port or 443)

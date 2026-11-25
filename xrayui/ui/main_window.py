@@ -39,6 +39,9 @@ from ..core import (
     speedtest,
 )
 from ..core import autostart as autostart_mod
+from ..core import (
+    leakcheck as leakcheck_mod,
+)
 from ..core import settings as app_settings
 from ..core import subscription as sub_mod
 from ..core.alerts import human_bytes
@@ -310,6 +313,7 @@ class MainWindow(QMainWindow):
     def __init__(self, elevated: bool = True, autostart: bool = False) -> None:
         super().__init__()
         self._launched_via_autostart = autostart
+        self._elevated = elevated
         # changeEvent consults titlebar, so it must exist before any of the
         # window state setters below fire a Change event.
         self.titlebar = None
@@ -360,6 +364,28 @@ class MainWindow(QMainWindow):
         self._test_cancel: threading.Event | None = None
         self._geo_updating = False
         self._subtitle_pix = None
+        self._subtitle_dropped = False
+        # Last known state of the tunnel process, set by _refresh_status and
+        # read by the status subtitle to flag a dropped kill-switch tunnel.
+        self._xray_running = False
+        # Periodic leak check (core/leakcheck.py): the last verdict and audits
+        # feed _check_security_alerts; the timer only runs while connected.
+        self._leak_verdict = None
+        self._leak_dns_audit = None
+        self._leak_ipv6_audit = None
+        self._leak_check_running = False
+        self._leak_check_at = 0.0
+        self._real_ip_cache = leakcheck_mod.RealIpCache()
+        # Alert keys already notified for the current incident, so each fires
+        # once per incident and again after it clears and reappears.
+        self._security_notified: set = set()
+        # macOS password-free helper offer: the open dialog (kept alive) and
+        # whether an install is in flight.
+        self._helper_offer = None
+        self._helper_installing = False
+        self._leak_timer = QTimer(self)
+        self._leak_timer.setTimerType(Qt.CoarseTimer)
+        self._leak_timer.timeout.connect(self._maybe_run_leak_check)
 
         self.stepReceived.connect(self._on_step)
         self.testResultReceived.connect(self._on_test_result)
@@ -976,7 +1002,15 @@ class MainWindow(QMainWindow):
         profile = self._connected_profile()
         plan = self._connected_chain if connected and self.conn.state.chain_uid else None
         pix = None
-        if connected and profile:
+        # Kill switch: the tunnel process died while the connection is still
+        # recorded, so the blackholes are now holding the internet. Say so in
+        # red instead of the calm "Connected" line.
+        dropped = (connected and self.conn.killswitch_active
+                   and not self._xray_running)
+        if dropped:
+            text = tr("VPN dropped: internet is blocked. Reconnect, or press "
+                      "Disconnect to restore normal internet.")
+        elif connected and profile:
             text = ltr(tr("Connected · {server}",
                           server=plan.name if plan else profile.name))
             pix = flag_pixmap(self.profiles.model.country_of(profile.uid), 16, 12)
@@ -986,6 +1020,11 @@ class MainWindow(QMainWindow):
         # repaint each triggers) when nothing actually changed.
         if self.toolbar.subtitle.text() != text:
             self.toolbar.subtitle.setText(text)
+        if dropped != self._subtitle_dropped:
+            self._subtitle_dropped = dropped
+            self.toolbar.subtitle.setStyleSheet(
+                f"font-size:11px; color:{ERR if dropped else MUTED}; "
+                "background:transparent;")
         if pix is not self._subtitle_pix:
             self._subtitle_pix = pix
             self.toolbar.subtitle_flag.setVisible(pix is not None)
@@ -1492,6 +1531,109 @@ class MainWindow(QMainWindow):
                      if level == "critical"
                      else QSystemTrayIcon.Warning)
 
+    # ── security alerts: tunnel drop + leak check --------------------------
+
+    def _check_security_alerts(self) -> None:
+        """Push a tray notification for each safety incident, once per
+        incident.
+
+        The red status line (kill switch) is the existing subtitle and is left
+        alone here. This only adds the OS notification: an alert key notifies
+        when it first becomes active, stays quiet while it persists, and
+        notifies again if it clears and reappears (a new incident). Leak-check
+        findings additionally honour leakcheck.notify; the tunnel drop is a
+        safety alert and always notifies.
+        """
+        connected = self.conn.is_connected()
+        if not connected:
+            # Disconnected: no incident can be active; forget what we told.
+            self._security_notified = set()
+            return
+        alerts_now = alerts.current_alerts(
+            state_connected=True,
+            xray_running=self._xray_running,
+            verdict=self._leak_verdict,
+            dns_audit=self._leak_dns_audit,
+            ipv6_audit=self._leak_ipv6_audit,
+        )
+        active = {a.key for a in alerts_now}
+        new = active - self._security_notified
+        self._security_notified = active
+        if not new:
+            return
+        for a in alerts_now:
+            if a.key not in new:
+                continue
+            # A leak finding is only an OS notification when the user asked
+            # for it; the tunnel drop is a safety alert and always notifies.
+            if a.key.startswith("leak:") and not self._leak_notify_enabled():
+                continue
+            self._notify(
+                "sushTun",
+                tr(a.template, **{k: ltr(str(v)) for k, v in a.params.items()})
+                if a.template else a.message,
+                QSystemTrayIcon.Critical
+                if a.level == "critical"
+                else QSystemTrayIcon.Warning)
+
+    def _leak_check_enabled(self) -> bool:
+        return bool((self.settings.get("leakcheck") or {}).get("enabled"))
+
+    def _leak_notify_enabled(self) -> bool:
+        cfg = self.settings.get("leakcheck") or {}
+        return bool(cfg.get("notify", True))
+
+    def _leak_check_interval(self) -> int:
+        cfg = self.settings.get("leakcheck") or {}
+        try:
+            return max(30, int(cfg.get("interval_s", 120))) * 1000
+        except (TypeError, ValueError):
+            return 120_000
+
+    def _maybe_run_leak_check(self) -> None:
+        """The periodic leak check: never when disabled, never while a check
+        is already running, and never on the UI thread."""
+        if not self._leak_check_enabled() or self._leak_check_running:
+            return
+        if not self.conn.is_connected():
+            return
+        self._leak_check_running = True
+
+        def work():
+            # exit_opener None: while connected the system route is the tunnel.
+            return {
+                "verdict": leakcheck_mod.run_check(
+                    None, self.conn.state.alias, self._real_ip_cache),
+                "dns": leakcheck_mod.run_dns_audit(),
+                "ipv6": leakcheck_mod.run_ipv6_audit(),
+            }
+
+        def done(result=None, error=None):
+            self._leak_check_running = False
+            self._leak_check_at = time.monotonic()
+            if error or not result:
+                # A failed probe is not a leak: keep the last known verdict
+                # rather than claiming a problem we could not verify.
+                return
+            self._leak_verdict = result["verdict"]
+            self._leak_dns_audit = result["dns"]
+            self._leak_ipv6_audit = result["ipv6"]
+            self._check_security_alerts()
+
+        self._run_async(work, done)
+
+    def _run_leak_check_now(self) -> None:
+        """A connect-time check: the first verdict arrives quickly, and the
+        timer then keeps the cadence. Skipped entirely when disabled."""
+        if not self._leak_check_enabled():
+            return
+        if self._leak_check_running:
+            return
+        if time.monotonic() - self._leak_check_at < 10:
+            return  # a check just finished; the timer owns the next one
+        self._leak_check_at = 0.0
+        self._maybe_run_leak_check()
+
     def _maybe_check_updates(self) -> None:
         cfg = self.settings.get("updates", {})
         if not cfg.get("check", True):
@@ -1722,6 +1864,9 @@ class MainWindow(QMainWindow):
         self._reload_chains()
         if not error and self.conn.is_connected():
             self._detect_exit_after_connect()
+            # First leak check right after connecting; the timer keeps the
+            # cadence. No-op when the leak check is off.
+            self._run_leak_check_now()
 
     def _on_step(self, msg: str) -> None:
         self.step_label.setText(tr(msg))
@@ -1831,15 +1976,24 @@ class MainWindow(QMainWindow):
                     or self.route_timer.interval() != _ROUTE_MS):
                 self.route_timer.start(_ROUTE_MS)
             self._flush_pending_log()
-            return
-        self.tailer.interval = LogTailer.IDLE_INTERVAL
-        self.timer.stop()
-        if self.conn.is_connected():
-            if (not self.route_timer.isActive()
-                    or self.route_timer.interval() != _ROUTE_HIDDEN_MS):
-                self.route_timer.start(_ROUTE_HIDDEN_MS)
         else:
-            self.route_timer.stop()
+            self.tailer.interval = LogTailer.IDLE_INTERVAL
+            self.timer.stop()
+            if self.conn.is_connected():
+                if (not self.route_timer.isActive()
+                        or self.route_timer.interval() != _ROUTE_HIDDEN_MS):
+                    self.route_timer.start(_ROUTE_HIDDEN_MS)
+            else:
+                self.route_timer.stop()
+        # The leak check supervises the tunnel like the route check: it runs
+        # from the tray too, but only while connected and only when enabled.
+        if self.conn.is_connected() and self._leak_check_enabled():
+            interval = self._leak_check_interval()
+            if (not self._leak_timer.isActive()
+                    or self._leak_timer.interval() != interval):
+                self._leak_timer.start(interval)
+        else:
+            self._leak_timer.stop()
 
     def _on_log_lines(self, lines: list[str]) -> None:
         if not lines:
@@ -1898,6 +2052,7 @@ class MainWindow(QMainWindow):
         else:
             self.status_card.set_chain(None)
         running = self.conn.xray.is_running()
+        self._xray_running = running or self._orphan_running
         if running:
             self._orphan_running = False
         elif (not self._orphan_check_pending
@@ -1930,6 +2085,12 @@ class MainWindow(QMainWindow):
         self.btn_connect.setEnabled(not connected and not self._busy)
         self.btn_disconnect.setEnabled(connected and not self._busy)
         self._refresh_status_subtitle()
+        # The safety alerts (tunnel drop, leak findings) clear the moment the
+        # condition is fixed, so they ride the same tick as the status line.
+        # Looked up defensively: headless namespace stubs call this unbound.
+        check_security = getattr(self, "_check_security_alerts", None)
+        if callable(check_security):
+            check_security()
         if (connected and not self._sampling
                 and st.tun_index is not None):
             self._sample_live(st.tun_index)
@@ -1949,6 +2110,13 @@ class MainWindow(QMainWindow):
             if error and error != getattr(self, "_route_health_error", None):
                 self._on_step(f"WARNING: route health check failed: {error}")
             self._route_health_error = error
+            # While hidden the status tick is paused, so the route tick is
+            # what keeps the safety alerts (tunnel drop, leak findings)
+            # current from the tray. Refresh the process state first: a dead
+            # xray under a "connected" flag is exactly the drop to flag.
+            self._xray_running = self.conn.xray.is_running() \
+                or self._orphan_running
+            self._check_security_alerts()
             if result:
                 self._refresh_status()
 
@@ -2125,6 +2293,68 @@ class MainWindow(QMainWindow):
         self.settings["tour_seen"] = True
         app_settings.save(self.settings)
 
+    # ── macOS password-free helper offer -----------------------------------
+
+    def maybe_offer_macos_helper(self) -> None:
+        """Once, after a successful password elevation on an installed macOS
+        app, ask whether to install the password-free helper.
+
+        Only when the helper is not already healthy (a healthy helper would
+        have started this launch without a password), and never again once the
+        user has been asked. A no-op everywhere else.
+        """
+        if sys.platform != "darwin" or not self._elevated:
+            return
+        if self.settings.get("helper_offer_seen"):
+            return
+        from ..core import macos_helper
+        if not macos_helper.should_offer():
+            return
+        self._show_helper_offer()
+
+    def _show_helper_offer(self) -> None:
+        # Non-modal: it must not block the window the user just got past the
+        # password prompt for. A reference is kept so the dialog is not
+        # garbage-collected while it is open.
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Question)
+        box.setWindowTitle(tr("sushTun"))
+        box.setText(tr("Skip the password next time?"))
+        box.setInformativeText(tr(
+            "Install a small background helper (one password) so sushTun opens "
+            "without asking again. You can remove it any time."))
+        yes = box.addButton(tr("Yes"), QMessageBox.AcceptRole)
+        box.addButton(tr("No"), QMessageBox.RejectRole)
+        box.addButton(tr("Later"), QMessageBox.ActionRole)
+        box.setDefaultButton(yes)
+        yes.clicked.connect(self._install_macos_helper)
+        self._helper_offer = box
+        box.show()
+        box.raise_()
+        # Marked the moment it is shown, so it is never presented twice even
+        # if the dialog is still open.
+        self._mark_helper_offer_seen()
+
+    def _install_macos_helper(self) -> None:
+        from ..core import macos_helper
+        if self._helper_installing:
+            return
+        self._helper_installing = True
+
+        def done(result=None, error=None):
+            self._helper_installing = False
+            if error or not result:
+                self._on_step(tr("Could not install the password-free helper."))
+                return
+            self._on_step(tr("Password-free start is on: sushTun will open "
+                             "without asking for the password."))
+
+        self._run_async(macos_helper.install, done)
+
+    def _mark_helper_offer_seen(self) -> None:
+        self.settings["helper_offer_seen"] = True
+        app_settings.save(self.settings)
+
     def _tour_steps(self) -> list[Step]:
         return [
             Step(tr("Welcome to sushTun"),
@@ -2163,6 +2393,15 @@ class MainWindow(QMainWindow):
                  tr("Share the tunnel with your phone: turn this on and join your "
                     "computer's Wi-Fi hotspot."),
                  lambda: self.sidebar._hotspot_row, PAGE_SERVERS),
+            Step(tr("Protect your real IP"),
+                 tr("sushTun can stop your real IP from leaking to AI sites. "
+                    "Recommended for AI accounts: the kill switch, strict mode "
+                    "and the leak check, in Settings → Security. The OS firewall "
+                    "is the strongest layer, but it can cut your internet if "
+                    "something goes wrong. Nothing is protected before you "
+                    "connect or after you disconnect, and Serverless-only always "
+                    "uses your real IP."),
+                 page=PAGE_SERVERS),
             Step(tr("You're all set"),
                  tr("Hover anything: every control explains itself. You can replay "
                     "this tour from Settings → General."),

@@ -103,6 +103,9 @@ def run(argv: list[str], elevated: bool = True, autostart: bool = False) -> int:
     shown = not starts_hidden(autostart, window.settings, tray=window.tray is not None)
     if shown:
         window.show()
+    # After a successful password elevation on an installed macOS app, offer
+    # the one-time password-free helper. No-op everywhere else.
+    window.maybe_offer_macos_helper()
     window.maybe_start_tour(shown)
     instance = single_instance.InstanceServer(parent=app)
     instance.show_requested.connect(window._show_window)

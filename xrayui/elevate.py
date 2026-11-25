@@ -186,7 +186,43 @@ def _pid_alive(pid: int) -> bool:
     return True
 
 
+def _relaunch_macos_via_helper() -> bool:
+    """Start the elevated app through the root launch daemon, no password.
+
+    Only for an installed app: a source/dev run has no fixed installed path
+    for the daemon to start, so it always uses the osascript prompt. Returns
+    True when the helper started (or found) the elevated copy; False to fall
+    back to the password prompt.
+    """
+    from . import paths
+    from .core import macos_helper
+    if not paths.installed():
+        return False
+    # Only a healthy helper (answers a ping with this app's version) is used.
+    # An absent, unreachable, or stale-version helper falls back to the
+    # password prompt rather than silently running stale logic; should_offer()
+    # is then True so the UI can present the (re)install choice.
+    if not macos_helper.healthy():
+        return False
+    # The helper derives the uid from the peer credentials, so the SUDO_UID
+    # argument (which the osascript path needs) is dropped: the helper rejects
+    # it, and it would be redundant anyway.
+    session = [a for a in _session_args()
+               if not a.startswith(f"{_SESSION_ARG}{_MAC_UID}=")]
+    try:
+        macos_helper.launch(session)
+    except macos_helper.Refusal:
+        return False
+    return True
+
+
 def _relaunch_macos() -> bool:
+    # Password-free path: when the user installed the helper daemon and it is
+    # healthy (right version), it starts the elevated app without a prompt.
+    # Any refusal, absence, or stale version falls through to the osascript
+    # password prompt below, so the user is never left without a window.
+    if _relaunch_macos_via_helper():
+        return True
     # Quoted for the shell `do shell script` runs, then escaped for the
     # AppleScript string literal around it: unquoted, a space anywhere in the
     # path split the command and the elevated app never started.
