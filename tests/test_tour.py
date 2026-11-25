@@ -68,9 +68,9 @@ def test_tour_seen_defaults_to_false():
     assert app_settings.DEFAULTS["tour_seen"] is False
 
 
-def test_nine_steps_and_the_first_is_centered(win):
+def test_ten_steps_and_the_first_is_centered(win):
     tour = _tour(win)
-    assert tour.step_count() == 9
+    assert tour.step_count() == 10
     assert tour.index() == 0
     assert tour.cutout() is None
 
