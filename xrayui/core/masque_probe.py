@@ -175,6 +175,7 @@ def _request_once(port: int, url: str, timeout: float) -> tuple[float | None, st
             resp.read(_MAX_BODY)
     except urllib.error.HTTPError as e:
         status = e.code
+        e.close()  # release the socket behind the error response
     except TimeoutError:
         return None, "timeout"
     except Exception:
@@ -212,10 +213,12 @@ def _request(port: int, url: str, timeout: float,
 
 
 def _stop(popen) -> None:
+    # Never raises: the child may already be gone/reaped, and cleanup must
+    # continue (join the request worker, remove the temp dir) on every path.
     try:
         popen.terminate()
     except OSError:
-        return  # already gone
+        pass  # already gone
     try:
         popen.wait(timeout=3)
     except subprocess.TimeoutExpired:
@@ -227,6 +230,8 @@ def _stop(popen) -> None:
             popen.wait(timeout=3)
         except (subprocess.TimeoutExpired, OSError):
             pass
+    except OSError:
+        pass  # already reaped
 
 
 def _write_secret(path: Path, text: str) -> None:
@@ -247,9 +252,9 @@ def _probe_one(profile, endpoint: str, *, xray_path: Path, timeout: float,
         return ProbeResult(endpoint, version, False, None, f"invalid endpoint: {e}")
     if not _health_url_ok(health_url):
         return ProbeResult(endpoint, version, False, None, "disallowed health url")
-    if iface_alias is None:
-        # Without a physical interface the outbound would ride our own TUN
-        # and the result would not be a direct reachability measurement.
+    if not (isinstance(iface_alias, str) and iface_alias.strip()):
+        # Without a real physical interface the outbound would ride our own
+        # TUN and the result would not be a direct reachability measurement.
         return ProbeResult(endpoint, version, False, None, "no active internet interface")
     if cancel_event is not None and cancel_event.is_set():
         return ProbeResult(endpoint, version, False, None, "cancelled")
@@ -285,7 +290,10 @@ def _probe_one(profile, endpoint: str, *, xray_path: Path, timeout: float,
             return ProbeResult(endpoint, version, False, None,
                                {"exited": "xray exited", "timeout": "startup timeout",
                                 "cancelled": "cancelled"}[state])
-        remaining = max(0.1, deadline - time.monotonic())
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            # The whole-probe deadline already passed during startup.
+            return ProbeResult(endpoint, version, False, None, "timeout")
         latency, error, worker = _request(port, health_url, remaining, cancel_event)
         # Cancellation arriving while the request was in flight wins over success.
         if cancel_event is not None and cancel_event.is_set():
@@ -295,7 +303,10 @@ def _probe_one(profile, endpoint: str, *, xray_path: Path, timeout: float,
         return ProbeResult(endpoint, version, True, latency, "")
     finally:
         if popen is not None:
-            _stop(popen)
+            try:
+                _stop(popen)
+            except Exception:
+                pass  # never let cleanup of the child block the rest
         if worker is not None:
             worker.join(3)  # the stopped proxy unblocks the request socket
         shutil.rmtree(tmp, ignore_errors=True)
@@ -321,9 +332,9 @@ def probe_endpoint(profile, *, xray_path: Path, timeout: float = 8.0,
     """
     _check_timeout(timeout)
     endpoint = f"{profile.address}:{profile.port}"
-    return _probe_one(profile, endpoint, xray_path=xray_path, timeout=timeout,
-                      cancel_event=cancel_event, health_url=health_url,
-                      iface_alias=iface_alias)
+    return _safe_probe(profile, endpoint, xray_path=xray_path, timeout=timeout,
+                       cancel_event=cancel_event, health_url=health_url,
+                       iface_alias=iface_alias)
 
 
 def scan_endpoints(profile, endpoints, *, xray_path: Path, timeout: float = 8.0,

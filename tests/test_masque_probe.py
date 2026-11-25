@@ -331,6 +331,102 @@ def test_probe_popen_failure_is_sanitized(monkeypatch):
     assert "token" not in res.error and "secret" not in res.error
 
 
+def test_probe_stop_wait_oserror_still_cleans(monkeypatch):
+    # A child whose wait() raises (already reaped) must not leak the temp dir
+    # or escape probe_endpoint: cleanup always runs.
+    import tempfile
+
+    class Popen(FakePopen):
+        def wait(self, timeout=None):
+            raise OSError("no child processes")
+
+    created = []
+    real_mkdtemp = tempfile.mkdtemp
+
+    def mkdtemp_spy(*a, **k):
+        p = real_mkdtemp(*a, **k)
+        created.append(p)
+        return p
+
+    FakePopen.instances = []
+    monkeypatch.setattr(tempfile, "mkdtemp", mkdtemp_spy)
+    monkeypatch.setattr(mp, "_free_port", lambda: 12345)
+    monkeypatch.setattr(mp, "_wait_ready", lambda *a, **k: "ready")
+    monkeypatch.setattr(mp, "_request", lambda *a, **k: (5.0, None, None))
+    monkeypatch.setattr(mp.subprocess, "Popen", Popen)
+    res = mp.probe_endpoint(_profile(), xray_path=mp.Path("/xray"), iface_alias="en0")
+    assert res.ok is True
+    assert FakePopen.instances[0].terminated
+    # the temp config dir was removed despite wait() raising
+    assert created and not Path(created[0]).exists()
+
+
+def test_probe_empty_iface_rejected(monkeypatch):
+    # Empty/whitespace iface must fail clearly, not silently drop the binding.
+    FakePopen.instances = []
+    monkeypatch.setattr(mp, "_free_port", lambda: 12345)
+    monkeypatch.setattr(mp.subprocess, "Popen", FakePopen)
+    for bad in ("", "   ", "\t"):
+        res = mp.probe_endpoint(_profile(), xray_path=mp.Path("/xray"),
+                                iface_alias=bad)
+        assert res.ok is False and res.error == "no active internet interface"
+    assert FakePopen.instances == []
+
+
+def test_probe_deadline_expired_before_request(monkeypatch):
+    # If startup eats the whole deadline, do not start a request at all.
+    FakePopen.instances = []
+    monkeypatch.setattr(mp, "_free_port", lambda: 12345)
+
+    def wait_ready(popen, port, deadline, cancel):
+        time.sleep(0.2)  # consume the 0.1s budget
+        return "ready"
+
+    requests = []
+    monkeypatch.setattr(mp, "_wait_ready", wait_ready)
+    monkeypatch.setattr(mp, "_request",
+                        lambda *a, **k: requests.append(1) or (5.0, None, None))
+    monkeypatch.setattr(mp.subprocess, "Popen", FakePopen)
+    res = mp.probe_endpoint(_profile(), xray_path=mp.Path("/xray"),
+                            timeout=0.1, iface_alias="en0")
+    assert res.ok is False and res.error == "timeout"
+    assert requests == []  # never dialed
+    assert FakePopen.instances[0].terminated
+
+
+def test_probe_endpoint_sanitized(monkeypatch):
+    # probe_endpoint (not just scan) must not raise on an unexpected error.
+    def boom(profile, endpoint, **kw):
+        raise RuntimeError("secret token leaked")
+
+    monkeypatch.setattr(mp, "_probe_one", boom)
+    res = mp.probe_endpoint(_profile(), xray_path=mp.Path("/xray"), iface_alias="en0")
+    assert res.ok is False and res.error == "probe error"
+    assert "secret" not in res.error
+
+
+def test_request_once_closes_httperror(monkeypatch):
+    # The HTTPError response object must be closed to release its socket.
+    import urllib.error
+
+    closed = []
+
+    class FakeHTTPError(urllib.error.HTTPError):
+        def __init__(self, url, code):
+            super().__init__(url, code, "msg", None, None)
+        def close(self):
+            closed.append(True)
+
+    def opener_open(url, timeout=None):
+        raise FakeHTTPError(url, 500)
+
+    monkeypatch.setattr(mp.urllib.request, "build_opener",
+                        lambda *a, **k: type("O", (), {"open": staticmethod(opener_open)})())
+    ms, err = mp._request_once(12345, "https://www.google.com/generate_204", 1.0)
+    assert ms is None and err == "HTTP 500"
+    assert closed == [True]
+
+
 def test_probe_invalid_profile_settings(monkeypatch):
     # Partial WARP identity: is_valid() is False -> sanitized failure, no process.
     FakePopen.instances = []
