@@ -85,6 +85,11 @@ class Profile:
     hy2_hop_interval: str = ""
     hy2_up_mbps: int = 0
     hy2_down_mbps: int = 0
+    masque_http_version: str = "h2"
+    masque_private_key: str = ""
+    masque_public_key: str = ""
+    masque_addresses: str = ""
+    masque_remote_dns: str = ""
     wg_local_address: str = ""
     wg_preshared: str = ""
     wg_reserved: str = ""
@@ -131,6 +136,20 @@ class Profile:
             if self.protocol == "http" and self.security not in ("", "none", "tls"):
                 return False
             return True
+
+        if self.protocol == "masque":
+            # MASQUE is TLS-only over a single h2/h3 carrier; never plaintext.
+            if self.security != "tls":
+                return False
+            if self.masque_http_version not in ("h2", "h3"):
+                return False
+            warp = (self.masque_private_key, self.masque_public_key,
+                    self.masque_addresses)
+            if any(warp):
+                # A WARP identity is all-or-nothing; basic auth is forbidden.
+                return all(warp) and not self.username and not self.id
+            # Generic MASQUE: optional basic auth, both credentials or neither.
+            return bool(self.username) == bool(self.id)
 
         if not self.id:
             return False

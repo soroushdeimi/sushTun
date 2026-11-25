@@ -224,6 +224,42 @@ def share_socks(p: Profile) -> str:
     return f"socks://{userinfo}{_authority(p.address, p.port)}#{quote(p.name)}"
 
 
+def _masque_query(p: Profile) -> dict[str, str]:
+    q: dict[str, str] = {"hv": p.masque_http_version or "h2"}
+    if p.host:
+        q["host"] = p.host
+    if p.path:
+        q["path"] = p.path
+    if p.sni:
+        q["sni"] = p.sni
+    if p.fp:
+        q["fp"] = p.fp
+    if p.pcs:
+        q["pcs"] = p.pcs
+    if p.vcn:
+        q["vcn"] = p.vcn
+    if p.masque_remote_dns:
+        q["dns"] = p.masque_remote_dns
+    if p.masque_private_key:
+        q["pk"] = p.masque_private_key
+    if p.masque_public_key:
+        q["pub"] = p.masque_public_key
+    if p.masque_addresses:
+        q["addr"] = p.masque_addresses
+    return q
+
+
+def share_masque(p: Profile) -> str:
+    query = urlencode(_masque_query(p), quote_via=quote)
+    userinfo = ""
+    if p.username:
+        userinfo = quote(p.username, safe="")
+        if p.id:
+            userinfo += ":" + quote(p.id, safe="")
+        userinfo += "@"
+    return f"masque://{userinfo}{_authority(p.address, p.port)}?{query}#{quote(p.name)}"
+
+
 def share_link(p: Profile) -> str | None:
     protocol = (p.protocol or "").lower()
     if protocol == "http":
@@ -238,6 +274,8 @@ def share_link(p: Profile) -> str | None:
         return share_trojan(p)
     if protocol == "hysteria2":
         return share_hysteria2(p)
+    if protocol == "masque":
+        return share_masque(p)
     if protocol == "shadowsocks":
         return share_shadowsocks(p)
     return share_vless(p)

@@ -438,6 +438,44 @@ def parse_hysteria2(url: str) -> Profile:
     )
 
 
+def parse_masque(url: str) -> Profile:
+    """masque://[user:pass@]host:port?hv=h2&host=..&path=..&sni=..&fp=..
+    &pcs=..&vcn=..&dns=..&pk=..&pub=..&addr=..#name
+
+    The query keys are the reverse of share._masque_query. hv is the single
+    h2/h3 carrier and must be one of the two; pk/pub/addr are the WARP
+    identity (all-or-nothing, checked by Profile.is_valid)."""
+    s = urlsplit(url.strip())
+    if s.scheme != "masque" or not s.hostname:
+        raise ValueError("not a masque:// link")
+    q = {k: v[0] for k, v in parse_qs(s.query).items()}
+    hv = (q.get("hv") or "h2").strip().lower()
+    if hv not in ("h2", "h3"):
+        raise ValueError("masque link has an invalid http version")
+    name = unquote(s.fragment) if s.fragment else (s.hostname or "")
+    return Profile(
+        name=name or s.hostname,
+        protocol="masque",
+        address=s.hostname,
+        port=s.port or 443,
+        network="masque",
+        security="tls",
+        username=unquote(s.username or ""),
+        id=unquote(s.password or ""),
+        masque_http_version=hv,
+        host=q.get("host", ""),
+        path=q.get("path", ""),
+        sni=q.get("sni", ""),
+        fp=q.get("fp", ""),
+        pcs=normalize_pcs(q.get("pcs", "")),
+        vcn=q.get("vcn", ""),
+        masque_remote_dns=q.get("dns", ""),
+        masque_private_key=q.get("pk", ""),
+        masque_public_key=q.get("pub", ""),
+        masque_addresses=q.get("addr", ""),
+    )
+
+
 def parse_wireguard(url: str) -> Profile:
     s = urlsplit(url.strip())
     if s.scheme not in ("wireguard", "wg") or not s.hostname:
@@ -543,6 +581,8 @@ def parse_share_text(text: str) -> list[Profile]:
                 p = parse_hysteria2(line)
             elif line.startswith("wireguard://") or line.startswith("wg://"):
                 p = parse_wireguard(line)
+            elif line.startswith("masque://"):
+                p = parse_masque(line)
             elif line.startswith(("socks://", "socks5://", "socks5h://")):
                 p = parse_socks(line)
             elif line.startswith(("http://", "https://")) and is_proxy_url(line):
@@ -767,7 +807,40 @@ def _profile_from_hysteria2_outbound(proxy: dict) -> Profile:
     )
 
 
-_KNOWN_PROTOCOLS = ("vless", "vmess", "trojan", "shadowsocks", "hysteria", "wireguard")
+def _profile_from_masque_outbound(proxy: dict) -> Profile:
+    settings = proxy.get("settings") or {}
+    stream = proxy.get("streamSettings") or {}
+    masque = stream.get("masqueSettings") or {}
+    tls = stream.get("tlsSettings") or {}
+    warp = masque.get("warp") or {}
+    dns = settings.get("remoteDNS") or []
+    if isinstance(dns, str):
+        dns = [dns]
+    return Profile(
+        name=masque.get("host") or settings.get("address", "imported"),
+        protocol="masque",
+        address=settings.get("address", ""),
+        port=int(settings.get("port", 443)),
+        network="masque",
+        security="tls",
+        username=masque.get("user", ""),
+        id=masque.get("pass", ""),
+        host=masque.get("host", ""),
+        path=masque.get("path", ""),
+        sni=tls.get("serverName", ""),
+        fp=tls.get("fingerprint", ""),
+        pcs=normalize_pcs(tls.get("pinnedPeerCertSha256", "")),
+        vcn=tls.get("verifyPeerCertByName", ""),
+        masque_http_version=(tls.get("alpn") or ["h2"])[0],
+        masque_remote_dns=", ".join(str(d) for d in dns),
+        masque_private_key=warp.get("privateKey", ""),
+        masque_public_key=warp.get("publicKey", ""),
+        masque_addresses=", ".join(str(a) for a in (warp.get("address") or [])),
+    )
+
+
+_KNOWN_PROTOCOLS = ("vless", "vmess", "trojan", "shadowsocks", "hysteria",
+                    "wireguard", "masque")
 
 
 def _profile_from_config(cfg: dict) -> Profile:
@@ -790,6 +863,8 @@ def _profile_from_config(cfg: dict) -> Profile:
         return _profile_from_vmess_outbound(proxy)
     if protocol == "hysteria":
         return _profile_from_hysteria2_outbound(proxy)
+    if protocol == "masque":
+        return _profile_from_masque_outbound(proxy)
     return _profile_from_vless_outbound(proxy)
 
 
