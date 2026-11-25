@@ -98,14 +98,14 @@ def test_basic_auth_both_or_neither():
 
 
 def test_warp_identity_complete_and_partial():
-    full = _profile(masque_private_key="PRIV", masque_public_key="PUB",
+    full = _profile(masque_private_key="AQID", masque_public_key="BAUG",
                     masque_addresses="172.16.0.2/32, 2606:4700::2/128")
     ob = mp._build_config(full, "1.2.3.4:443", 1, "h2", "en0")["outbounds"][0]
     assert ob["streamSettings"]["masqueSettings"]["warp"] == {
-        "privateKey": "PRIV", "publicKey": "PUB",
+        "privateKey": "AQID", "publicKey": "BAUG",
         "address": ["172.16.0.2/32", "2606:4700::2/128"]}
-    # partial WARP identity: the profile itself is invalid
-    assert not _profile(masque_private_key="PRIV", masque_public_key="PUB").is_valid()
+    # partial WARP identity (keys but no addresses): the profile is invalid
+    assert not _profile(masque_private_key="AQID", masque_public_key="BAUG").is_valid()
 
 
 def test_partial_basic_auth_rejected():
@@ -432,7 +432,8 @@ def test_probe_invalid_profile_settings(monkeypatch):
     FakePopen.instances = []
     monkeypatch.setattr(mp, "_free_port", lambda: 12345)
     monkeypatch.setattr(mp.subprocess, "Popen", FakePopen)
-    p = _profile(masque_private_key="PRIV", masque_public_key="PUB")
+    # valid keys but no addresses: partial WARP identity -> invalid profile
+    p = _profile(masque_private_key="AQID", masque_public_key="BAUG")
     assert not p.is_valid()
     res = mp.probe_endpoint(p, xray_path=mp.Path("/xray"), iface_alias="en0")
     assert res.ok is False and res.error == "invalid profile settings"
@@ -630,7 +631,7 @@ def test_scan_invalid_profile_among_valid(monkeypatch):
     monkeypatch.setattr(mp, "_wait_ready", lambda *a, **k: "ready")
     monkeypatch.setattr(mp, "_request", lambda *a, **k: (5.0, None, None))
     monkeypatch.setattr(mp.subprocess, "Popen", FakePopen)
-    broken = _profile(masque_private_key="PRIV")  # partial WARP: is_valid() False
+    broken = _profile(masque_private_key="AQID")  # partial WARP: is_valid() False
     results = mp.scan_endpoints(broken, ["1.1.1.1:443", "2.2.2.2:443"],
                                 xray_path=mp.Path("/x"), iface_alias="en0")
     assert [r.ok for r in results] == [False, False]
