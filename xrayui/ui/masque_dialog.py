@@ -2,12 +2,11 @@
 
 Kept in its own module so the profile dialog only has to show/hide it and
 copy a few fields on save. The WARP identity helper lives in
-core.masque_identity (worker 2); it is imported lazily so the panel still
-builds before that dependency is cherry-picked.
+core.warp_identity.
 """
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QComboBox,
     QFormLayout,
@@ -27,6 +26,10 @@ _HTTP_VERSIONS = ["h2", "h3"]
 class MasquePanel(QGroupBox):
     """The MASQUE-specific rows. The dialog reads/writes the f_* fields."""
 
+    # A WARP identity was imported successfully: the dialog clears the
+    # generic username/password, because WARP and basic auth are exclusive.
+    identity_imported = Signal()
+
     def __init__(self, parent=None) -> None:
         super().__init__(tr("MASQUE"), parent)
 
@@ -45,6 +48,8 @@ class MasquePanel(QGroupBox):
         self.btn_import = QPushButton(tr("Import identity…"))
         self.btn_import.clicked.connect(self._import_identity)
 
+        self.btn_test = QPushButton(tr("Test endpoint"))
+
         form = QFormLayout(self)
         form.addRow(tr("HTTP version"), self.f_http_version)
         form.addRow(tr("Private key"), self.f_private_key)
@@ -53,6 +58,7 @@ class MasquePanel(QGroupBox):
         form.addRow(tr("Remote DNS"), self.f_remote_dns)
         row = QHBoxLayout()
         row.addWidget(self.btn_import)
+        row.addWidget(self.btn_test)
         row.addStretch(1)
         form.addRow(row)
 
@@ -68,7 +74,7 @@ class MasquePanel(QGroupBox):
                  tr("Paste it exactly as given."))
         set_help(self.f_addresses,
                  tr("The tunnel's IP addresses, comma or newline separated."),
-                 tr("162.158.74.187/32, 2606:4700::/48"))
+                 tr("162.158.74.187/32, 2606:4700::1/128"))
         set_help(self.f_remote_dns,
                  tr("Literal IP addresses to resolve through the tunnel."),
                  tr("1.1.1.1"))
@@ -76,10 +82,13 @@ class MasquePanel(QGroupBox):
                  tr("Paste a WARP identity JSON to fill the keys and "
                     "addresses."),
                  tr("Copy the identity block your provider exported."))
+        set_help(self.btn_test,
+                 tr("Checks whether this endpoint answers through a real "
+                    "tunnel. Runs in the background; the button becomes "
+                    "Cancel while it works."),
+                 tr("A few seconds, at most about 8."))
 
     def load(self, p) -> None:
-        # getattr so the panel builds before worker 1 adds the fields to
-        # Profile (they default to "" once present).
         version = getattr(p, "masque_http_version", "")
         self.f_http_version.setCurrentText(version if version in _HTTP_VERSIONS else "h2")
         self.f_private_key.setText(getattr(p, "masque_private_key", ""))
@@ -103,9 +112,9 @@ class MasquePanel(QGroupBox):
         if not ok or not text.strip():
             return
         try:
-            from ..core import masque_identity
-            identity = masque_identity.parse_identity(text)
-            fields = masque_identity.profile_fields(identity)
+            from ..core import warp_identity
+            identity = warp_identity.parse_identity(text)
+            fields = warp_identity.profile_fields(identity)
         except Exception:
             # The helper's own message may echo the pasted secret, so a fixed
             # string is shown instead of the exception text.
@@ -115,3 +124,4 @@ class MasquePanel(QGroupBox):
         self.f_private_key.setText(fields.get("masque_private_key", ""))
         self.f_public_key.setText(fields.get("masque_public_key", ""))
         self.f_addresses.setText(fields.get("masque_addresses", ""))
+        self.identity_imported.emit()
