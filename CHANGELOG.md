@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.14.1
+
+### Fixed
+- **The Security page never showed the kill switch as active.** The status banner at the top now reads the live connection and refreshes while the page is open, so it shows what is really protecting you.
+- **Changing the kill switch, strict mode or the firewall did nothing visible.** They are read when you connect, so after saving you are now asked to reconnect (the same prompt other connection settings use).
+- **The built-in AI list looked like names you had typed.** It now sits in its own line, "Always protected", and your own box starts empty.
+
+<!-- fa -->
+
+### چی درست شده
+- **صفحه‌ی امنیت هیچ‌وقت کیل‌سوییچ رو فعال نشون نمی‌داد.** نوار وضعیت بالای صفحه حالا از اتصال زنده می‌خونه و تا وقتی صفحه بازه خودش به‌روز می‌شه، برای همین چیزی رو نشون می‌ده که واقعاً داره ازت محافظت می‌کنه.
+- **عوض کردن کیل‌سوییچ، حالت سخت‌گیرانه یا فایروال هیچ اثر دیدنی نداشت.** اینا موقع وصل شدن خونده می‌شن، برای همین بعد از ذخیره حالا ازت می‌پرسه دوباره وصل بشی (همون پیامی که بقیه‌ی تنظیمات اتصال دارن).
+- **لیست آماده‌ی هوش مصنوعی شبیه اسم‌هایی بود که خودت نوشتی.** حالا تو یه خط جدا به اسم «همیشه محافظت‌شده» هست و کادر خودت خالی شروع می‌شه.
+
 ## v0.14.0
 
 ### New
