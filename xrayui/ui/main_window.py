@@ -2232,7 +2232,11 @@ class MainWindow(QMainWindow):
         old_exits = copy.deepcopy(self.settings.get("exits"))
         old_forwards = copy.deepcopy(self.settings.get("forwards"))
         old_gateway = copy.deepcopy(self.settings.get("gateway"))
-        dlg = SettingsWindow(self.settings, self, profiles=self.store.list())
+        old_killswitch = copy.deepcopy(self.settings.get("killswitch"))
+        old_strict = copy.deepcopy(self.settings.get("strict"))
+        old_firewall = copy.deepcopy(self.settings.get("firewall"))
+        dlg = SettingsWindow(self.settings, self, profiles=self.store.list(),
+                             connection=self.conn)
         # Parented to the settings window so the update sits on top of it
         # rather than behind, and so closing it does not strand the dialog.
         dlg.updateAvailable.connect(
@@ -2256,6 +2260,10 @@ class MainWindow(QMainWindow):
                 (tr("Multi-exit port"), old_exits, values["exits"]),
                 (tr("Port forwarding"), old_forwards, values["forwards"]),
                 (tr("Hotspot"), old_gateway, values["gateway"]),
+                # These are all read when the connection is made.
+                (tr("Kill switch"), old_killswitch, values.get("killswitch", old_killswitch)),
+                (tr("Strict mode"), old_strict, values.get("strict", old_strict)),
+                (tr("OS firewall"), old_firewall, values.get("firewall", old_firewall)),
             ) if old != new]
             if changed:
                 self._needs_reconnect(

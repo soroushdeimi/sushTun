@@ -1616,8 +1616,10 @@ class SettingsWindow(QDialog):
         parent=None,
         topic: str = "general",
         profiles: list[Profile] | None = None,
+        connection=None,
     ) -> None:
         super().__init__(parent)
+        self._connection = connection
         self.setWindowTitle(tr("Settings"))
         # Same chrome as the main window: outside macOS the window draws its
         # own working traffic lights. The native title bar was light-themed
@@ -1720,7 +1722,7 @@ class SettingsWindow(QDialog):
         self._pages["geo-data"] = _GeoDataPage(geo_cfg)
         self._pages["hotspot"] = _HotspotPage(self._settings.get("gateway") or {})
         self._pages["startup"] = _StartupPage(startup_cfg)
-        self._pages["security"] = SecurityPage(self._settings)
+        self._pages["security"] = SecurityPage(self._settings, connection=self._connection)
         self._pages["general"]._security_page = self._pages["security"]
         self._pages["exits"] = _ExitsPage(self._settings.get("exits") or {}, core_cfg,
                                           self._settings.get("dns") or {}, self._profiles)

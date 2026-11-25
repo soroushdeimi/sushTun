@@ -10,7 +10,7 @@ from __future__ import annotations
 import sys
 import types
 
-from PySide6.QtCore import Qt, QThreadPool
+from PySide6.QtCore import Qt, QThreadPool, QTimer
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -99,7 +99,9 @@ class SecurityPage(QWidget):
             state = QLabel("")
             state.setObjectName("Muted")
             state.setWordWrap(True)
-            row.addWidget(QLabel(label), 0)
+            name = QLabel(label)
+            name.setStyleSheet("background: transparent;")
+            row.addWidget(name, 0)
             row.addStretch(1)
             row.addWidget(dot, 0)
             row.addWidget(state, 0)
@@ -157,7 +159,7 @@ class SecurityPage(QWidget):
                  tr("The strongest strict setting — use it only when you need it."))
 
         self.strict_domains = QPlainTextEdit()
-        self.strict_domains.setPlaceholderText("\n".join(strict_mod.DEFAULT_AI_DOMAINS))
+        self.strict_domains.setPlaceholderText(tr("Your own names, one per line"))
         domains = strict_cfg.get("domains") or []
         if domains:
             self.strict_domains.setPlainText("\n".join(domains))
@@ -172,6 +174,12 @@ class SecurityPage(QWidget):
         dr.addWidget(self.strict_domains, 1)
         dr.addWidget(reset_btn, 0, Qt.AlignTop)
         strict_group.add_row(tr("Extra protected domains (one per line)"), domains_row)
+        builtin = QLabel(", ".join(strict_mod.DEFAULT_AI_DOMAINS))
+        builtin.setObjectName("Muted")
+        builtin.setWordWrap(True)
+        builtin.setLayoutDirection(Qt.LeftToRight)
+        builtin.setStyleSheet("background: transparent;")
+        strict_group.add_row(tr("Always protected (built-in AI list)"), builtin)
         set_help(self.strict_domains,
                  tr("Your own names to always send through the tunnel, one per line. "
                     "The default AI list is shown when this is empty."),
@@ -293,6 +301,20 @@ class SecurityPage(QWidget):
         layout.addWidget(self._not_covered)
 
         layout.addStretch(1)
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        if getattr(self, "_banner_timer", None) is None:
+            self._banner_timer = QTimer(self)
+            self._banner_timer.timeout.connect(self._render_banner)
+        self._render_banner()
+        self._banner_timer.start(3000)
+
+    def hideEvent(self, event) -> None:
+        timer = getattr(self, "_banner_timer", None)
+        if timer is not None:
+            timer.stop()
+        super().hideEvent(event)
 
     # -- status banner ------------------------------------------------------
     def _live_state(self) -> types.SimpleNamespace:

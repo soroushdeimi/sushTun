@@ -2092,3 +2092,43 @@ def test_refresh_status_clears_the_tunnel_device_when_disconnected(window, monke
     monkeypatch.setattr(window, "isMinimized", lambda: False)
     window._refresh_status()
     assert window.activity_page.diagnostics._values["tun"].text() == ltr("—")
+
+
+def test_changing_the_kill_switch_asks_for_a_reconnect(window, monkeypatch):
+    # The kill switch, strict mode and the firewall are read when the
+    # connection is made; saving them while connected must say so, or the user
+    # sees nothing happen and thinks the switch is broken.
+    import copy
+
+    values = copy.deepcopy(window.settings)
+    values["killswitch"] = {"enabled": not (window.settings.get("killswitch") or {}).get("enabled")}
+    values["strict"] = copy.deepcopy(window.settings.get("strict"))
+
+    class FakeDialog:
+        updateAvailable = _NoSignal()
+        tourRequested = _NoSignal()
+
+        def __init__(self, *a, **k):
+            pass
+
+        def exec(self):
+            return 1
+
+        def values(self):
+            return values
+
+        def restored(self):
+            return False
+
+        def deleteLater(self):
+            pass
+
+    monkeypatch.setattr("xrayui.ui.settings_window.SettingsWindow", FakeDialog)
+    monkeypatch.setattr(window.conn, "is_connected", lambda: True)
+    monkeypatch.setattr("xrayui.core.settings.save", lambda s: None)
+    reconnects = []
+    monkeypatch.setattr(window, "_needs_reconnect", lambda what: reconnects.append(what))
+
+    window._open_settings()
+
+    assert reconnects and "Kill switch" in reconnects[0]
