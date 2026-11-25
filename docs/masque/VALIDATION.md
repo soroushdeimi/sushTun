@@ -1,76 +1,77 @@
 # MASQUE chain — local runtime validation
 
-Evidence from `tools/masque_runtime_probe.py` and `tests/test_masque_runtime.py`,
-run against the pinned baseline Xray 26.10.31
+Evidence from `tools/masque_runtime_probe.py` (opt-in manual diagnostic,
+run as `python -m tools.masque_runtime_probe --xray /path/to/xray`) and
+`tests/test_masque_runtime.py` (portable unit tests, no binary/openssl
+required). Run against the pinned baseline Xray 26.10.31
 (`/Users/soroushdeimi/Desktop/myprojects/SUSHTUN/sushTun/xray`,
-`a4a3dff`, darwin/arm64). All runs are isolated in a temp dir: a local MASQUE
-TLS server, a local VLESS/TCP exit, and an HTTP target. No TUN, no OS routes,
-no DNS changes. Ephemeral certs are generated with the locally installed
-`openssl` (test-only, not a runtime dependency).
+`a4a3dff`, darwin/arm64).
 
-## Reproduced outcomes (distinct config / handshake / data-plane)
+## Loopback-only topology (no LAN, no TUN, no OS routes, no DNS)
+
+Everything is bound to `127.0.0.1` in an isolated temp dir:
+
+- a fixed-body HTTP target (the exact expected response body, so a proxy
+  bypass cannot pass);
+- local MASQUE TLS servers (h2 and h3);
+- a local VLESS/TCP exit;
+- a host-side SOCKS5 fixture with an EXACT allowlist mapping the logical
+  documentation addresses onto loopback:
+  `203.0.113.10:<target_port> -> 127.0.0.1:<target_port>` and
+  `192.168.20.20:<vless_port> -> 127.0.0.1:<vless_port>`.
+  Every other destination gets SOCKS5 reply code 4 (host unreachable).
+
+The MASQUE server and the VLESS exit use that SOCKS fixture as their
+outbound, so the tunnel's userspace stack never dials its own `127`
+address. `192.168.20.20` is RFC1918 because Xray refuses a plaintext
+VLESS outbound to a non-private address, and it sits outside the tunnel's
+own subnet (`10.0.0.1/24`) so the stack forwards it. Certificates/keys
+live in the private temp dir and are never HTTP-served. The fetch
+environment is built explicitly with only the proxy set, so an inherited
+`NO_PROXY` cannot turn a tunnel test into a direct hit.
+
+## Reproduced outcomes (2026-11-25, exit code 0)
 
 | Case | Outcome | Evidence |
 |------|---------|----------|
-| H2 standalone data plane | PASS | `HTTP 200 size=499B`; client log `proxy/masque: MASQUE: tunnel established from [10.0.0.2]`; server log `processing from tcp:10.0.0.2:… to tcp:<local-ip>:<port>` |
-| H2 wrong credentials | REJECTED (expected) | client log `connect-ip: server responded with 401`; server log `proxy/masque: invalid credentials` / `authentication failed for u1` |
-| H3 standalone data plane | PASS | `HTTP 200 size=847B`; server `listening UDP for MASQUE over HTTP/3` |
-| chain MASQUE(H2) -> VLESS/TCP exit | PASS | `HTTP 200 size=1071B`; client `proxy/vless/outbound: tunneling request … via <local-ip>:<port>` then `MASQUE: tunnel established from [10.0.0.3]`; exit log `proxy/vless/inbound: received request` |
+| fixture rejects unknown target | PASS | SOCKS5 reply code 4 (host unreachable) |
+| H2 standalone data plane | PASS | `HTTP 200 size=37B exact-body=True` |
+| H2 wrong credentials | REJECTED (expected) | `HTTP 0 size=0B` |
+| H2 wrong cert pin | REJECTED (expected) | `HTTP 0 size=0B` |
+| H3 standalone data plane | PASS | `HTTP 200 size=37B exact-body=True` |
+| chain MASQUE(H2) -> VLESS/TCP exit | PASS | `HTTP 200 size=37B exact-body=True` |
+| stopping entry fails closed | PASS | `HTTP 0 size=0B` |
 
-TLS-only is not treated as data-plane success: the test asserts a non-empty
-HTTP body, not just a completed handshake.
+`size=37B` is the exact expected body
+(`MASQUE-LOOPBACK-PROBE-BODY-0123456789`); the probe asserts byte-exact
+equality, not just a non-empty body. The client Xray configs are built by
+the REAL app code: `outbounds.build` for the standalone MASQUE profile and
+`chains.resolve`/`apply` for the H2 chain; only the entry's `__IFACE__`
+interface placeholder is stripped for the loopback fixture.
 
-## Root cause of the previous "HTTP response timed out"
+## Chain support (narrow, this round)
 
-The tunnel establishes and the server assigns an address, but the data path
-fails with `proxy/masque: failed to create TCP connection > proxy/tun:
-connection timed out`, and the server never logs a forward. Two distinct
-causes were found and fixed in the probe:
+- MASQUE is accepted as the ENTRY (first hop) of a chain, carrier H2 only.
+  H3 chains, MASQUE as middle/exit, and MASQUE mux/flow remain rejected in
+  `chains.validate` until separately verified.
+- `coreopts._masque_is_h2` reads `masque_http_version` (authoritative),
+  not `alpn`, which may be empty or contradictory on imported profiles.
+  H3 never gets TCP fragment/socket options; MASQUE is never mux-eligible.
+- `connection.Connection.connect` runs full MASQUE profile validation
+  BEFORE any interface/route/state/DNS mutation.
 
-1. **Loopback target.** The MASQUE outbound runs a user-space network stack
-   that cannot reach `127.0.0.1`. A target bound to loopback is never reached
-   (server sees no forward). Binding the target to a real interface address
-   (e.g. `10.42.0.107`) makes the data plane work.
-2. **`NO_PROXY` in the environment.** `NO_PROXY=127.0.0.1,localhost` made
-   `curl` bypass the SOCKS proxy entirely, silently turning a tunnel test into
-   a direct hit (a dead proxy port still returned `HTTP 200`). The probe
-   strips `NO_PROXY`/`no_proxy` from the fetch environment.
+## Limits / NOT VERIFIED
 
-## Chain wiring notes (for the narrow chain extension)
-
-- The VLESS/TCP exit is dialed from inside the tunnel, so it must be reachable
-  at a non-loopback address (the tunnel stack cannot reach `127.0.0.1`).
-- Xray's `freedom` outbound blackholes the local machine's own IP
-  (`proxy/freedom: blocked target … blackholing connection`), so the chain's
-  final hop to a local target must go through a plain socket proxy, not a
-  second `freedom` outbound.
-- A VLESS inbound requires `settings.decryption = "none"` (settings level, not
-  per-client) or Xray refuses to start.
-
-## coreopts / connection changes (this worker)
-
-- `coreopts.mux_eligible`: MASQUE is never mux-eligible (the MASQUE outbound
-  does not support Mux).
-- `coreopts.fragment_eligible` / `sockopt_eligible`: MASQUE h2 (TCP+TLS) is
-  eligible; MASQUE h3 (QUIC) is not. The single carrier is the profile `alpn`
-  (default h2).
-- `connection.Connection.connect`: MASQUE is exempt from the VLESS-style `id`
-  requirement (it authenticates with basic auth or a WARP identity).
-
-## NOT VERIFIED
-
-- **Chain acceptance in `chains.validate`/`SUPPORTED_PROTOCOLS`.** MASQUE is
-  not yet in `SUPPORTED_PROTOCOLS`, so a MASQUE chain hop is still rejected
-  ("not verified for chains"). Enabling it requires Worker 1's model/builder
-  (the `masque` outbound builder and profile fields) to land first; I did not
-  edit those owned paths.
-- **WARP identity path.** Only generic basic-auth MASQUE was exercised locally.
-  The WARP mTLS path (P-256 device key, `masqueSettings.warp`) was not tested
-  (no live WARP enrollment, per contract).
-- **Cross-platform / operator.** Only darwin/arm64 with the pinned binary.
-  H3 uses QUIC datagrams; real-network MTU/UDP behaviour is NOT VERIFIED.
-  Iranian-operator field behaviour is NOT VERIFIED.
-- **`connection.connect` full MASQUE connect path.** Only the id-exemption
-  check was unit-tested (OS interactions mocked). A full MASQUE connect
-  through `render`/`chains.build` is NOT VERIFIED until the MASQUE outbound
-  builder exists.
+- **Operator / Iran field behaviour**: NOT VERIFIED. All evidence is
+  loopback-only with fake credentials; nothing here claims a real
+  operator, ISP or WARP network works.
+- **WARP enrollment / mTLS path**: NOT VERIFIED. Only generic basic-auth
+  MASQUE was exercised; no live WARP enrollment (P-256 device key,
+  `masqueSettings.warp`) was tested, per contract.
+- **H3 chain**: H3 standalone works locally, but H3 as a chain carrier is
+  deliberately rejected until separately proven.
+- **Cross-platform**: only darwin/arm64 with the pinned binary. H3 uses
+  QUIC datagrams; real-network MTU/UDP behaviour is NOT VERIFIED.
+- The native probe is an opt-in manual diagnostic (needs the Xray binary
+  and `openssl`); the default unit suite (`tests/test_masque_runtime.py`)
+  is portable and needs neither.

@@ -106,6 +106,11 @@ class Connection:
         if not profile.address or (
                 not profile.id and profile.protocol not in ("http", "socks", "masque")):
             raise ConnectError("profile is missing address or id")
+        # Full MASQUE validation (TLS-only, h2/h3 carrier, all-or-nothing WARP
+        # identity, basic auth both-or-neither) BEFORE any interface, route,
+        # state or DNS mutation.
+        if profile.protocol == "masque" and not profile.is_valid():
+            raise ConnectError("MASQUE profile has invalid TLS or credential settings")
         if profile.protocol == "wireguard" and not profile.pbk:
             raise ConnectError("WireGuard profile is missing the peer public key")
         if self.state.is_connected():

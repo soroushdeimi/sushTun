@@ -33,9 +33,10 @@ DEFAULT_SOCKS_PORT = 10808
 
 
 def _masque_is_h2(profile: Profile) -> bool:
-    # MASQUE h2 rides TCP+TLS; h3 rides QUIC. The single carrier is the
-    # profile's alpn (default h2), so h3 must not get TCP-only options.
-    return "h3" not in (profile.alpn or "").strip().lower()
+    # MASQUE h2 rides TCP+TLS; h3 rides QUIC. masque_http_version is the
+    # authoritative carrier; alpn may be empty or contradictory on
+    # imported/share-created profiles, so it must not decide.
+    return (profile.masque_http_version or "h2").strip().lower() == "h2"
 
 
 # -- TLS fragment -------------------------------------------------------------
