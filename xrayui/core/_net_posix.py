@@ -569,6 +569,17 @@ MAC_SPLIT = ("0.0.0.0/2", "64.0.0.0/2", "128.0.0.0/2", "192.0.0.0/2")
 # Earlier builds used these; still removed so an old session cannot strand them.
 _MAC_OLD_SPLIT = ("0.0.0.0/1", "128.0.0.0/1")
 
+# Kill switch: blackhole routes that take over the moment the tunnel routes
+# vanish (Xray dies, the app crashes), so traffic is dropped instead of
+# leaking to the physical default route. One per half of the IPv4 space, the
+# same split the tunnel uses. On Linux they are the tunnel's own /1 prefixes
+# with a worse metric; on macOS they are /1s, less specific than the tunnel's
+# /2s, so they only win once the /2s are gone. The tunnel is IPv4-only, so
+# there is no IPv6 family to cover.
+KILLSWITCH_SPLIT = ("0.0.0.0/1", "128.0.0.0/1")
+# Higher than the tunnel route's metric (0), so the tunnel wins while it is up.
+KILLSWITCH_METRIC = 1000
+
 
 def _mac_via(native: bool) -> list[str]:
     # Xray's own utun is reached by interface. The tun2socks device only
@@ -616,6 +627,47 @@ def repair_tun_routes() -> bool | None:
     return True if missing else None
 
 
+def add_killswitch_routes() -> None:
+    """Install the blackhole routes that catch traffic once the tunnel is gone.
+
+    Idempotent: a stale blackhole a crashed session left behind is cleared
+    first (best-effort), so a fresh connect never fails on "File exists".
+    Raises on the first refused add, exactly like add_default_routes: the
+    caller treats a failed kill switch as "not active" and keeps the
+    connection, rather than claiming protection it does not have.
+    """
+    if IS_MAC:
+        # -blackhole is a route type (RTF_BLACKHOLE): it needs no gateway, and
+        # the kernel silently drops matching packets. A /1 is less specific
+        # than the tunnel's /2s, so it only wins once those are gone.
+        for dest in KILLSWITCH_SPLIT:
+            _run_best_effort(["route", "-n", "delete", "-net", dest, "-blackhole"])
+            result = proc.run(["route", "-n", "add", "-net", dest, "-blackhole"])
+            if result.returncode != 0:
+                raise RuntimeError(f"kill switch route {dest} failed: "
+                                   f"{result.stderr.strip()}")
+        return
+    for dest in KILLSWITCH_SPLIT:
+        # Same prefix as the tunnel's /1 routes, but a worse metric: while the
+        # tunnel route (metric 0) is present it wins, and the blackhole takes
+        # over the instant it disappears.
+        _run_best_effort(["ip", "route", "del", dest, "blackhole"])
+        _ip_route("route", "add", dest, "blackhole", "metric", str(KILLSWITCH_METRIC))
+
+
+def remove_killswitch_routes() -> None:
+    """Delete the kill switch blackholes. Best-effort, like every teardown
+    delete: a route whose owner is already gone fails, and that is fine."""
+    if IS_MAC:
+        cmds = [["route", "-n", "delete", "-net", dest, "-blackhole"]
+                for dest in KILLSWITCH_SPLIT]
+    else:
+        cmds = [["ip", "route", "del", dest, "blackhole"]
+                for dest in KILLSWITCH_SPLIT]
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        list(pool.map(_run_best_effort, cmds))
+
+
 def remove_routes(server_ip: str | None = None) -> None:
     # Every delete is independent and best-effort, so they all run side by
     # side: on macOS this used to be thirteen sequential `route` calls, which
@@ -627,12 +679,16 @@ def remove_routes(server_ip: str | None = None) -> None:
         for dest in (*MAC_SPLIT, *_MAC_OLD_SPLIT):
             for native in (True, False):
                 cmds.append(["route", "-n", "delete", "-net", dest, *_mac_via(native)])
+        cmds.extend(["route", "-n", "delete", "-net", dest, "-blackhole"]
+                    for dest in KILLSWITCH_SPLIT)
         if server_ip:
             cmds.append(["route", "-n", "delete", "-host", server_ip])
     else:
         cmds.append(["ip", "route", "del", "default", "dev", TUN_NAME])
         for dest in ("0.0.0.0/1", "128.0.0.0/1"):
             cmds.append(["ip", "route", "del", dest, "dev", TUN_NAME])
+        cmds.extend(["ip", "route", "del", dest, "blackhole"]
+                    for dest in KILLSWITCH_SPLIT)
         if server_ip:
             cmds.append(["ip", "route", "del", server_ip])
     with ThreadPoolExecutor(max_workers=6) as pool:

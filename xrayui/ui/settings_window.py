@@ -292,6 +292,19 @@ class _GeneralPage(QWidget):
                     "debug is very chatty."),
                  tr("Chasing a problem? Raise it for a while, then put it back."))
 
+        self.killswitch = Switch()
+        self.killswitch.setChecked(
+            bool((self._settings.get("killswitch") or {}).get("enabled")))
+        group.add_row(tr("Block the internet if the VPN drops (kill switch)"),
+                      self.killswitch,
+                      tr("Applies from the next connect."))
+        set_help(self.killswitch,
+                 tr("If the tunnel dies while you are connected, your traffic is "
+                    "blocked instead of falling back to your normal connection and "
+                    "leaking your real IP. Turn it off and disconnect to get your "
+                    "internet back."),
+                 tr("Protects an account that bans your real IP if the VPN drops."))
+
         self.check_updates = Switch()
         self.check_updates.setChecked(bool((self._settings.get("updates") or {}).get("check", True)))
         group.add_row(tr("Check for updates"), self.check_updates)
@@ -366,6 +379,7 @@ class _GeneralPage(QWidget):
             "sample_seconds": self.sample_seconds.value(),
             "tun_mtu": self.tun_mtu.value(),
             "log_level": self.log_level.currentText(),
+            "killswitch": {"enabled": self.killswitch.isChecked()},
             "updates": {"check": self.check_updates.isChecked()},
             "speedtest": {**(self._settings.get("speedtest") or {}),
                           "mode": self.delay_mode.currentData()},
@@ -1889,6 +1903,7 @@ class SettingsWindow(QDialog):
             "sample_seconds": self._pages["general"].sample_seconds.value(),
             "tun_mtu": self._pages["general"].tun_mtu.value(),
             "log_level": self._pages["general"].log_level.currentText(),
+            "killswitch": {"enabled": self._pages["general"].killswitch.isChecked()},
             "speedtest": self._pages["general"].collect()["speedtest"],
             "language": self._pages["language"].language.currentData() or "en",
             "geo": self._pages["geo-data"].collect(),

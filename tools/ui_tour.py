@@ -123,6 +123,10 @@ def install_stubs() -> None:
         def is_connected(self) -> bool:
             return self._connected
 
+        @property
+        def killswitch_active(self) -> bool:
+            return False
+
         def connect(self, profile) -> None:
             self._connected = True
 

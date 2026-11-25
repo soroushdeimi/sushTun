@@ -16,6 +16,23 @@ TUN_METRIC = 1
 # wins regardless of the interface metrics Windows hands out.
 DEFAULT_SPLIT = (("0.0.0.0", "128.0.0.0"), ("128.0.0.0", "128.0.0.0"))
 
+# Kill switch: higher than the tunnel route's metric (1) so the tunnel wins
+# while it is up; the blackhole takes over the instant the tunnel routes are
+# gone. It is still a /1, so it outranks the physical /0 default by
+# longest-prefix match — nothing leaks.
+KILLSWITCH_METRIC = 1000
+# The blackhole's next hop. 127.0.0.1 (loopback) rather than the canonical
+# 0.0.0.0: the tunnel route already uses next-hop 0.0.0.0, so a 0.0.0.0
+# blackhole would be indistinguishable from it on `route delete` and a
+# teardown could take the tunnel route down instead. A loopback next hop is
+# unique, so removal is unambiguous, and a packet handed to the loopback
+# interface for a non-local destination is dropped there. NOT VERIFIED live:
+# this is the sanctioned "loopback next hop" form, reasoned from the existing
+# tunnel-route argv, not run against a real Windows route table. If Windows
+# refuses it, add_killswitch_routes raises and the connect continues without
+# the kill switch (logged, and reported as not active) — never broken.
+KILLSWITCH_GATEWAY = "127.0.0.1"
+
 _DETECT_PS = """
 $candidate = $null
 foreach ($route in (Get-NetRoute -DestinationPrefix '0.0.0.0/0' -AddressFamily IPv4 -ErrorAction SilentlyContinue)) {
@@ -253,13 +270,55 @@ def replace_host_route(server_ip: str, gateway: str) -> None:
     add_host_route(server_ip, gateway)
 
 
+def add_killswitch_routes() -> None:
+    """Install the blackhole routes that catch traffic once the tunnel is gone.
+
+    A /1 with a higher metric than the tunnel route (metric 1) and a loopback
+    next hop: while the tunnel route is present it wins, and the blackhole
+    takes over the instant the tunnel routes are removed. The loopback next
+    hop (KILLSWITCH_GATEWAY) drops the packet and, unlike the canonical
+    0.0.0.0, is distinguishable from the tunnel route so removal is
+    unambiguous. Idempotent: a stale blackhole a crashed session left behind
+    is cleared first, so a fresh connect never fails on "already exists".
+    Raises on the first refused add, like add_default_routes.
+
+    NOT VERIFIED live: the exact `route` argv was reasoned from the existing
+    tunnel-route form, not run against a real Windows route table.
+    """
+    for dest, mask in DEFAULT_SPLIT:
+        _run_best_effort(["route", "delete", dest, "mask", mask, KILLSWITCH_GATEWAY])
+        result = proc.run(["route", "add", dest, "mask", mask, KILLSWITCH_GATEWAY,
+                           "metric", str(KILLSWITCH_METRIC)])
+        if result.returncode != 0:
+            raise RuntimeError(f"kill switch route {dest} failed: "
+                               f"{result.stderr.strip()}")
+
+
+def remove_killswitch_routes() -> None:
+    """Delete the kill switch blackholes. Best-effort, like every teardown
+    delete: a route whose owner is already gone fails, and that is fine.
+
+    Matched on the loopback gateway, so the tunnel route (next hop 0.0.0.0)
+    is never touched.
+    """
+    cmds = [["route", "delete", dest, "mask", mask, KILLSWITCH_GATEWAY]
+            for dest, mask in DEFAULT_SPLIT]
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        list(pool.map(_run_best_effort, cmds))
+
+
 def remove_routes(server_ip: str | None = None) -> None:
     # The bare /0 is what releases before the split default installed.
     # Independent, best-effort deletes: side by side, never one hung call
-    # stalling the disconnect.
+    # stalling the disconnect. The kill switch blackholes are deleted too, so
+    # a disconnect (or a failed connect, or boot restore) never leaves one
+    # behind to keep the user's internet blocked.
     cmds = [["route", "delete", "0.0.0.0", "mask", "0.0.0.0", "0.0.0.0"]]
     for dest, mask in DEFAULT_SPLIT:
         cmds.append(["route", "delete", dest, "mask", mask, "0.0.0.0"])
+        # The blackhole, matched on its loopback gateway so the tunnel route
+        # (next hop 0.0.0.0) is never taken down by mistake.
+        cmds.append(["route", "delete", dest, "mask", mask, KILLSWITCH_GATEWAY])
     if server_ip:
         cmds.append(["route", "delete", server_ip, "mask", "255.255.255.255"])
     with ThreadPoolExecutor(max_workers=4) as pool:
@@ -313,6 +372,8 @@ if sys.platform != "win32":
     add_host_route = _posix.add_host_route
     replace_host_route = _posix.replace_host_route
     add_default_routes = _posix.add_default_routes
+    add_killswitch_routes = _posix.add_killswitch_routes
+    remove_killswitch_routes = _posix.remove_killswitch_routes
     repair_tun_routes = _posix.repair_tun_routes
     remove_routes = _posix.remove_routes
     wait_for_tun = _posix.wait_for_tun

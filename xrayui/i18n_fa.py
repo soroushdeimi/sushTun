@@ -372,6 +372,22 @@ TRANSLATIONS_FA: dict[str, str] = {
         "MTU تونل. مقدار کمتر فضای بیشتری برای کپسوله‌سازی می‌گذارد؛ "
         "مقدار بیشتر سربار هر بسته را کاهش می‌دهد. 1420 مقداری امن و پیش‌فرض است.",
     "Xray log level": "سطح لاگ Xray",
+    "Block the internet if the VPN drops (kill switch)":
+        "مسدود کردن اینترنت وقتی VPN قطع می‌شود (کلید قطع)",
+    "Applies from the next connect.": "از اتصال بعدی اعمال می‌شود.",
+    "If the tunnel dies while you are connected, your traffic is "
+    "blocked instead of falling back to your normal connection and "
+    "leaking your real IP. Turn it off and disconnect to get your "
+    "internet back.":
+        "اگر تونل در حین اتصال از کار بیفتد، ترافیک شما به‌جای برگشت به "
+        "اتصال معمولی و نشت آدرس واقعی‌تان، مسدود می‌شود. برای بازگشت "
+        "اینترنت، آن را خاموش کنید و قطع شوید.",
+    "Protects an account that bans your real IP if the VPN drops.":
+        "حسابی را که در صورت قطع VPN، آدرس واقعی شما را مسدود می‌کند، محافظت می‌کند.",
+    "VPN dropped: internet is blocked. Reconnect, or press "
+    "Disconnect to restore normal internet.":
+        "VPN قطع شد: اینترنت مسدود است. دوباره وصل شوید، یا برای بازگشت "
+        "به اینترنت معمولی «قطع اتصال» را بزنید.",
     "Check for updates": "بررسی به‌روزرسانی",
     "Geo data": "داده‌های جغرافیایی",
     "Source": "منبع",

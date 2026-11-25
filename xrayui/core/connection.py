@@ -107,10 +107,23 @@ class Connection:
         self._owned = False  # did this process establish the active connection?
         self._gateway_on = False
         self._dns_warned = False
+        # True only once the kill switch blackholes are actually in the route
+        # table. The UI uses it to say "internet is blocked" — it must never
+        # claim that when the install failed.
+        self._killswitch_active = False
         atexit.register(self._atexit)
 
     def is_connected(self) -> bool:
         return self.state.is_connected()
+
+    @property
+    def killswitch_active(self) -> bool:
+        """True only while the kill switch blackholes are actually installed.
+
+        The UI shows "internet is blocked" from this; it must never claim that
+        when the install failed or the connection is down.
+        """
+        return self._killswitch_active
 
     def connect(self, profile: Profile | chains.Chain | chains.ResolvedChain) -> None:
         plan = None
@@ -193,6 +206,7 @@ class Connection:
             self._log(f"WARNING: teardown operation failed: {exc}")
         # A failure after state.save() must not leave a stale "connected".
         self.state.clear()
+        self._killswitch_active = False
         raise ConnectError(reason)
 
     def _dns_rollback(self, alias: str, dns) -> None:
@@ -320,6 +334,10 @@ class Connection:
         except (OSError, RuntimeError) as exc:
             self._fail_connect(server_ip, f"Could not install tunnel routes: {exc}")
 
+        # After the tunnel routes are in: the blackholes only win once those
+        # are gone, so they must exist by the time the connection is live.
+        self._install_killswitch()
+
         # Persist backup + a boot restore task BEFORE hijacking DNS. Static
         # 127.0.0.1 survives a power-off; the task puts the adapter back.
         self.state.save(iface, server_ip, tun, dns,
@@ -344,6 +362,26 @@ class Connection:
         self._owned = True
         self._setup_gateway()
         self._log("Connected.")
+
+    def _install_killswitch(self) -> None:
+        """Install the kill switch blackholes when the setting is on.
+
+        Read at connect time: the flag applies to this connection only, so a
+        change made while connected takes effect on the next connect. An
+        optional feature must never break the main connection — a failed
+        install is logged and the connection continues, with the kill switch
+        reported as not active rather than claimed.
+        """
+        self._killswitch_active = False
+        if not (app_settings.load().get("killswitch") or {}).get("enabled"):
+            return
+        try:
+            network.add_killswitch_routes()
+        except (OSError, RuntimeError) as exc:
+            self._log(f"WARNING: kill switch could not be installed: {exc}")
+            return
+        self._killswitch_active = True
+        self._log("Kill switch on: the internet is blocked if the tunnel drops.")
 
     def _setup_gateway(self) -> None:
         """Optionally share the tunnel with hotspot clients. Never fails the connect."""
@@ -546,6 +584,9 @@ class Connection:
             raise ConnectError(f"traffic is still routed through {routed or 'nothing'}, "
                                f"not the tunnel ({t2s.DEVICE}) — another VPN is holding "
                                "more specific routes; disconnect it first")
+        # The tunnel is confirmed carrying traffic: install the blackholes
+        # that take over if it dies.
+        self._install_killswitch()
         self._owned = True
         self._log("Connected.")
 
@@ -756,6 +797,7 @@ class Connection:
                 self.state.clear()
             finally:
                 self._owned = False
+                self._killswitch_active = False
                 paths.runtime_config().unlink(missing_ok=True)
         if restored and cleanup_ok and not self.state.pending():
             self._log("Network restored.")

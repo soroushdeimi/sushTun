@@ -138,6 +138,12 @@ DEFAULTS: dict = {
     "forwards": [],
     # Serverless entry (core/serverless.py). Off: nothing is rendered for it.
     "serverless": {"enabled": False, "skip_only_warning": False},
+    # Kill switch: when on, a connect also installs blackhole routes that are
+    # less preferred than the tunnel routes, so the moment the tunnel routes
+    # vanish (Xray dies, the app crashes) traffic is dropped instead of
+    # leaking to the physical default route. Off: identical behaviour to
+    # before — no extra routes at all.
+    "killswitch": {"enabled": False},
     "startup": {
         "start_on_login": False,
         "start_minimized": False,

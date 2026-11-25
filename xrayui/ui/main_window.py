@@ -360,6 +360,10 @@ class MainWindow(QMainWindow):
         self._test_cancel: threading.Event | None = None
         self._geo_updating = False
         self._subtitle_pix = None
+        self._subtitle_dropped = False
+        # Last known state of the tunnel process, set by _refresh_status and
+        # read by the status subtitle to flag a dropped kill-switch tunnel.
+        self._xray_running = False
 
         self.stepReceived.connect(self._on_step)
         self.testResultReceived.connect(self._on_test_result)
@@ -976,7 +980,15 @@ class MainWindow(QMainWindow):
         profile = self._connected_profile()
         plan = self._connected_chain if connected and self.conn.state.chain_uid else None
         pix = None
-        if connected and profile:
+        # Kill switch: the tunnel process died while the connection is still
+        # recorded, so the blackholes are now holding the internet. Say so in
+        # red instead of the calm "Connected" line.
+        dropped = (connected and self.conn.killswitch_active
+                   and not self._xray_running)
+        if dropped:
+            text = tr("VPN dropped: internet is blocked. Reconnect, or press "
+                      "Disconnect to restore normal internet.")
+        elif connected and profile:
             text = ltr(tr("Connected · {server}",
                           server=plan.name if plan else profile.name))
             pix = flag_pixmap(self.profiles.model.country_of(profile.uid), 16, 12)
@@ -986,6 +998,11 @@ class MainWindow(QMainWindow):
         # repaint each triggers) when nothing actually changed.
         if self.toolbar.subtitle.text() != text:
             self.toolbar.subtitle.setText(text)
+        if dropped != self._subtitle_dropped:
+            self._subtitle_dropped = dropped
+            self.toolbar.subtitle.setStyleSheet(
+                f"font-size:11px; color:{ERR if dropped else MUTED}; "
+                "background:transparent;")
         if pix is not self._subtitle_pix:
             self._subtitle_pix = pix
             self.toolbar.subtitle_flag.setVisible(pix is not None)
@@ -1898,6 +1915,7 @@ class MainWindow(QMainWindow):
         else:
             self.status_card.set_chain(None)
         running = self.conn.xray.is_running()
+        self._xray_running = running or self._orphan_running
         if running:
             self._orphan_running = False
         elif (not self._orphan_check_pending
