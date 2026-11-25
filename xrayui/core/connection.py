@@ -101,7 +101,10 @@ class Connection:
             except ValueError as exc:
                 raise ConnectError(str(exc)) from exc
             profile = plan.entry
-        if not profile.address or (not profile.id and profile.protocol not in ("http", "socks")):
+        # MASQUE authenticates with basic auth (username/password) or a WARP
+        # identity, not a VLESS-style id, so it is exempt from the id check.
+        if not profile.address or (
+                not profile.id and profile.protocol not in ("http", "socks", "masque")):
             raise ConnectError("profile is missing address or id")
         if profile.protocol == "wireguard" and not profile.pbk:
             raise ConnectError("WireGuard profile is missing the peer public key")
