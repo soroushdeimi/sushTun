@@ -204,3 +204,33 @@ def test_download_uses_proxy_and_counts_bytes(monkeypatch):
     monkeypatch.setattr("http.client.HTTPConnection", Connection)
     assert chain_test._download(1234, 'http://example.test/file', 1, threading.Event()) == 0.004
     assert connections[0].closed
+
+
+def test_download_https_uses_the_app_tls_context(monkeypatch):
+    # The frozen app ships no CA bundle: the chain test's HTTPS download must
+    # use the app's context like every other outbound HTTPS call.
+    import ssl
+    import threading
+
+    from xrayui.core import chain_test, tls
+
+    sentinel = ssl.create_default_context()
+    seen = {}
+
+    class FakeConn:
+        def __init__(self, host, port, timeout=None, context=None):
+            seen["context"] = context
+
+        def set_tunnel(self, *a):
+            raise OSError("stop here")
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(tls, "https_context", lambda: sentinel)
+    monkeypatch.setattr("http.client.HTTPSConnection", FakeConn)
+    try:
+        chain_test._download(1, "https://example.com/f", 1.0, threading.Event())
+    except OSError:
+        pass
+    assert seen["context"] is sentinel

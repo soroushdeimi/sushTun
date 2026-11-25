@@ -282,3 +282,32 @@ def test_generated_config_validates_with_real_xray(tmp_path):
         capture_output=True, text=True, timeout=10,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_warm_https_uses_the_app_tls_context(monkeypatch):
+    # A frozen build has no CA bundle of its own; the warm test must hand the
+    # app's context to HTTPSConnection or every server shows as Failed.
+    import ssl
+
+    from xrayui.core import speedtest, tls
+
+    sentinel = ssl.create_default_context()
+    seen = {}
+
+    class FakeConn:
+        def __init__(self, host, port, timeout=None, context=None):
+            seen["context"] = context
+
+        def set_tunnel(self, *a):
+            pass
+
+        def request(self, *a):
+            raise OSError("stop here")
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(tls, "https_context", lambda: sentinel)
+    monkeypatch.setattr("http.client.HTTPSConnection", FakeConn)
+    speedtest._measure_warm(1, "https://www.google.com/generate_204", 1.0)
+    assert seen["context"] is sentinel
