@@ -339,8 +339,6 @@ TRANSLATIONS_FA: dict[str, str] = {
         "پرش {hop}: ماسک فقط به‌عنوان اولین پرش (ورودی) زنجیره تأیید شده است.",
     "Hop {hop}: MASQUE H3 (QUIC) chains are not verified yet; use H2.":
         "پرش {hop}: زنجیره‌های ماسک H3 (QUIC) هنوز تأیید نشده‌اند؛ از H2 استفاده کنید.",
-    "MASQUE profile has invalid TLS or credential settings":
-        "پروفایل ماسک تنظیمات TLS یا احراز هویت نامعتبر دارد",
     "A WARP identity needs the private key, public key and addresses together.":
         "هویت WARP به کلید خصوصی، کلید عمومی و آدرس‌ها به‌صورت هم‌زمان نیاز دارد.",
     "A WARP identity and a username/password are two different auth modes; keep only one.":

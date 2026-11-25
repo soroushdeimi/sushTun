@@ -88,21 +88,21 @@ def test_masque_fields_are_ltr(qapp):
 def test_round_trip_preserves_fields(qapp):
     p = _masque_profile()
     p.masque_http_version = "h3"
-    p.masque_private_key = "priv"
-    p.masque_public_key = "pub"
-    p.masque_addresses = "162.158.74.187/32, 2606:4700::/48"
+    p.masque_private_key = "AQID"
+    p.masque_public_key = "BAUG"
+    p.masque_addresses = "162.158.74.187/32, 2606:4700::1/128"
     p.masque_remote_dns = "1.1.1.1"
     dlg = ProfileEditDialog(p)
     try:
-        assert dlg._masque.f_public_key.text() == "pub"
-        assert dlg._masque.f_addresses.text() == "162.158.74.187/32, 2606:4700::/48"
+        assert dlg._masque.f_public_key.text() == "BAUG"
+        assert dlg._masque.f_addresses.text() == "162.158.74.187/32, 2606:4700::1/128"
         dlg._masque.f_remote_dns.setText("9.9.9.9")
         dlg._save()
         assert dlg.result() == QDialog.Accepted
         r = dlg.result_profile()
         assert (r.masque_http_version, r.masque_private_key, r.masque_public_key) == (
-            "h3", "priv", "pub")
-        assert r.masque_addresses == "162.158.74.187/32, 2606:4700::/48"
+            "h3", "AQID", "BAUG")
+        assert r.masque_addresses == "162.158.74.187/32, 2606:4700::1/128"
         assert r.masque_remote_dns == "9.9.9.9"
     finally:
         dlg.close()
