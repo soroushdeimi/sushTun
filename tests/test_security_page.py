@@ -225,3 +225,38 @@ def test_page_builds_in_persian(qapp, defaults):
         assert win.windowTitle() == "تنظیمات"
     finally:
         set_language("en")
+
+
+def test_settings_window_hands_the_live_connection_to_the_page(qapp, defaults):
+    # The banner reads the live connection. Without it the page could never
+    # show an active kill switch, even when the blackholes are installed.
+    live = types.SimpleNamespace(killswitch_active=True)
+    win = SettingsWindow(copy.deepcopy(defaults), connection=live)
+    try:
+        items = {label: (text, real) for label, text, real in sp.security_summary(
+            defaults, win._pages["security"]._live_state())}
+        assert items["Kill switch"] == ("Active", True)
+    finally:
+        win.close()
+
+
+def test_banner_follows_the_connection_while_the_page_is_open(qapp, defaults):
+    live = types.SimpleNamespace(killswitch_active=False)
+    page = sp.SecurityPage(copy.deepcopy(defaults), connection=live)
+    page.show()
+    try:
+        assert page._banner_items[0][1].text() == "Off"
+        live.killswitch_active = True
+        page._banner_timer.timeout.emit()
+        assert page._banner_items[0][1].text() == "Active"
+    finally:
+        page.close()
+
+
+def test_default_ai_list_is_not_shown_as_if_the_user_typed_it(qapp, defaults):
+    page = sp.SecurityPage(copy.deepcopy(defaults))
+    try:
+        assert page.strict_domains.toPlainText() == ""
+        assert "openai.com" not in page.strict_domains.placeholderText()
+    finally:
+        page.close()

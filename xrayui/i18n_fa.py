@@ -2131,4 +2131,6 @@ TRANSLATIONS_FA: dict[str, str] = {
     "The OS firewall lockdown, the strongest layer. It is off by default because it can cut your internet if something goes wrong.":
         "قفل فایروالِ سیستم، قوی‌ترین لایه. پیش‌فرض خاموش است چون اگر چیزی خراب شود ممکن است اینترنتت را قطع کند.",
     "Expand to turn it on.": "برای روشن کردن باز کن.",
+    "Your own names, one per line": "اسم‌های خودت، هر خط یکی",
+    "Always protected (built-in AI list)": "همیشه محافظت‌شده (لیست آماده‌ی هوش مصنوعی)",
 }
