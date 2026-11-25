@@ -7,7 +7,7 @@ Loopback-only topology in an isolated temp dir:
   - a host-side SOCKS5 fixture bound to 127.0.0.1 with an EXACT allowlist
     mapping the logical documentation addresses onto loopback:
       203.0.113.10:<target_port> -> 127.0.0.1:<target_port>
-      10.0.0.20:<vless_port>     -> 127.0.0.1:<vless_port>
+      192.168.20.20:<vless_port> -> 127.0.0.1:<vless_port>
     Every other destination is rejected. The MASQUE server/exit use that
     SOCKS fixture as their outbound, so the userspace stack never dials its
     own 127 address. No TUN, no OS routes, no DNS changes, no LAN listener,
