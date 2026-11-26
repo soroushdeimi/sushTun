@@ -1,15 +1,17 @@
-"""Windows firewall backend: netsh advfirewall rules in one named group.
+"""Windows firewall backend: two outbound block rules built from complements.
 
-Windows Firewall has no "block all" profile switch to toggle, so the lockdown
-is a set of named rules in a single group: allow rules for the tunnel
-interface, the proxy server IPs, loopback, and (when allow_lan) the LAN /
-link-local / DHCP, plus one block-all outbound rule. The profile defaults are
-never changed.
+Windows Firewall has no "block all except" and its block rules always beat
+allow rules (checked on a real Windows: a block-all plus an allow rule still
+dropped the traffic). `netsh` also rejects `group=`, `priority=` and `iface=`.
+So nothing here is an allow rule. Instead the lockdown blocks everything
+*outside* what must stay reachable: the destination range is the complement of
+{proxy servers, loopback, and (allow_lan) LAN / link-local / DHCP}, and the
+source range is the complement of the tunnel's own address, so traffic that
+leaves through the tunnel is never matched. One rule per IP family.
 
-netsh evaluates rules by priority (higher first; ties by creation order), so
-the allow rules carry a high priority and the block-all rule a low one: the
-allows always win, and there is never a moment with a block and no allows.
-Everything is removed by group name, so a leftover is found and cleared.
+The profiles' default policy is never touched (a crash then cannot leave the
+machine with outbound blocked by policy). The rules are found again by name,
+so a leftover is cleared by install, remove and the stale-state recovery.
 """
 from __future__ import annotations
 
@@ -17,134 +19,95 @@ import shutil
 
 from . import proc
 from ._firewall_common import (
-    DHCP_V4,
+    DHCP_V4,  # noqa: F401  (documented: v4 DHCP goes to the broadcast address)
     LAN_V4,
     LAN_V6,
     FirewallError,
+    complement_ranges,
     split_ips,
 )
+from ._net_common import TUN_ADDRESS
 
-GROUP = "sushTun Firewall"
-# Allow rules must be evaluated before the block-all rule. netsh orders by
-# priority (lower value = higher priority = evaluated first), so the allows get
-# a low number and the block a high one; creation order is then irrelevant.
-_ALLOW_PRIORITY = 1
-_BLOCK_PRIORITY = 100
-_BLOCK_NAME = "sushTun block all outbound"
+_V4_NAME = "sushTun block outbound v4"
+_V6_NAME = "sushTun block outbound v6"
+_NAMES = (_V4_NAME, _V6_NAME)
+_DESCRIPTION = "sushTun kill-switch firewall (removed on disconnect)"
+# v4 DHCP discovers go to the limited broadcast; v6 uses link-local multicast.
+_V4_BROADCAST = "255.255.255.255/32"
+_V6_LINK_MULTICAST = "ff02::/16"
 
 
 def supported() -> bool:
     return shutil.which("netsh") is not None
 
 
-def _rule_specs(tun_alias: str, server_ips, allow_lan: bool) -> list[dict]:
-    """The allow rules, in order. Each is a netsh advfirewall rule spec."""
+def _allowed(tun_alias: str, server_ips, allow_lan: bool) -> tuple[list[str], list[str]]:
+    """The destination networks that must stay reachable: (v4, v6)."""
     v4, v6 = split_ips(server_ips)
-    specs: list[dict] = [
-        {"name": "sushTun tunnel", "remoteip": "any", "iface": tun_alias},
-    ]
-    for ip in v4 + v6:
-        specs.append({"name": f"sushTun server {ip}", "remoteip": ip})
-    specs.append({"name": "sushTun loopback", "remoteip": "localhost"})
+    a4 = [f"{ip}/32" for ip in v4] + ["127.0.0.0/8"]
+    a6 = [f"{ip}/128" for ip in v6] + ["::1/128"]
     if allow_lan:
-        specs.append({"name": "sushTun dhcp", "remoteip": "any",
-                      "proto": "UDP", "rport": str(DHCP_V4[1])})
-        for net in LAN_V4:
-            specs.append({"name": f"sushTun lan {net}", "remoteip": net})
-        specs.append({"name": "sushTun lan6", "remoteip": LAN_V6[0]})
-    return specs
+        a4 += [*LAN_V4, _V4_BROADCAST]
+        a6 += [*LAN_V6, _V6_LINK_MULTICAST]
+    return a4, a6
 
 
-def _allow_argv(spec: dict) -> list[str]:
-    args = ["netsh", "advfirewall", "firewall", "add", "rule",
-            f"name={spec['name']}",
-            "dir=out", "action=allow", "enable=yes",
-            f"remoteip={spec['remoteip']}",
-            f"group={GROUP}",
-            f"priority={_ALLOW_PRIORITY}"]
-    if spec.get("iface"):
-        args.append(f"iface={spec['iface']}")
-    if spec.get("proto"):
-        args += [f"protocol={spec['proto']}", f"remoteport={spec['rport']}"]
-    return args
+def _rule_argvs(tun_alias: str, server_ips, allow_lan: bool) -> list[list[str]]:
+    a4, a6 = _allowed(tun_alias, server_ips, allow_lan)
+    base = ["netsh", "advfirewall", "firewall", "add", "rule"]
+    common = ["dir=out", "action=block", "enable=yes", f"description={_DESCRIPTION}"]
+    return [
+        [*base, f"name={_V4_NAME}", *common,
+         "remoteip=" + ",".join(complement_ranges(a4, 4)),
+         # Not the tunnel's own source address: traffic sent through the tunnel
+         # carries it, and must never be matched.
+         "localip=" + ",".join(complement_ranges([f"{TUN_ADDRESS}/32"], 4))],
+        [*base, f"name={_V6_NAME}", *common,
+         "remoteip=" + ",".join(complement_ranges(a6, 6))],
+    ]
 
 
-def _block_argv() -> list[str]:
-    return ["netsh", "advfirewall", "firewall", "add", "rule",
-            f"name={_BLOCK_NAME}",
-            "dir=out", "action=block", "enable=yes",
-            "remoteip=any",
-            f"group={GROUP}",
-            f"priority={_BLOCK_PRIORITY}"]
+def _delete_argv(name: str) -> list[str]:
+    return ["netsh", "advfirewall", "firewall", "delete", "rule", f"name={name}"]
 
 
-def _group_rules() -> list[str]:
-    """The names of the rules currently in our group (empty if none)."""
-    r = proc.run(["netsh", "advfirewall", "firewall", "show", "rule",
-                  f"groupname={GROUP}"])
-    if r.returncode != 0:
-        return []
-    names: list[str] = []
-    for line in r.stdout.splitlines():
-        s = line.strip()
-        if s.lower().startswith("rule name:"):
-            name = s.split(":", 1)[1].strip()
-            if name:
-                names.append(name)
-    return names
-
-
-def _delete_rule(name: str) -> None:
-    proc.run(["netsh", "advfirewall", "firewall", "delete", "rule",
-              f"name={name}"])
+def _exists(name: str) -> bool:
+    r = proc.run(["netsh", "advfirewall", "firewall", "show", "rule", f"name={name}"])
+    return r.returncode == 0 and name.lower() in r.stdout.lower()
 
 
 def install(tun_alias: str, server_ips, allow_lan: bool) -> None:
     if not supported():
         raise FirewallError("netsh not found")
-    # Clear any rules a crashed previous run left in the group first.
-    for name in _group_rules():
-        _delete_rule(name)
-
-    added: list[str] = []
+    # Clear a leftover from a crashed run first, so adding never duplicates.
+    for name in _NAMES:
+        proc.run(_delete_argv(name))
     try:
-        # Allow rules first, then the block-all rule: the block is only added
-        # once every allow is in place, so there is never a block-only moment.
-        for spec in _rule_specs(tun_alias, server_ips, allow_lan):
-            r = proc.run(_allow_argv(spec))
+        for argv in _rule_argvs(tun_alias, server_ips, allow_lan):
+            r = proc.run(argv)
             if r.returncode != 0:
-                raise FirewallError(f"could not add firewall rule {spec['name']}: "
-                                    f"{r.stderr.strip()}")
-            added.append(spec["name"])
-        r = proc.run(_block_argv())
-        if r.returncode != 0:
-            raise FirewallError(f"could not add the block-all rule: {r.stderr.strip()}")
-        added.append(_BLOCK_NAME)
-
+                raise FirewallError(
+                    f"could not add firewall rule {argv[5][5:]}: "
+                    f"{(r.stdout or r.stderr).strip()}")
         if not is_active():
             raise FirewallError("firewall installed but could not be verified")
     except FirewallError:
-        # Roll back the rules added so far so a failed install never leaves a
-        # half-locked-down machine; the caller logs a WARNING and continues.
-        for name in added:
-            _delete_rule(name)
+        # Never leave half a lockdown behind; the caller logs and continues.
+        for name in _NAMES:
+            proc.run(_delete_argv(name))
         raise
 
 
 def remove() -> list[str]:
-    """Idempotent: delete every rule in the group (no-op when none)."""
+    """Idempotent: delete both rules (no-op when absent)."""
     warnings: list[str] = []
     if not supported():
         return warnings
-    for name in _group_rules():
-        r = proc.run(["netsh", "advfirewall", "firewall", "delete", "rule",
-                      f"name={name}"])
-        if r.returncode != 0:
+    for name in _NAMES:
+        if _exists(name) and proc.run(_delete_argv(name)).returncode != 0:
             warnings.append(f"could not remove firewall rule {name}")
     return warnings
 
 
 def is_active() -> bool:
-    if not supported():
-        return False
-    return _BLOCK_NAME in _group_rules()
+    return supported() and all(_exists(n) for n in _NAMES)
