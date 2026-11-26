@@ -41,7 +41,11 @@ PLIST_NAME = f"{LABEL}.plist"
 PLIST_PATH = Path("/Library/LaunchDaemons") / PLIST_NAME
 SOCK_PATH = Path("/var/run/sushtun-helper.sock")
 # launchd.plist: "Property lists don't support octal, so convert to decimal."
-SOCK_MODE = 0o660  # 408
+# The socket is root:daemon, and connecting needs write permission, so 0660
+# kept the signed-in user out entirely: ping failed with "permission denied".
+# Who may *ask* is decided by the daemon (peer uid must be the console user,
+# checked with getpeereid), not by the file mode.
+SOCK_MODE = 0o666
 
 # Where the user installed the app (the copy source) and where the daemon
 # actually runs from.
@@ -341,7 +345,7 @@ def install_commands(source_app: str = str(SOURCE_APP),
         f"chmod 0755 {parent}\n"
         # Re-copy on every install so a version change replaces the copy;
         # bootout first so bootstrap below does not fail on a live job.
-        f"/bin/launchctl bootout system {shlex.quote(LABEL)} 2>/dev/null || true\n"
+        f"/bin/launchctl bootout system/{shlex.quote(LABEL)} 2>/dev/null || true\n"
         f"rm -rf {dst}\n"
         f"cp -R {src} {dst}\n"
         f"chown -R root:wheel {dst}\n"
@@ -360,7 +364,7 @@ def install_commands(source_app: str = str(SOURCE_APP),
 def uninstall_commands() -> list[list[str]]:
     """The argv steps that remove the helper, run as root."""
     script = (
-        f"/bin/launchctl bootout system {shlex.quote(LABEL)} 2>/dev/null; "
+        f"/bin/launchctl bootout system/{shlex.quote(LABEL)} 2>/dev/null; "
         f"rm -rf {shlex.quote(str(HELPER_APP_DIR))}; "
         f"rm -f {shlex.quote(str(PLIST_PATH))} {shlex.quote(str(SOCK_PATH))}\n"
     )

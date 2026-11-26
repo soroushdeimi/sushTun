@@ -67,3 +67,18 @@ def test_activated_socket_declares_the_out_pointer_signature(monkeypatch):
         h._activated_socket()
     assert len(seen["argtypes"]) == 3           # name, int **fds, size_t *count
     assert seen["restype"] is ctypes.c_int
+
+
+def test_socket_lets_the_signed_in_user_connect():
+    # root:daemon plus 0660 refused every connect from the user. Authorisation
+    # is the daemon's peer-uid check, so the file mode must allow the connect.
+    assert h.SOCK_MODE & 0o006 == 0o006
+    assert f"<integer>{h.SOCK_MODE}</integer>" in h.plist_xml()
+
+
+def test_bootout_names_the_service_not_a_path():
+    # `bootout system <label>` treats the label as a plist path and unloads
+    # nothing, so bootstrap then failed with "Input/output error".
+    for argv in (h.install_commands()[0], h.uninstall_commands()[0]):
+        assert f"bootout system/{h.LABEL}" in argv[2]
+        assert f"bootout system {h.LABEL}" not in argv[2]

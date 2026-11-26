@@ -223,7 +223,7 @@ def test_the_plist_has_the_exact_keys():
     assert "<string>--helper</string>" in xml
     assert "SockPathName" in xml
     assert f"<string>{h.SOCK_PATH}</string>" in xml
-    assert f"<integer>{0o660}</integer>" in xml  # SockPathMode, decimal
+    assert f"<integer>{h.SOCK_MODE}</integer>" in xml  # SockPathMode, decimal
     assert f"<integer>{h.HELPER_VERSION}</integer>" in xml  # Version
 
 
@@ -280,7 +280,7 @@ def test_install_recopies_on_reinstall():
     inner = _inner_shell(h.install_commands()[0])
     assert "rm -rf " + str(h.HELPER_APP_DIR) in inner
     # bootout before bootstrap so a live job does not block the reinstall.
-    assert "launchctl bootout system " + h.LABEL in inner
+    assert "launchctl bootout system/" + h.LABEL in inner
 
 
 def test_install_does_not_inject_through_a_path_with_spaces_or_quotes():
@@ -302,7 +302,7 @@ def _inner_shell(argv: list[str]) -> str:
 
 def test_uninstall_bootouts_and_removes_copy_plist_and_socket():
     inner = _inner_shell(h.uninstall_commands()[0])
-    assert "launchctl bootout system " + h.LABEL in inner
+    assert "launchctl bootout system/" + h.LABEL in inner
     assert "rm -rf " + str(h.HELPER_APP_DIR) in inner
     assert str(h.PLIST_PATH) in inner
     assert str(h.SOCK_PATH) in inner
