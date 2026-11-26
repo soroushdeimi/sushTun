@@ -41,7 +41,11 @@ PLIST_NAME = f"{LABEL}.plist"
 PLIST_PATH = Path("/Library/LaunchDaemons") / PLIST_NAME
 SOCK_PATH = Path("/var/run/sushtun-helper.sock")
 # launchd.plist: "Property lists don't support octal, so convert to decimal."
-SOCK_MODE = 0o660  # 408
+# The socket is root:daemon, and connecting needs write permission, so 0660
+# kept the signed-in user out entirely: ping failed with "permission denied".
+# Who may *ask* is decided by the daemon (peer uid must be the console user,
+# checked with getpeereid), not by the file mode.
+SOCK_MODE = 0o666
 
 # Where the user installed the app (the copy source) and where the daemon
 # actually runs from.
@@ -307,6 +311,13 @@ def plist_xml(app_exe: str = str(HELPER_APP_EXE), version: int = HELPER_VERSION)
 
 # -- install / uninstall command construction --------------------------------
 
+def _admin_script(script: str) -> str:
+    """AppleScript that runs `script` as root. AppleScript strings are double
+    quoted with backslash escapes; a shell-quoted string is a syntax error."""
+    literal = script.replace("\\", "\\\\").replace('"', '\\"')
+    return f'do shell script "{literal}" with administrator privileges'
+
+
 def install_commands(source_app: str = str(SOURCE_APP),
                      helper_app: str = str(HELPER_APP_DIR),
                      app_exe: str = str(HELPER_APP_EXE)) -> list[list[str]]:
@@ -334,7 +345,7 @@ def install_commands(source_app: str = str(SOURCE_APP),
         f"chmod 0755 {parent}\n"
         # Re-copy on every install so a version change replaces the copy;
         # bootout first so bootstrap below does not fail on a live job.
-        f"/bin/launchctl bootout system {shlex.quote(LABEL)} 2>/dev/null || true\n"
+        f"/bin/launchctl bootout system/{shlex.quote(LABEL)} 2>/dev/null || true\n"
         f"rm -rf {dst}\n"
         f"cp -R {src} {dst}\n"
         f"chown -R root:wheel {dst}\n"
@@ -346,21 +357,19 @@ def install_commands(source_app: str = str(SOURCE_APP),
         f"/bin/launchctl bootstrap system {plist}\n"
     )
     return [
-        ["osascript", "-e",
-         f'do shell script {shlex.quote(script)} with administrator privileges'],
+        ["osascript", "-e", _admin_script(script)],
     ]
 
 
 def uninstall_commands() -> list[list[str]]:
     """The argv steps that remove the helper, run as root."""
     script = (
-        f"/bin/launchctl bootout system {shlex.quote(LABEL)} 2>/dev/null; "
+        f"/bin/launchctl bootout system/{shlex.quote(LABEL)} 2>/dev/null; "
         f"rm -rf {shlex.quote(str(HELPER_APP_DIR))}; "
         f"rm -f {shlex.quote(str(PLIST_PATH))} {shlex.quote(str(SOCK_PATH))}\n"
     )
     return [
-        ["osascript", "-e",
-         f'do shell script {shlex.quote(script)} with administrator privileges'],
+        ["osascript", "-e", _admin_script(script)],
     ]
 
 
@@ -652,13 +661,24 @@ def serve_forever(sock: socket.socket) -> None:
 
 
 def _activated_socket() -> socket.socket:
-    """The listening socket launchd created, via launch_activate_socket(3)."""
-    libsystem = ctypes.CDLL("libsystem_launchd.dylib")
-    libsystem.launch_activate_socket.argtypes = [ctypes.c_char_p]
-    libsystem.launch_activate_socket.restype = ctypes.c_int
-    fd = libsystem.launch_activate_socket(b"Listener")
-    if fd < 0:
-        raise OSError("launch_activate_socket failed")
+    """The listening socket launchd created, via launch_activate_socket(3).
+
+    The call lives in libSystem (there is no libsystem_launchd.dylib to open by
+    name) and takes an out-pointer for the descriptors, returning 0 or an
+    errno; it does not return a descriptor itself.
+    """
+    libsystem = ctypes.CDLL("/usr/lib/libSystem.B.dylib")
+    activate = libsystem.launch_activate_socket
+    activate.argtypes = [ctypes.c_char_p, ctypes.POINTER(ctypes.POINTER(ctypes.c_int)),
+                         ctypes.POINTER(ctypes.c_size_t)]
+    activate.restype = ctypes.c_int
+    fds = ctypes.POINTER(ctypes.c_int)()
+    count = ctypes.c_size_t()
+    rc = activate(b"Listener", ctypes.byref(fds), ctypes.byref(count))
+    if rc != 0 or count.value < 1:
+        raise OSError(rc, "launch_activate_socket failed")
+    fd = fds[0]
+    libsystem.free(fds)
     return socket.fromfd(fd, socket.AF_UNIX, socket.SOCK_STREAM)
 
 
