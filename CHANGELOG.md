@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.14.5
+
+### Fixed
+- **"Install helper" never worked, so sushTun still asked for your password on every launch.** Found by installing it on a real Mac, where four separate faults showed up one after another:
+  - the install script was built with the wrong kind of quoting for AppleScript, so the password prompt never appeared;
+  - the background helper opened a system library that does not exist and called the socket API wrongly, so it exited at once;
+  - its socket was closed to the signed-in user, so even a running helper could not be reached;
+  - reinstalling did not unload the old helper, so it failed with "Input/output error".
+  After this, the helper installs, stays running and answers. Update, press Install helper once (one password), then quit and reopen sushTun.
+
+### Notes
+- Verified on one Mac: install, the helper staying alive, a version ping, and a launch request being accepted. Not yet verified: a cold start after quitting the app. If it still asks for the password, send the message you see.
+- Updating sushTun means pressing Install helper again (one password).
+
+<!-- fa -->
+
+### چی درست شده
+- **«Install helper» هیچ‌وقت کار نمی‌کرد و برای همین sushTun هنوز هر بار پسورد می‌خواست.** با نصب روی یه مک واقعی چهار مشکل جدا یکی‌یکی پیدا شد:
+  - اسکریپت نصب با quoting اشتباه برای AppleScript ساخته شده بود و پنجره‌ی پسورد اصلاً باز نمی‌شد؛
+  - هلپر پس‌زمینه یه کتابخانه‌ی سیستمی رو که وجود نداره باز می‌کرد و API سوکت رو اشتباه صدا می‌زد، پس همون لحظه می‌مرد؛
+  - سوکتش به روی کاربر واردشده بسته بود، پس حتی هلپر در حال اجرا هم قابل دسترس نبود؛
+  - نصب دوباره، هلپر قبلی رو خاموش نمی‌کرد و با «Input/output error» شکست می‌خورد.
+  بعد از این، هلپر نصب می‌شه، زنده می‌مونه و جواب می‌ده. آپدیت کن، یه بار «Install helper» رو بزن (یه پسورد)، بعد برنامه رو ببند و دوباره باز کن.
+
+### نکته‌ها
+- روی یه مک تست شده: نصب، زنده موندن هلپر، پینگ نسخه و پذیرفته شدن درخواست اجرا. هنوز تست نشده: شروع سرد بعد از بستن برنامه. اگه هنوز پسورد خواست، پیامی که می‌بینی رو بفرست.
+- با هر آپدیت sushTun باید دوباره «Install helper» رو بزنی (یه پسورد).
+
 ## v0.14.4
 
 ### Fixed
