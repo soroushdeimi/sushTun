@@ -61,7 +61,9 @@ def build_nft(tun_alias: str, server_ips, allow_lan: bool) -> str:
     lines.append('\t\toifname "lo" accept')
     if allow_lan:
         lines.append(f"\t\tudp dport {DHCP_V4[1]} accept")
-        lines.append(f"\t\tudp6 dport {DHCP_V6[1]} accept")
+        # `udp6` is not an nft keyword (syntax error on load); in the inet
+        # family `udp dport` matches both, so pin the family explicitly.
+        lines.append(f"\t\tmeta nfproto ipv6 udp dport {DHCP_V6[1]} accept")
         lines.append("\t\tip daddr { " + ", ".join(LAN_V4) + " } accept")
         lines.append(f"\t\tip6 daddr {LAN_V6[0]} accept")
     lines.append("\t\tdrop")

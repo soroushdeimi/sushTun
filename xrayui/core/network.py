@@ -24,26 +24,24 @@ DEFAULT_SPLIT = (("0.0.0.0", "128.0.0.0"), ("128.0.0.0", "128.0.0.0"))
 # gone. It is still a /1, so it outranks the physical /0 default by
 # longest-prefix match — nothing leaks.
 KILLSWITCH_METRIC = 1000
-# The blackhole's next hop. 127.0.0.1 (loopback) rather than the canonical
-# 0.0.0.0: the tunnel route already uses next-hop 0.0.0.0, so a 0.0.0.0
-# blackhole would be indistinguishable from it on `route delete` and a
-# teardown could take the tunnel route down instead. A loopback next hop is
-# unique, so removal is unambiguous, and a packet handed to the loopback
-# interface for a non-local destination is dropped there. NOT VERIFIED live:
-# this is the sanctioned "loopback next hop" form, reasoned from the existing
-# tunnel-route argv, not run against a real Windows route table. If Windows
-# refuses it, add_killswitch_routes raises and the connect continues without
-# the kill switch (logged, and reported as not active) — never broken.
-KILLSWITCH_GATEWAY = "127.0.0.1"
+# The blackhole is a route on the loopback interface (index 1, "Loopback
+# Pseudo-Interface 1") with next hop 0.0.0.0. Checked live on Windows: a
+# route whose gateway is 127.0.0.1 is refused ("The parameter is incorrect"),
+# while this form is accepted, wins only once the tunnel's metric-1 route is
+# gone, and really drops the traffic (a connection to a covered address timed
+# out instead of connecting). The tunnel route shares the 0.0.0.0 next hop but
+# sits on the tunnel's interface, so every delete names `if 1` and can never
+# take the tunnel route down.
+KILLSWITCH_GATEWAY = "0.0.0.0"
+KILLSWITCH_IF = "1"
 # The tunnel is IPv4-only, so IPv6 is never routed into it and would leave in
 # the clear while connected. The kill switch blackholes IPv6 too: one /1 per
-# half of the IPv6 space, to the loopback next hop, at the same worse metric.
-# Unconditional (no tunnel v6 route exists to beat them), installed and removed
-# with the v4 ones. Windows `route -6` writes the destination as
-# address/prefixlen (no separate mask) and the gateway after it:
-#   route -6 add ::/1 ::1 metric 1000
+# half of the IPv6 space, on the same loopback interface at the same worse
+# metric. `route -6` writes the destination as address/prefixlen and, like the
+# IPv4 form, refuses ::1 as a gateway; `::` with `if 1` is accepted:
+#   route -6 add ::/1 :: if 1 metric 1000
 KILLSWITCH_V6_SPLIT = ("::/1", "8000::/1")
-KILLSWITCH_V6_GATEWAY = "::1"
+KILLSWITCH_V6_GATEWAY = "::"
 
 _DETECT_PS = """
 $candidate = $null
@@ -294,9 +292,10 @@ def _add_killswitch_v6() -> bool:
     from the v4 form, not run against a real Windows route table.
     """
     for dest in KILLSWITCH_V6_SPLIT:
-        _run_best_effort(["route", "-6", "delete", dest, KILLSWITCH_V6_GATEWAY])
+        _run_best_effort(["route", "-6", "delete", dest, KILLSWITCH_V6_GATEWAY,
+                          "if", KILLSWITCH_IF])
         result = proc.run(["route", "-6", "add", dest, KILLSWITCH_V6_GATEWAY,
-                           "metric", str(KILLSWITCH_METRIC)])
+                           "if", KILLSWITCH_IF, "metric", str(KILLSWITCH_METRIC)])
         if result.returncode != 0:
             logger.debug("kill switch IPv6 route %s not installed: %s",
                          dest, result.stderr.strip())
@@ -322,9 +321,10 @@ def add_killswitch_routes() -> None:
     tunnel-route form, not run against a real Windows route table.
     """
     for dest, mask in DEFAULT_SPLIT:
-        _run_best_effort(["route", "delete", dest, "mask", mask, KILLSWITCH_GATEWAY])
+        _run_best_effort(["route", "delete", dest, "mask", mask, KILLSWITCH_GATEWAY,
+                          "if", KILLSWITCH_IF])
         result = proc.run(["route", "add", dest, "mask", mask, KILLSWITCH_GATEWAY,
-                           "metric", str(KILLSWITCH_METRIC)])
+                           "if", KILLSWITCH_IF, "metric", str(KILLSWITCH_METRIC)])
         if result.returncode != 0:
             raise RuntimeError(f"kill switch route {dest} failed: "
                                f"{result.stderr.strip()}")
@@ -337,10 +337,10 @@ def remove_killswitch_routes() -> None:
     fine. Matched on the loopback gateway, so the tunnel route (next hop
     0.0.0.0) is never touched.
     """
-    cmds = [["route", "delete", dest, "mask", mask, KILLSWITCH_GATEWAY]
-            for dest, mask in DEFAULT_SPLIT]
-    cmds += [["route", "-6", "delete", dest, KILLSWITCH_V6_GATEWAY]
-             for dest in KILLSWITCH_V6_SPLIT]
+    cmds = [["route", "delete", dest, "mask", mask, KILLSWITCH_GATEWAY,
+             "if", KILLSWITCH_IF] for dest, mask in DEFAULT_SPLIT]
+    cmds += [["route", "-6", "delete", dest, KILLSWITCH_V6_GATEWAY,
+              "if", KILLSWITCH_IF] for dest in KILLSWITCH_V6_SPLIT]
     with ThreadPoolExecutor(max_workers=4) as pool:
         list(pool.map(_run_best_effort, cmds))
 
@@ -356,9 +356,10 @@ def remove_routes(server_ip: str | None = None) -> None:
         cmds.append(["route", "delete", dest, "mask", mask, "0.0.0.0"])
         # The blackhole, matched on its loopback gateway so the tunnel route
         # (next hop 0.0.0.0) is never taken down by mistake.
-        cmds.append(["route", "delete", dest, "mask", mask, KILLSWITCH_GATEWAY])
-    cmds += [["route", "-6", "delete", dest, KILLSWITCH_V6_GATEWAY]
-             for dest in KILLSWITCH_V6_SPLIT]
+        cmds.append(["route", "delete", dest, "mask", mask, KILLSWITCH_GATEWAY,
+                     "if", KILLSWITCH_IF])
+    cmds += [["route", "-6", "delete", dest, KILLSWITCH_V6_GATEWAY,
+              "if", KILLSWITCH_IF] for dest in KILLSWITCH_V6_SPLIT]
     if server_ip:
         cmds.append(["route", "delete", server_ip, "mask", "255.255.255.255"])
     with ThreadPoolExecutor(max_workers=4) as pool:
@@ -370,13 +371,13 @@ def ipv6_blocked() -> bool:
     table, so the UI / a leak check can tell whether v6 is covered.
 
     Pure inspection: it reads the route table and changes nothing. True only
-    when both halves of the IPv6 space are blackholed (next hop ::1).
+    when both halves of the IPv6 space are blackholed (loopback interface).
     """
     for prefix in KILLSWITCH_V6_SPLIT:
         script = (
             f"(Get-NetRoute -AddressFamily IPv6 -DestinationPrefix '{prefix}' "
             f"-ErrorAction SilentlyContinue | "
-            f"Where-Object {{ $_.NextHop -eq '{KILLSWITCH_V6_GATEWAY}' }}).Count"
+            f"Where-Object {{ $_.InterfaceIndex -eq {KILLSWITCH_IF} }}).Count"
         )
         lines = proc.ps_lines(script)
         if not lines or not lines[0].isdigit() or int(lines[0]) < 1:

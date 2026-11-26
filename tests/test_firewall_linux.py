@@ -43,7 +43,7 @@ def test_nft_script_allows_then_drops():
     assert "ip6 daddr 2001:db8::1 accept" in script
     assert 'oifname "lo" accept' in script
     assert "udp dport 67 accept" in script
-    assert "udp6 dport 546 accept" in script
+    assert "meta nfproto ipv6 udp dport 546 accept" in script
     assert "ip daddr { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16 } accept" in script
     assert "ip6 daddr fe80::/10 accept" in script
     assert script.rstrip().endswith("}")

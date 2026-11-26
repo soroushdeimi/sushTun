@@ -113,3 +113,42 @@ def load_state() -> dict | None:
 
 def clear_state() -> None:
     _state_path().unlink(missing_ok=True)
+
+
+def complement_ranges(networks, version: int) -> list[str]:
+    """Everything in the IPv`version` address space that is NOT in `networks`,
+    as the minimal list of `first-last` ranges (a lone address stays bare).
+
+    Windows Firewall cannot express "block everything except"; its block
+    rules always beat allow rules. So the lockdown blocks the complement of
+    what must stay reachable instead.
+    """
+    top = (1 << (32 if version == 4 else 128)) - 1
+    spans = sorted(
+        (int(n.network_address), int(n.broadcast_address))
+        for n in (ipaddress.ip_network(str(x), strict=False) for x in networks)
+        if n.version == version
+    )
+    merged: list[list[int]] = []
+    for lo, hi in spans:
+        if merged and lo <= merged[-1][1] + 1:
+            merged[-1][1] = max(merged[-1][1], hi)
+        else:
+            merged.append([lo, hi])
+    out: list[str] = []
+    start = 0
+    for lo, hi in merged:
+        if lo > start:
+            out.append(_fmt_span(start, lo - 1, version))
+        start = hi + 1
+    if start <= top:
+        out.append(_fmt_span(start, top, version))
+    return out
+
+
+def _fmt_span(lo: int, hi: int, version: int) -> str:
+    a = ipaddress.ip_address(lo) if version == 4 else ipaddress.IPv6Address(lo)
+    if lo == hi:
+        return str(a)
+    b = ipaddress.ip_address(hi) if version == 4 else ipaddress.IPv6Address(hi)
+    return f"{a}-{b}"

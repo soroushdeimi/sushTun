@@ -1,49 +1,48 @@
-"""Windows firewall backend: netsh argv, group tagging, allow-before-block
-ordering, rollback, and idempotency. The real netsh cannot be run here, so a
-recording fake captures every argv and simulates the group's rule list.
+"""Windows firewall backend. Windows Firewall cannot express "block all except"
+(block rules beat allow rules; `netsh` rejects group=, priority= and iface=,
+checked on a real Windows), so the backend installs two block rules over the
+complement of what must stay reachable. These tests pin the rule contents, the
+rollback and the idempotency with a fake netsh.
 """
 from __future__ import annotations
 
+import ipaddress
 from types import SimpleNamespace
 
 import pytest
 
 from xrayui.core import _firewall_windows as win
-from xrayui.core._firewall_common import FirewallError
+from xrayui.core._firewall_common import FirewallError, complement_ranges
 
 NS = SimpleNamespace
 
 
 class FakeNetsh:
-    """Simulates netsh advfirewall: a group of named rules."""
-
     def __init__(self):
-        self.rules: dict[str, dict] = {}  # name -> spec
+        self.rules: dict[str, dict] = {}
         self.calls: list[list[str]] = []
-        self.fail_add = None  # a rule name whose add should fail
+        self.fail_add = None
 
     @staticmethod
     def _spec(args) -> dict:
-        # After "netsh advfirewall firewall <verb> rule" the rest is key=value.
         return dict(t.split("=", 1) for t in args[5:] if "=" in t)
 
     def run(self, args, **_k):
         self.calls.append(list(args))
-        if args[0] != "netsh":
-            return NS(returncode=0, stdout="", stderr="")
-        if "show" in args:
-            names = "\n".join(f"Rule Name: {n}" for n in self.rules)
-            return NS(returncode=0, stdout=names, stderr="")
         spec = self._spec(args)
+        name = spec.get("name")
+        if "show" in args:
+            if name in self.rules:
+                return NS(returncode=0, stdout=f"Rule Name: {name}\n", stderr="")
+            return NS(returncode=1, stdout="No rules match the specified criteria.", stderr="")
         if "add" in args:
-            name = spec.get("name")
             if self.fail_add == name:
-                return NS(returncode=1, stdout="", stderr="forced")
+                return NS(returncode=1, stdout="The parameter is incorrect.", stderr="")
             self.rules[name] = spec
-            return NS(returncode=0, stdout="", stderr="")
+            return NS(returncode=0, stdout="Ok.", stderr="")
         if "delete" in args:
-            self.rules.pop(spec.get("name"), None)
-            return NS(returncode=0, stdout="", stderr="")
+            found = self.rules.pop(name, None) is not None
+            return NS(returncode=0 if found else 1, stdout="", stderr="")
         return NS(returncode=0, stdout="", stderr="")
 
 
@@ -55,99 +54,127 @@ def fake(monkeypatch):
     return netsh
 
 
-# -- rule specs --------------------------------------------------------------
-def test_rule_specs_cover_tunnel_servers_loopback():
-    specs = win._rule_specs("xray0", ["1.2.3.4", "2001:db8::1"], allow_lan=False)
-    names = [s["name"] for s in specs]
-    assert names[0] == "sushTun tunnel"
-    assert "sushTun server 1.2.3.4" in names
-    assert "sushTun server 2001:db8::1" in names
-    assert "sushTun loopback" in names
-    # No LAN rules when allow_lan is off.
-    assert not any("lan" in n for n in names)
+def _covers(ranges: list[str], ip: str) -> bool:
+    addr = ipaddress.ip_address(ip)
+    for r in ranges:
+        lo, _, hi = r.partition("-")
+        if ipaddress.ip_address(lo) <= addr <= ipaddress.ip_address(hi or lo):
+            return True
+    return False
 
 
-def test_rule_specs_add_lan_and_dhcp_when_allowed():
-    specs = win._rule_specs("xray0", ["1.2.3.4"], allow_lan=True)
-    names = [s["name"] for s in specs]
-    assert "sushTun dhcp" in names
-    assert "sushTun lan 10.0.0.0/8" in names
-    assert "sushTun lan 192.168.0.0/16" in names
-    assert "sushTun lan6" in names
+# -- complement_ranges -------------------------------------------------------
+def test_complement_of_nothing_is_the_whole_space():
+    assert complement_ranges([], 4) == ["0.0.0.0-255.255.255.255"]
+    assert complement_ranges([], 6) == ["::-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff"]
 
 
-def test_allow_argv_carries_group_and_priority():
-    argv = win._allow_argv({"name": "sushTun tunnel", "remoteip": "any",
-                            "iface": "xray0"})
-    assert f"group={win.GROUP}" in argv
-    assert f"priority={win._ALLOW_PRIORITY}" in argv
-    assert "action=allow" in argv
-    assert "iface=xray0" in argv
+def test_complement_excludes_exactly_the_given_networks():
+    r = complement_ranges(["10.0.0.0/8", "1.2.3.4/32"], 4)
+    assert not _covers(r, "10.1.2.3") and not _covers(r, "1.2.3.4")
+    for ip in ("1.2.3.3", "1.2.3.5", "9.255.255.255", "11.0.0.0", "0.0.0.0",
+               "255.255.255.255"):
+        assert _covers(r, ip), ip
 
 
-def test_block_argv_has_lower_priority_than_allows():
-    # netsh: lower value = evaluated first, so the block must have a HIGHER
-    # number than the allows for the allows to win.
-    argv = win._block_argv()
-    assert "action=block" in argv
-    assert f"priority={win._BLOCK_PRIORITY}" in argv
-    assert win._BLOCK_PRIORITY > win._ALLOW_PRIORITY
+def test_complement_merges_overlapping_and_adjacent_networks():
+    # 10/8 contains 10.1/16; 192.168.0.0/17 and 192.168.128.0/17 are adjacent.
+    r = complement_ranges(["10.0.0.0/8", "10.1.0.0/16", "192.168.0.0/17",
+                           "192.168.128.0/17"], 4)
+    assert len(r) == 3
+    assert not _covers(r, "192.168.200.1") and _covers(r, "192.169.0.0")
+
+
+def test_complement_ignores_the_other_family():
+    assert complement_ranges(["2001:db8::/32"], 4) == ["0.0.0.0-255.255.255.255"]
+
+
+# -- rules -------------------------------------------------------------------
+def _rules(allow_lan, ips=("1.2.3.4", "2001:db8::1")):
+    v4, v6 = win._rule_argvs("xray0", list(ips), allow_lan)
+    return (dict(t.split("=", 1) for t in v4[5:] if "=" in t),
+            dict(t.split("=", 1) for t in v6[5:] if "=" in t))
+
+
+def test_rules_only_use_arguments_netsh_accepts():
+    for argv in win._rule_argvs("xray0", ["1.2.3.4"], True):
+        keys = {t.split("=", 1)[0] for t in argv[5:] if "=" in t}
+        assert keys <= {"name", "dir", "action", "enable", "description",
+                        "remoteip", "localip"}
+        assert "action=block" in argv and "dir=out" in argv
+
+
+def test_v4_rule_leaves_server_and_loopback_reachable_and_blocks_the_rest():
+    v4, _ = _rules(allow_lan=False)
+    remote = v4["remoteip"].split(",")
+    assert not _covers(remote, "1.2.3.4") and not _covers(remote, "127.0.0.1")
+    assert _covers(remote, "8.8.8.8") and _covers(remote, "192.168.1.1")
+
+
+def test_allow_lan_keeps_lan_link_local_and_dhcp_broadcast_reachable():
+    v4, v6 = _rules(allow_lan=True)
+    remote = v4["remoteip"].split(",")
+    for ip in ("10.93.0.3", "172.16.5.5", "192.168.1.1", "169.254.1.1",
+               "255.255.255.255"):
+        assert not _covers(remote, ip), ip
+    assert _covers(remote, "8.8.8.8")
+    assert not _covers(v6["remoteip"].split(","), "fe80::1")
+
+
+def test_v4_rule_never_matches_the_tunnels_own_source_address():
+    v4, _ = _rules(allow_lan=False)
+    local = v4["localip"].split(",")
+    assert not _covers(local, win.TUN_ADDRESS)
+    assert _covers(local, "192.168.1.143")
+
+
+def test_v6_rule_keeps_server_and_loopback_and_blocks_other_v6():
+    _, v6 = _rules(allow_lan=False)
+    remote = v6["remoteip"].split(",")
+    assert not _covers(remote, "2001:db8::1") and not _covers(remote, "::1")
+    assert _covers(remote, "2606:4700:4700::1111")
+    assert "localip" not in v6
 
 
 # -- install -----------------------------------------------------------------
-def test_install_adds_allows_then_block(fake):
+def test_install_adds_both_rules_and_is_active(fake):
     win.install("xray0", ["1.2.3.4"], allow_lan=True)
-    # Every allow is present, and the block-all rule is present.
-    assert win._BLOCK_NAME in fake.rules
-    assert "sushTun tunnel" in fake.rules
-    assert "sushTun server 1.2.3.4" in fake.rules
-    # The block rule was added after every allow rule.
-    add_order = [c[5].split("=", 1)[1] for c in fake.calls
-                 if "add" in c and c[5].startswith("name=")]
-    block_idx = add_order.index(win._BLOCK_NAME)
-    assert block_idx == len(add_order) - 1
+    assert set(fake.rules) == {win._V4_NAME, win._V6_NAME}
+    assert win.is_active() is True
 
 
-def test_install_clears_leftover_group_rules_first(fake):
-    fake.rules["sushTun stale"] = {"name": "sushTun stale"}
+def test_install_never_touches_the_profile_policy(fake):
+    win.install("xray0", ["1.2.3.4"], allow_lan=True)
+    assert not any("set" in c and "allprofiles" in c for c in fake.calls)
+
+
+def test_install_clears_a_leftover_first(fake):
+    fake.rules[win._V4_NAME] = {"name": win._V4_NAME, "remoteip": "stale"}
     win.install("xray0", ["1.2.3.4"], allow_lan=False)
-    assert "sushTun stale" not in fake.rules
-    assert win._BLOCK_NAME in fake.rules
+    assert fake.rules[win._V4_NAME]["remoteip"] != "stale"
 
 
-def test_install_rolls_back_when_block_fails(fake):
-    fake.fail_add = win._BLOCK_NAME
-    with pytest.raises(FirewallError, match="block-all"):
+def test_install_rolls_back_when_a_rule_is_refused(fake):
+    fake.fail_add = win._V6_NAME
+    with pytest.raises(FirewallError, match="could not add firewall rule"):
         win.install("xray0", ["1.2.3.4"], allow_lan=False)
-    # The allow rules added before the failure were rolled back.
     assert fake.rules == {}
 
 
-def test_install_rolls_back_when_an_allow_fails(fake):
-    fake.fail_add = "sushTun server 1.2.3.4"
-    with pytest.raises(FirewallError, match="server 1.2.3.4"):
-        win.install("xray0", ["1.2.3.4"], allow_lan=False)
-    # The tunnel rule added before the failure was rolled back.
-    assert fake.rules == {}
-
-
-# -- remove ------------------------------------------------------------------
-def test_remove_deletes_every_rule_in_group(fake):
+# -- remove / is_active ------------------------------------------------------
+def test_remove_deletes_both_rules(fake):
     win.install("xray0", ["1.2.3.4"], allow_lan=True)
-    assert fake.rules
     assert win.remove() == []
     assert fake.rules == {}
+    assert win.is_active() is False
 
 
 def test_remove_is_idempotent_when_empty(fake):
     assert win.remove() == []
-    assert fake.rules == {}
 
 
-# -- is_active ---------------------------------------------------------------
-def test_is_active_requires_the_block_rule(fake):
+def test_is_active_needs_both_rules(fake):
     assert win.is_active() is False
     win.install("xray0", ["1.2.3.4"], allow_lan=False)
-    assert win.is_active() is True
-    win.remove()
+    del fake.rules[win._V6_NAME]
     assert win.is_active() is False
