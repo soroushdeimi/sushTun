@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.14.6
+
+### Fixed
+- **The macOS kill switch was never installed.** The command that adds the blocking routes (`route add ... -blackhole`) is rejected by macOS with "Invalid argument" unless it names a gateway, so turning the kill switch on did nothing and the app quietly carried on without it. It now names the loopback gateway. Checked on a real Mac with the app's own code: the blocking routes go in, normal traffic still uses the tunnel, they come out cleanly on removal, and nothing is left behind.
+
+### Notes
+- Verified on one Mac: the IPv4 routes, and that a route to the tunnel wins over the blocking route while a lookup falls to the blocking route once the tunnel route is gone (tested on documentation addresses, not your real traffic). Not verified: the IPv6 half on this Mac (it has no IPv6), the OS firewall, and the same kill switch on Linux and Windows.
+
+<!-- fa -->
+
+### چی درست شده
+- **کیل‌سوییچ مک هیچ‌وقت نصب نمی‌شد.** دستوری که مسیرهای بلاک رو اضافه می‌کنه (`route add ... -blackhole`) رو macOS با «Invalid argument» رد می‌کنه مگه اینکه یه gateway بهش بدی. برای همین روشن کردن کیل‌سوییچ هیچ کاری نمی‌کرد و برنامه بی‌صدا بدون اون ادامه می‌داد. حالا gateway لوپ‌بک رو می‌ده. روی یه مک واقعی با خود کد برنامه تست شد: مسیرهای بلاک نصب می‌شن، ترافیک عادی هنوز از تونل می‌ره، موقع برداشتن تمیز پاک می‌شن و چیزی باقی نمی‌مونه.
+
+### نکته‌ها
+- روی یه مک تست شده: مسیرهای IPv4، و اینکه مسیر تونل از مسیر بلاک جلوتره و وقتی مسیر تونل نباشه، ترافیک به مسیر بلاک می‌افته (روی آدرس‌های مستندات تست شد، نه ترافیک واقعی تو). تست نشده: نیمه‌ی IPv6 روی این مک (IPv6 نداره)، فایروال سیستم و همین کیل‌سوییچ روی لینوکس و ویندوز.
+
 ## v0.14.5
 
 ### Fixed

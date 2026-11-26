@@ -645,10 +645,9 @@ def _add_killswitch_v6() -> bool:
     """
     if IS_MAC:
         for dest in KILLSWITCH_V6_SPLIT:
-            _run_best_effort(["route", "-n", "delete", "-inet6", "-net", dest,
-                              "-blackhole"])
+            _run_best_effort(["route", "-n", "delete", "-inet6", "-net", dest])
             result = proc.run(["route", "-n", "add", "-inet6", "-net", dest,
-                               "-blackhole"])
+                               "::1", "-blackhole"])
             if result.returncode != 0:
                 logger.debug("kill switch IPv6 route %s not installed: %s",
                              dest, result.stderr.strip())
@@ -677,12 +676,16 @@ def add_killswitch_routes() -> None:
     skips it.
     """
     if IS_MAC:
-        # -blackhole is a route type (RTF_BLACKHOLE): it needs no gateway, and
-        # the kernel silently drops matching packets. A /1 is less specific
-        # than the tunnel's /2s, so it only wins once those are gone.
+        # -blackhole marks the route so the kernel silently drops matching
+        # packets, but macOS refuses it without a gateway ("Invalid argument");
+        # loopback is the conventional one. Checked live on macOS: with a
+        # more specific route to the tunnel the lookup uses the tunnel, and
+        # once that route is gone it falls to the blackhole. A /1 is less
+        # specific than the tunnel's /2s, so it only wins once those are gone.
         for dest in KILLSWITCH_SPLIT:
-            _run_best_effort(["route", "-n", "delete", "-net", dest, "-blackhole"])
-            result = proc.run(["route", "-n", "add", "-net", dest, "-blackhole"])
+            _run_best_effort(["route", "-n", "delete", "-net", dest])
+            result = proc.run(["route", "-n", "add", "-net", dest, "127.0.0.1",
+                               "-blackhole"])
             if result.returncode != 0:
                 raise RuntimeError(f"kill switch route {dest} failed: "
                                    f"{result.stderr.strip()}")
@@ -702,9 +705,9 @@ def remove_killswitch_routes() -> None:
     teardown delete: a route whose owner is already gone fails, and that is
     fine."""
     if IS_MAC:
-        cmds = [["route", "-n", "delete", "-net", dest, "-blackhole"]
+        cmds = [["route", "-n", "delete", "-net", dest]
                 for dest in KILLSWITCH_SPLIT]
-        cmds += [["route", "-n", "delete", "-inet6", "-net", dest, "-blackhole"]
+        cmds += [["route", "-n", "delete", "-inet6", "-net", dest]
                  for dest in KILLSWITCH_V6_SPLIT]
     else:
         cmds = [["ip", "route", "del", dest, "blackhole"]
@@ -751,9 +754,9 @@ def remove_routes(server_ip: str | None = None) -> None:
         for dest in (*MAC_SPLIT, *_MAC_OLD_SPLIT):
             for native in (True, False):
                 cmds.append(["route", "-n", "delete", "-net", dest, *_mac_via(native)])
-        cmds.extend(["route", "-n", "delete", "-net", dest, "-blackhole"]
+        cmds.extend(["route", "-n", "delete", "-net", dest]
                     for dest in KILLSWITCH_SPLIT)
-        cmds.extend(["route", "-n", "delete", "-inet6", "-net", dest, "-blackhole"]
+        cmds.extend(["route", "-n", "delete", "-inet6", "-net", dest]
                     for dest in KILLSWITCH_V6_SPLIT)
         if server_ip:
             cmds.append(["route", "-n", "delete", "-host", server_ip])
