@@ -654,8 +654,8 @@ def _add_killswitch_v6() -> bool:
                 return False
         return True
     for dest in KILLSWITCH_V6_SPLIT:
-        _run_best_effort(["ip", "-6", "route", "del", dest, "blackhole"])
-        result = proc.run(["ip", "-6", "route", "add", dest, "blackhole",
+        _run_best_effort(["ip", "-6", "route", "del", "blackhole", dest])
+        result = proc.run(["ip", "-6", "route", "add", "blackhole", dest,
                            "metric", str(KILLSWITCH_METRIC)])
         if result.returncode != 0:
             logger.debug("kill switch IPv6 route %s not installed: %s",
@@ -692,11 +692,13 @@ def add_killswitch_routes() -> None:
         _add_killswitch_v6()
         return
     for dest in KILLSWITCH_SPLIT:
-        # Same prefix as the tunnel's /1 routes, but a worse metric: while the
+        # The route type comes first: `ip route add <dest> blackhole` is
+        # rejected ('"to" is duplicate, or "metric" is garbage'), checked on
+        # Ubuntu 26.04 iproute2. Same prefix as the tunnel's /1 routes, but a worse metric: while the
         # tunnel route (metric 0) is present it wins, and the blackhole takes
         # over the instant it disappears.
-        _run_best_effort(["ip", "route", "del", dest, "blackhole"])
-        _ip_route("route", "add", dest, "blackhole", "metric", str(KILLSWITCH_METRIC))
+        _run_best_effort(["ip", "route", "del", "blackhole", dest])
+        _ip_route("route", "add", "blackhole", dest, "metric", str(KILLSWITCH_METRIC))
     _add_killswitch_v6()
 
 
@@ -710,9 +712,9 @@ def remove_killswitch_routes() -> None:
         cmds += [["route", "-n", "delete", "-inet6", "-net", dest]
                  for dest in KILLSWITCH_V6_SPLIT]
     else:
-        cmds = [["ip", "route", "del", dest, "blackhole"]
+        cmds = [["ip", "route", "del", "blackhole", dest]
                 for dest in KILLSWITCH_SPLIT]
-        cmds += [["ip", "-6", "route", "del", dest, "blackhole"]
+        cmds += [["ip", "-6", "route", "del", "blackhole", dest]
                  for dest in KILLSWITCH_V6_SPLIT]
     with ThreadPoolExecutor(max_workers=4) as pool:
         list(pool.map(_run_best_effort, cmds))
@@ -764,9 +766,9 @@ def remove_routes(server_ip: str | None = None) -> None:
         cmds.append(["ip", "route", "del", "default", "dev", TUN_NAME])
         for dest in ("0.0.0.0/1", "128.0.0.0/1"):
             cmds.append(["ip", "route", "del", dest, "dev", TUN_NAME])
-        cmds.extend(["ip", "route", "del", dest, "blackhole"]
+        cmds.extend(["ip", "route", "del", "blackhole", dest]
                     for dest in KILLSWITCH_SPLIT)
-        cmds.extend(["ip", "-6", "route", "del", dest, "blackhole"]
+        cmds.extend(["ip", "-6", "route", "del", "blackhole", dest]
                     for dest in KILLSWITCH_V6_SPLIT)
         if server_ip:
             cmds.append(["ip", "route", "del", server_ip])

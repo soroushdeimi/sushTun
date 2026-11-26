@@ -3,20 +3,24 @@
 ## v0.14.6
 
 ### Fixed
-- **The kill switch was never installed on macOS or on Windows.** The commands that add the blocking routes were rejected by both systems (macOS: `route add ... -blackhole` with no gateway is "Invalid argument"; Windows: a route with gateway `127.0.0.1` or `::1` is "The parameter is incorrect"), so turning the kill switch on did nothing and the app quietly carried on without it. macOS now names the loopback gateway; Windows uses the loopback interface. Both were checked on real machines with the app's own commands: the blocking route goes in, traffic to a covered address really is dropped, a route to the tunnel still wins over it, removal deletes only the blocking route, and nothing is left behind.
+- **The kill switch was never installed on macOS, Windows or Linux.** The commands that add the blocking routes were rejected by both systems (macOS: `route add ... -blackhole` with no gateway is "Invalid argument"; Windows: a route with gateway `127.0.0.1` or `::1` is "The parameter is incorrect"), so turning the kill switch on did nothing and the app quietly carried on without it. macOS now names the loopback gateway; Windows uses the loopback interface; Linux puts the route type first (`ip route add blackhole <prefix>`), because `ip route add <prefix> blackhole` is rejected. All three were checked on real machines (Linux in an isolated network namespace) with the app's own commands: the blocking route goes in, traffic to a covered address really is dropped, a route to the tunnel still wins over it, removal deletes only the blocking route, and nothing is left behind.
+
+- **The Linux firewall could not turn on with "allow LAN" enabled.** The IPv6 DHCP rule used `udp6`, which is not an nftables keyword, so the whole table was refused with a syntax error. Checked in an isolated namespace: with the fix the table loads, traffic to the internet is dropped while the proxy server, the LAN, the tunnel and loopback pass, and removing it restores everything.
 
 ### Notes
 - Not fixed yet: the Windows firewall layer. Checked on a real Windows: its `netsh` rejects the `group=`, `priority=` and `iface=` arguments, and a block rule overrides an allow rule, so the "allow the tunnel, block the rest" design cannot work as built. It fails to turn on rather than locking you out. Do not rely on it on Windows until the next release.
-- Not verified: the IPv6 half on macOS (that Mac has no IPv6), the macOS and Linux firewall layers, and the kill switch on Linux.
+- Not verified: the IPv6 half on macOS (that Mac has no IPv6), and the macOS firewall layer end to end (its pf anchor loads and unloads fine).
 
 <!-- fa -->
 
 ### چی درست شده
-- **کیل‌سوییچ نه روی مک نصب می‌شد و نه روی ویندوز.** دستورهایی که مسیرهای بلاک رو اضافه می‌کردن هر دو سیستم رد می‌کردن (مک: `route add ... -blackhole` بدون gateway می‌شه «Invalid argument»؛ ویندوز: مسیر با gateway برابر `127.0.0.1` یا `::1` می‌شه «The parameter is incorrect»). برای همین روشن کردن کیل‌سوییچ هیچ کاری نمی‌کرد و برنامه بی‌صدا بدون اون ادامه می‌داد. مک حالا gateway لوپ‌بک رو می‌ده و ویندوز از اینترفیس لوپ‌بک استفاده می‌کنه. هر دو با خود دستورهای برنامه روی دستگاه واقعی تست شد: مسیر بلاک نصب می‌شه، ترافیک به آدرس زیرپوشش واقعاً قطع می‌شه، مسیر تونل هنوز از اون جلوتره، برداشتن فقط مسیر بلاک رو پاک می‌کنه و چیزی باقی نمی‌مونه.
+- **کیل‌سوییچ نه روی مک نصب می‌شد، نه ویندوز و نه لینوکس.** دستورهایی که مسیرهای بلاک رو اضافه می‌کردن هر دو سیستم رد می‌کردن (مک: `route add ... -blackhole` بدون gateway می‌شه «Invalid argument»؛ ویندوز: مسیر با gateway برابر `127.0.0.1` یا `::1` می‌شه «The parameter is incorrect»). برای همین روشن کردن کیل‌سوییچ هیچ کاری نمی‌کرد و برنامه بی‌صدا بدون اون ادامه می‌داد. مک حالا gateway لوپ‌بک رو می‌ده و ویندوز از اینترفیس لوپ‌بک استفاده می‌کنه. هر دو با خود دستورهای برنامه روی دستگاه واقعی تست شد: مسیر بلاک نصب می‌شه، ترافیک به آدرس زیرپوشش واقعاً قطع می‌شه، مسیر تونل هنوز از اون جلوتره، برداشتن فقط مسیر بلاک رو پاک می‌کنه و چیزی باقی نمی‌مونه.
+
+- **فایروال لینوکس با «Allow LAN» روشن اصلاً بالا نمی‌اومد.** قانون DHCP نسخه‌ی ۶ از `udp6` استفاده می‌کرد که کلمه‌ی nftables نیست و کل جدول با خطای syntax رد می‌شد. تو یک namespace جدا تست شد: جدول لود می‌شه، ترافیک اینترنت بلاک می‌شه ولی سرور پروکسی، LAN، تونل و loopback رد می‌شن و برداشتنش همه‌چیز رو برمی‌گردونه.
 
 ### نکته‌ها
 - هنوز درست نشده: لایه‌ی فایروال ویندوز. روی ویندوز واقعی دیده شد: `netsh` آرگومان‌های `group=` و `priority=` و `iface=` رو نمی‌پذیره و قانون بلاک روی قانون اجازه غلبه می‌کنه، پس طراحی «تونل رو اجازه بده و بقیه رو ببند» به شکل فعلی کار نمی‌کنه. روشن نمی‌شه، ولی تو رو هم قفل نمی‌کنه. تا نسخه‌ی بعد روی ویندوز بهش تکیه نکن.
-- تست نشده: نیمه‌ی IPv6 روی مک (اون مک IPv6 نداشت)، فایروال مک و لینوکس و کیل‌سوییچ روی لینوکس.
+- تست نشده: نیمه‌ی IPv6 روی مک (اون مک IPv6 نداشت)، و فایروال مک به‌صورت end to end (pf anchor بدون مشکل لود و آنلود می‌شه).
 
 ## v0.14.5
 
